@@ -499,10 +499,48 @@ Pydantic-Schemas nur am IO-Rand. Das gibt 1:1-Portierung statt Daten-Modell-Verb
 9. `PAusloeser` + `PAslEinzel`
 10. Tests gegen `test.otx` (1-Knoten) + `dc1.otx` (3 Pläne mit Verzweigung)
 
-## Offene Fragen für Sie
+## Entscheidungen (2026-05-15)
 
-1. **Datenmodell-Strategie:** Option B (Plain Python + Pydantic am IO-Rand) okay?
-2. **Bisheriger Spike-Code:** Löschen okay, oder lieber in einem `legacy-spike/`-Branch parken?
-3. **`OFC/OVerteil.cpp`:** das ist eigentlich UI-Modul — aber `OVerteilung.cpp` ist eher Schnittstelle, die echte Implementierung der Zufallszahlen liegt vermutlich in `OFC/OVerteil.cpp`. Soll ich das parallel zum Sim-Kern lesen?
-4. **Reihenfolge OSimAZeit:** früher oder später? `test.otx` zeigt `ASimulator` als Top-Level — heißt das, das echte File hat schon OSimAZeit-Klassen? Wenn ja, müssen wir das wahrscheinlich früher haben.
-5. **`PGenerator`:** soll der in der ersten Iteration nur als Stub existieren oder ganz weggelassen werden?
+Die ursprünglich offenen Fragen sind entschieden:
+
+1. **Datenmodell — Option B.** Plain Python-Klassen mit Vererbung als Engine-Kern
+   (1:1 wie C++), Pydantic nur am IO-Rand für JSON-Load/Dump. Begründung:
+   Polymorphismus und Mehrfachvererbung (`PRessBeleg + PAktor`) natürlich
+   abbildbar; keine Discriminated-Union-Verbiegung.
+
+2. **Spike-Code wird gelöscht.** Pydantic-Models in `src/osim_engine/model/`,
+   `engine/transient.py`, `engine/runner.py` und `kpi/core.py` raus. Backup ist
+   die Git-Historie (Commit `5a62d73` — *Initial spike: Phase-1 sim core based
+   on Jonsson 2003 dissertation*). Kein `legacy-spike/`-Branch nötig.
+
+3. **`OFC/OVerteil.cpp` wird parallel zum Sim-Kern gelesen.** Verifiziert per
+   File-Inspektion am 2026-05-15: `OSimBase/OVerteilung.cpp` enthält nur die
+   Verteilungs-Klassen (Konstant/Gleich/Normal/…), deren `HoleZufallswert()`-
+   Implementierungen alle auf `OSimulator::s_verteil.VertGleich()` zurückgreifen.
+   Die eigentliche PAWLICEK-LCG-Implementierung (`Zufall()`, `InternerKeim()`,
+   `Antithetisch()`) sitzt in `OFC/OVerteil.cpp` und ist Pflicht-Lektüre für
+   bit-genaue Stochastik.
+
+4. **`OSimAZeit` kommt früh — Skelett in Phase 1.** Begründung: `test.otx` und
+   andere `Vorstellung04/*.otx` (`AZ-Tool.otx`, …) haben `ASimulator` als
+   Top-Level-Objekt. Ohne AZ-Skelett lässt sich Phase 1 nicht gegen reale
+   `.otx`-Dateien validieren. Skelett heißt: `ASimulator` als Subklasse von
+   `PSimulator` registriert, `APerson`/`AGruppe`/`AAusloeser` als Pass-Through-
+   Klassen. Echte AZ-Logik (Einsatzzeit-Wünsche, Kap-Bed-Berechnung) bleibt in
+   Phase 5.
+
+5. **`PGenerator` als Stub.** Leere Stub-Klasse im `m_oGenerator`-Slot von
+   `PSimulator`, damit C++-Aufrufstellen 1:1 übertragen werden können. Kein
+   `.psg`-Parser, keine Engpass-Erkennung in Iter-1.
+
+## Test-Daten
+
+Die `.otx`-Validierungs-Daten liegen in `OSim2004/Vorstellung04/`:
+
+- `test.otx` — 1-Knoten-Plan (kleinster Smoke-Test)
+- `dc1.otx` — 3 Pläne mit Verzweigung (Spike-Validierung lief)
+- `Fertigungsstruktur1_mit_AslFj.otx`, `AZ-Tool.otx`, … — größere Modelle für
+  spätere Phasen
+
+Diese Files werden **nicht** ins `osim-engine`-Repo kopiert; Tests lesen sie
+per Pfad aus dem OSim2004-Clone.
