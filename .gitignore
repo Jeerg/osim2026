@@ -1,0 +1,30 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Run outputs
+events.jsonl
+result.json
+*.events.jsonl
+*.result.json
+
+# Local fixtures (große .otx-Files werden separat versioniert)
+tests/fixtures/large/

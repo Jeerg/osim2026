@@ -1,0 +1,31 @@
+{
+  "name": "Jonsson Abb. 4-13 — 4-Knoten-Durchlaufplan mit Übergangszeit und Join",
+  "sim_params": {
+    "period_length": 1000,
+    "horizon_periods": 1,
+    "seed": 1776496601
+  },
+  "plans": [
+    {
+      "id": "D1",
+      "name": "Beispiel-Plan",
+      "nodes": [
+        {"type": "konstant", "id": "K1", "name": "K1", "duration": 60},
+        {"type": "konstant", "id": "K2", "name": "K2", "duration": 80},
+        {"type": "konstant", "id": "K3", "name": "K3", "duration": 90},
+        {"type": "konstant", "id": "K4", "name": "K4", "duration": 50}
+      ],
+      "edges": [
+        {"id": "N1", "predecessors": [],     "successors": ["K1"], "transition_time": 0},
+        {"id": "N2", "predecessors": ["K1"], "successors": ["K2", "K3"], "transition_time": 20},
+        {"id": "N3", "predecessors": ["K2", "K3"], "successors": ["K4"], "transition_time": 0},
+        {"id": "N4", "predecessors": ["K4"], "successors": [], "transition_time": 0}
+      ],
+      "start_edge": "N1",
+      "end_edge": "N4"
+    }
+  ],
+  "triggers": [
+    {"type": "single", "id": "A1", "plan_id": "D1", "begin_time": 0}
+  ]
+}
