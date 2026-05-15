@@ -1,49 +1,48 @@
 # osim-engine
 
-Headless Discrete-Event-Simulator (process-flow auf Knoten-Kanten-Graphen). Reengineering von OSim2004 auf Basis der Dissertation **Uwe Jonsson (2003) — "Auf dem Weg zur integrierten Simulation von Produktionssystemen"** (Uni Karlsruhe, IfAB).
+**1:1-Portierung der OSim2004-C++-Codebase nach Python, headless (ohne UI).**
 
-## Designprinzipien
+## Designprinzip
 
-- **Standalone-Library**, keine Datenbank, kein Webservice.
-- **Input:** JSON-Datei (deserialisiert in Pydantic-Klassen).
-- **Output:** Event-Stream als JSONL (append-only) + End-Ergebnis-JSON mit KPIs.
-- **Domain-agnostisch:** der Kern weiß nur Knoten/Kanten/Prozesse/Zeit, keine PPS-Spezifika.
-- **Sukzessive Modellierung** als Designprinzip (Jonsson Kap. 1.1): minimal lauffähig sind nur Durchlaufpläne + Auslöser; Ressourcen, Aktoren, Entitäten, Hierarchie kommen schrittweise dazu, ohne Bestehendes zu brechen.
+> Den existierenden Code übertragen — nichts neu erfinden. Keine Theorie-Vorlage
+> als Implementierungs-Referenz.
 
-## Architektur
+Quelle: `C:\Users\JörgWFischer\PycharmProjects\OSim2004\OSimV01(Fj)\`. Die
+zugehörige Dissertation (Uwe Jonsson 2003) ist nur **Begleitmaterial zum
+Verstehen**, nicht die Implementierungs-Vorlage.
 
-```
-src/osim_engine/
-├── model/        Pydantic-Datenmodell (JSON-serialisierbar)
-├── engine/       Sim-Loop, Event-Heap, Lifecycle-Methoden
-├── kpi/          Post-Processing aus Event-Log + Modell
-└── io/           JSON-Loader, .otx-Konverter (für Jonssons Originaldaten)
-```
+## Was übernommen wird
+
+- `OSimBase/` — Sim-Kern (`OSimObj`, `OSimulator`, `OVerteilung`)
+- `OSimPro/` — PPS-Domain (`PSimulator`, `PDurchlaufplan`, `PDlplKnoten`, …)
+- `OSimAZeit/` — Auftragszeit-Modul
+- `OSimINSIGHTS/` — Reporting
+
+## Was raus muss
+
+- UI-Schichten: `OFC/`, `OGfx*`, `*DesignView`, `OMetaViewer*`
+- Reflektion: `ObjectBase/`, `.odh`-DSL, `odhc`-Compiler — durch Python-Klassen ersetzt
+- Persistenz via `OArchive` — durch JSON ersetzt
+
+## Datenmodell-Strategie
+
+- **Plain Python-Klassen mit Vererbung** als Engine-Klassen (1:1 wie in C++)
+- **Pydantic nur am IO-Rand** (JSON-Load/Dump, Konfig-Validierung)
+
+## Stochastik
+
+Der PAWLICEK-LCG aus `OFC/OVerteil.cpp` wird **bit-genau** portiert. Die exakten
+Konstanten `AA=6636085.0`, `X=907633385.0`, `AM=2^32` und die Reihenfolge der
+`VertGleich()`-Aufrufe in Box-Müller etc. sind Teil des Reproduzierbarkeits-
+Vertrags — **kein NumPy/SciPy** für die Stochastik.
 
 ## Status
 
-Spike-Phase. Stand:
+Spike-Reset (2026-05-15). Vollständiger Portierungs-Plan in
+[`docs/porting-plan.md`](docs/porting-plan.md).
 
-- [ ] Pydantic-Modell (Plan, Node, Edge, Trigger, Distribution)
-- [ ] Engine-Loop (heapq, Period, Lifecycle)
-- [ ] Recorder (JSONL)
-- [ ] KPI-Aggregator (AFA, AFK, MDZ, MDK)
-- [ ] Jonssons 4-Knoten-Beispiel als Smoke-Test
-- [ ] .otx-Reader
-- [ ] test.otx durch Engine
-
-## Roadmap
-
-Schichten gemäß Jonssons 5 Bausteinen:
-
-1. **Phase 1 — Sim-Kern** (aktuelle Phase): Durchlaufpläne, Knoten, Kanten, Auslöser, Verteilungen, KPI-Basis.
-2. **Phase 2 — Passive Ressourcen:** Belegungs- und Mengenressourcen, Assoziationen, Einsatzzeiten, Prozesskosten.
-3. **Phase 3 — Aktive Ressourcen:** Aktoren, Prozessspeicher.
-4. **Phase 4 — Prozessentitäten:** persistente Entities (passiv / extern).
-5. **Phase 5 — Hierarchisierung:** verschachtelte Pläne, Ressourcenkollektionen, Kopplungsknoten.
-
-## Quellen
-
-- `../OSim2004/docs/dissertations/jonsson-300.pdf` — Hauptquelle, Diss Uwe Jonsson 2003
-- `../OSim2004/` — alte C++-Codebasis als Referenz
-- `../OSim2004/Vorstellung04/*.otx` — Realdaten als Validierungs-Fixtures
+Behalten aus dem ersten Versuch:
+- `engine/event_heap.py` — heapq-Wrapper
+- `engine/recorder.py` — JSONL-Stream
+- `io/otx_reader.py` — Parser für `.otx`-Format (funktioniert für 252-Objekt-Files)
+- `io/json_loader.py` — Skelett

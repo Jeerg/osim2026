@@ -1,21 +1,9 @@
-"""osim-engine: headless discrete-event simulator on node/edge graphs."""
+"""osim-engine — headless 1:1-Portierung des OSim2004-Codes nach Python.
 
-from osim_engine.model.core import Plan, Node, Edge, Trigger
-from osim_engine.model.distribution import Distribution
-from osim_engine.model.sim_params import SimParams
-from osim_engine.model.sim_model import SimModel
-from osim_engine.engine.runner import Simulator
-from osim_engine.io.json_loader import load_model
+Quelle: `C:\\Users\\JörgWFischer\\PycharmProjects\\OSim2004\\OSimV01(Fj)\\`
+Strategie: siehe `docs/porting-plan.md`.
 
-__version__ = "0.1.0"
-__all__ = [
-    "Plan",
-    "Node",
-    "Edge",
-    "Trigger",
-    "Distribution",
-    "SimParams",
-    "SimModel",
-    "Simulator",
-    "load_model",
-]
+Stand: Spike-Reset — Public API entsteht erst während der Portierung.
+"""
+
+__version__ = "0.2.0-dev"
