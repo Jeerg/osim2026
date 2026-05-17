@@ -4,6 +4,10 @@
 **Auftraggeber:** Jörg Werner Fischer (Originalautor von OSim2004)
 **Verfasser:** Claude (Opus 4.7)
 **Datum:** 2026-05-15
+**Update 2026-05-17:** Die 4 self-flagged Lücken (BLOCKER + HIGH + 2× MED) sind
+geschlossen in [`docs/CONTEXT-P1-SUPPLEMENT.md`](CONTEXT-P1-SUPPLEMENT.md). Die
+restlichen 8 Prüf-Aufträge ("Heikle Stellen 1-8") + 5 Meta-Fragen bleiben für
+Codex offen.
 
 ---
 

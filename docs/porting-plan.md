@@ -1,6 +1,10 @@
 # Portierungs-Plan: OSim2004 (C++/MFC) → osim-engine (Python, headless)
 
 **Stand:** 2026-05-15. Ersetzt den bisherigen Diss-basierten Spike.
+**Patch:** 2026-05-17 — [CONTEXT-P1-SUPPLEMENT.md](CONTEXT-P1-SUPPLEMENT.md)
+schließt 4 self-flagged Lücken (PDpKnZeitvorgabe, MAX_EVENT_TIME,
+$event(N)-Schema, PDpKaUebergang-Sim-Methoden) + Namens-Korrektur
+(PDpKaUebergang statt PDlplKanUebergang).
 
 ## Leitlinie
 
@@ -206,7 +210,7 @@ PDlplKante               → osim_engine.pps.DlplKante
   m_lProzesse   : PProzessList
   m_lKnotenOber : Knoten
   m_iPtkUebergangCount
-  m_iUebergangszeit (bei PDlplKanUebergang)
+  m_iUebergangszeit (bei PDpKaUebergang)
 
 PtProzess                → osim_engine.pps.PtProzess
   Felder:
@@ -310,7 +314,7 @@ osim_engine/
 │   ├── kante/
 │   │   ├── __init__.py
 │   │   ├── base.py              PDlplKante
-│   │   └── uebergang.py         PDlplKanUebergang
+│   │   └── uebergang.py         PDpKaUebergang
 │   ├── prozess/
 │   │   ├── __init__.py
 │   │   ├── base.py              PtProzess + DLL-Mechanik
@@ -398,7 +402,7 @@ Ziel: Eine vollständige Phase-1-Engine, die strukturell mit OSim2004 *identisch
 - `OSimObj`, `OSimulator` mit kompletter Event-Pool-Mechanik, Period-Vorschub, Listener-Hooks
 - `OVerteilung` + 7 Subtypen (echte Implementierungen aus `OVerteilung.cpp` / `OFC/OVerteil.cpp`)
 - `PSimObj`, `PSimulator` (mit allen 12 Listen, ohne PGenerator-Befüllung)
-- `PDlplKnoten` + `PDurchlaufplan` + `PDlplKante` + `PDlplKanUebergang`
+- `PDlplKnoten` + `PDurchlaufplan` + `PDlplKante` + `PDpKaUebergang`
 - `PtProzess` + `PtProzZeitvorgabe` + `PtProzDurchlaufplan` + `PProzessDLL`
 - `PtTrigger`, `PtVerknuepfung`
 - `PAusloeser` + `PAslEinzel` + `PAslMehrfachZaz`
