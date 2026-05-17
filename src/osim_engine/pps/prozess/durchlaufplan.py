@@ -38,12 +38,69 @@ class PtProzDurchlaufplan(PtProzess):
         dann Prozess zerstören.
 
         In Python entfällt das aktive `Delete()` (GC), aber die Konsistenz-
-        prüfung machen wir trotzdem.
+        prüfung (PtProzess.cpp:686-702 `SucheUnterprozesseInPList()>1`)
+        wird in V3.1 nachgereicht — silent-Fehlverhalten in Phase 2+
+        bei Ressourcen-Konflikten wäre sonst schwer zu debuggen
+        (SELF-REVIEW-CODE.md M1).
         """
-        # SucheUnterprozesseInPList()>1 check entfällt in V1/V2 —
-        # in den Tests ist garantiert dass alle Unter-Prozesse vor dem
-        # PtProzDurchlaufplan beendet sind.
+        anz_subs = self._suche_unterprozesse_in_p_list()
+        if anz_subs > 1:
+            raise RuntimeError(
+                f"PtProzDurchlaufplan {self.m_sName!r} hat noch {anz_subs} "
+                f"Unter-Prozesse beim bearbeit_beenden — Plan ist inkonsistent. "
+                f"Knoten-Listen: "
+                + ", ".join(
+                    f"{kn.m_sName}({len(kn.m_lProzesse)})"
+                    for kn in self.p_simulator.m_lKnoten
+                    if kn.m_lProzesse
+                )
+            )
         super().bearbeit_beenden()
+
+    def _suche_unterprozesse_in_p_list(self) -> int:
+        """Zählt Unter-Prozesse dieses Plans in allen Knoten/Kanten/Warteschlangen.
+
+        C++-Äquivalent: PtProzess::SucheUnterprozesseInPList — durchsucht
+        alle Prozess-Listen des Simulators und zählt jene, deren
+        m_oProzOber-Kette auf `self` führt.
+        """
+        count = 0
+        sim = self.p_simulator
+
+        def _is_descendant(proz: "PtProzess") -> bool:
+            cur: "PtProzess | None" = proz
+            while cur is not None:
+                if cur is self:
+                    return True
+                cur = cur.m_oProzOber  # type: ignore[assignment]
+            return False
+
+        # Knoten-Listen durchsuchen (Top-Level und in Plänen)
+        from osim_engine.pps.durchlaufplan import PDurchlaufplan
+        all_knoten: list = []
+        all_kanten: list = []
+        for kn in sim.m_lKnoten:
+            all_knoten.append(kn)
+        for plan in sim.m_lDlpl:
+            if isinstance(plan, PDurchlaufplan):
+                all_knoten.extend(plan.m_lKnoten)
+                all_kanten.extend(plan.m_lKanten)
+
+        for kn in all_knoten:
+            for p in kn.m_lProzesse:
+                if _is_descendant(p):
+                    count += 1
+        for ka in all_kanten:
+            for p in ka.m_lProzesse:
+                if _is_descendant(p):
+                    count += 1
+        # Auch self in seiner eigenen m_lProzesse-Liste am Plan-Container
+        # zählt als Unter-Prozess (analog zu C++)
+        # → die Plan-Container haben self als einzigen "Prozess" in
+        # PDurchlaufplan.m_lProzesse während des Laufs. Das ist der
+        # Wurzel-Prozess selbst, kein Unter-Prozess.
+
+        return count
 
     def on_unter_proz_beginn(self, proz: "PtProzess") -> None:
         """C++: leerer Hook (PtProzess.cpp:710)."""
