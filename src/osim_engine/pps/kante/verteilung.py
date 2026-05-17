@@ -85,3 +85,16 @@ class PDpKaVerteilung(PDpKaUebergang):
 
         if not self.is_start_kante():
             del proz
+
+    def get_knz_min_dlfz(self, z_klass=None) -> float:
+        """Verteilungs-Kante: Min-DLZ = Mittelwert der bisherigen Übergänge.
+
+        C++ PDlplKante.cpp:999-1003.
+        """
+        if self.m_iKummVerteilungszeit == 0 or self.m_iAnzUebergaenge == 0:
+            return 0.0
+        return self.m_iKummVerteilungszeit / self.m_iAnzUebergaenge
+
+    def get_knz_sum_zeit(self, z_klass=None) -> float:
+        """C++ PDlplKante.cpp:1006-1009."""
+        return float(self.m_iKummVerteilungszeit)

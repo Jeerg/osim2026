@@ -104,6 +104,17 @@ class PDpKnKonstant(PDpKnZeitvorgabe):
         self.m_iPtkDurchfuehrungszeitCount += 1
         return self.m_iDurchfuehrungszeit
 
+    def get_knz_min_dlfz(self, z_klass=None) -> float:
+        """Konstante Knoten: kritischer-Weg-Anteil = konstante Dauer.
+
+        C++ PDpKnZeitvorgabe.cpp:75-78: PDpKnKonstant nutzt GetKnzMittlDlfz,
+        die wiederum auf m_iDurchfuehrungszeit fällt zurück wenn noch keine
+        Ausführungen.
+        """
+        if self.m_iPtkAusloesungCount > 0:
+            return self.get_knz_mittl_dlfz(z_klass)
+        return float(self.m_iDurchfuehrungszeit)
+
 
 class PDpKnVerteilung(PDpKnZeitvorgabe):
     """Verteilte Durchführungszeit. C++: `PDpKnVerteilung` (PDpKnZeitvorgabe.odh:176).
@@ -146,3 +157,12 @@ class PDpKnVerteilung(PDpKnZeitvorgabe):
         self.m_iPtkKumDurchfuehrungszeit += self.m_iVerteilZeit
         self.m_iPtkDurchfuehrungszeitCount += 1
         return self.m_iVerteilZeit
+
+    def get_knz_min_dlfz(self, z_klass=None) -> float:
+        """Verteilte Knoten: zurückgegeben wird Mittelwert der Samples oder
+        letzter Wert wenn noch keine Aggregat-Daten.
+        """
+        if self.m_iPtkAusloesungCount > 0:
+            return self.get_knz_mittl_dlfz(z_klass)
+        # Fallback: letzter Sample-Wert (oder 0 wenn noch nicht gezogen)
+        return float(self.m_iVerteilZeit)

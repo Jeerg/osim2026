@@ -107,13 +107,17 @@ class PDlplKnoten(PSimObj):
         Reihenfolge:
             1. ress_verfuegbar prüfen → bei False return False
             2. m_iPtkBegAusloesungCount++
-            3. Listener-Notifikation (V2+)
-            4. proz.bearbeit_beginnen()
-            5. return True
+            3. Begin-Zeitpunkt am Prozess merken (für DLZ-Akkumulation)
+            4. Listener-Notifikation (V2+)
+            5. proz.bearbeit_beginnen()
+            6. return True
         """
         if not self.ress_verfuegbar(proz):
             return False
         self.m_iPtkBegAusloesungCount += 1
+
+        # DLZ-Akkumulation vorbereiten: Begin am Prozess merken
+        proz._knoten_begin_zeit = self.p_simulator.evt_curr_time()  # type: ignore[attr-defined]
 
         for listener in list(self._listeners):
             listener.on_proz_bearbeit_beginn(proz)
@@ -126,6 +130,7 @@ class PDlplKnoten(PSimObj):
 
         V2-Routing:
             - Wenn is_ptk: Counter++
+            - DLZ akkumulieren (Sample für KPI)
             - Listener notifizieren (on_proz_bearbeit_ende)
             - Prozess aus Liste entfernen
             - Routing:
@@ -136,6 +141,11 @@ class PDlplKnoten(PSimObj):
         """
         if self.is_ptk:
             self.m_iPtkAusloesungCount += 1
+
+        # DLZ akkumulieren (V3 KPI)
+        begin = getattr(proz, "_knoten_begin_zeit", None)
+        if begin is not None:
+            self.m_dPtkDurchlaufzeit += float(self.p_simulator.evt_curr_time() - begin)
 
         for listener in list(self._listeners):
             listener.on_proz_bearbeit_ende(proz)
@@ -156,3 +166,47 @@ class PDlplKnoten(PSimObj):
         V2 minimale Implementation: leitet an on_proz_beendet weiter.
         """
         self.on_proz_beendet(proz, ent)
+
+    # ------------------------------------------------------------------
+    # KPI-Methoden (V3)
+    # ------------------------------------------------------------------
+
+    def get_knz_mittl_dlfz(self, z_klass: Any = None) -> float:
+        """Mittlere Durchlaufzeit = m_dPtkDurchlaufzeit / m_iPtkAusloesungCount.
+
+        C++: PDlplKnoten::GetKnzMittlDlfz. Liefert 0.0 bei keinem Lauf
+        (vermeidet Division-by-zero).
+        """
+        if self.m_iPtkAusloesungCount == 0:
+            return 0.0
+        return self.m_dPtkDurchlaufzeit / self.m_iPtkAusloesungCount
+
+    def get_knz_min_dlfz(self, z_klass: Any = None) -> float:
+        """Minimale Durchlaufzeit = Approximation für kritischen Weg.
+
+        Default: gibt die mittlere DLZ zurück (= geschätzt minimal für
+        Konstant-Knoten). Subklassen wie PDpKnZeitvorgabe überschreiben.
+        """
+        return self.get_knz_mittl_dlfz(z_klass)
+
+    def get_knz_periodenkosten(self, k_klass: Any = None) -> float:
+        """Periodenkosten = Eingangs-Kosten + Knoten-eigene Kosten.
+
+        In V1/V2 (ohne Ressourcen): nur Eingangs-Kosten + 0.
+        """
+        return self.m_dEinKostenVorgaenger
+
+    def get_knz_min_periodenkosten(self, k_klass: Any = None) -> float:
+        """Min-Periodenkosten — analog get_knz_periodenkosten."""
+        return self.m_dEinMinKostenVorgaenger
+
+    def prz_kosten_berechnen(self, d_ein_kosten: float) -> None:
+        """Default-Knoten-Kosten-Setter: Eingangs-Kosten merken.
+
+        C++: PDlplKnoten::PrzKostenBerechnen (Defaultverhalten).
+        """
+        self.m_dEinKostenVorgaenger = d_ein_kosten
+
+    def min_prz_kosten_berechnen(self, d_min_ein_kosten: float) -> None:
+        """Default-Knoten-Min-Kosten-Setter."""
+        self.m_dEinMinKostenVorgaenger = d_min_ein_kosten

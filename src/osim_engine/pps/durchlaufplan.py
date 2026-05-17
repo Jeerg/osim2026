@@ -218,3 +218,204 @@ class PDurchlaufplan(PDlplKnoten):
         # PtProzDurchlaufplan beenden (analog C++ bearbeit_beenden)
         assert isinstance(proz_this, PtProzDurchlaufplan)
         proz_this.bearbeit_beenden()
+
+    # ------------------------------------------------------------------
+    # KPI: Kritischer Weg (V3) — PDurchlaufplan.cpp:204-305
+    # ------------------------------------------------------------------
+
+    def get_knz_min_dlfz(self, z_klass: Any = None) -> float:
+        """Minimale Durchlaufzeit des Plans = kritischer Weg.
+
+        Wörtlich aus PDurchlaufplan.cpp:204-224.
+        """
+        if self.m_lStartKante is None or self.m_lEndKante is None:
+            return 0.0
+
+        # alle Kanten initialisieren (m_dHelp = -1)
+        for ka in self.m_lKanten:
+            ka.m_dHelp = -1.0
+
+        # kritischen Weg beginnend mit der Startkante rekursiv berechnen
+        self._calc_krit_weg_rek(self.m_lStartKante, 0.0, z_klass)
+
+        assert self.m_lEndKante.m_dHelp >= 0, (
+            f"PDurchlaufplan {self.m_sName!r}: kritischer Weg konnte "
+            f"die Endkante nicht erreichen"
+        )
+
+        # End-Kanten-eigene Übergangszeit aufaddieren
+        self.m_lEndKante.m_dHelp += self.m_lEndKante.get_knz_min_dlfz(z_klass)
+        return self.m_lEndKante.m_dHelp
+
+    def _calc_krit_weg_rek(
+        self,
+        kante: "PDlplKante",
+        d_dlz: float,
+        z_klass: Any,
+    ) -> None:
+        """Rekursiver kritischer Weg.
+
+        Wörtlich aus PDurchlaufplan.cpp:249-305. Hauptweg iterativ über
+        ersten Nachfolger, parallele Wege rekursiv.
+        """
+        # Abbruch falls die Kante schon eine höhere DLZ trägt
+        if kante.m_dHelp >= d_dlz:
+            return
+        kante.m_dHelp = d_dlz
+
+        while kante is not None:
+            if kante.is_end_kante():
+                break
+
+            # Eigene Übergangszeit der Kante draufpacken
+            kante.m_dHelp += kante.get_knz_min_dlfz(z_klass)
+
+            # Nachfolger-Knoten durchgehen
+            kante_next = None
+            for i, knoten in enumerate(kante.m_lNachfolger):
+                d_dlz_new = kante.m_dHelp + knoten.get_knz_min_dlfz(z_klass)
+                if i == 0:
+                    # Erster Nachfolger = Hauptweg → iterativ weiter
+                    kante_next = knoten.m_lKanteAus
+                    if kante_next is None:
+                        break
+                    if kante_next.m_dHelp < d_dlz_new:
+                        kante_next.m_dHelp = d_dlz_new
+                else:
+                    # Parallele Wege rekursiv
+                    if knoten.m_lKanteAus is not None:
+                        self._calc_krit_weg_rek(knoten.m_lKanteAus, d_dlz_new, z_klass)
+
+            kante = kante_next  # type: ignore[assignment]
+
+    # ------------------------------------------------------------------
+    # KPI: Kosten-Verteilung (V3) — PDurchlaufplan.cpp:315-427
+    # ------------------------------------------------------------------
+
+    def prz_kosten_berechnen(self, d_ein_kosten: float) -> None:
+        """Verteilt Prozesskosten rekursiv über alle Knoten des Plans.
+
+        Wörtlich aus PDurchlaufplan.cpp:315-339.
+        """
+        # Plan selbst mit Eingangs-Kosten versehen
+        super().prz_kosten_berechnen(d_ein_kosten)
+
+        # Alle Kanten initialisieren (m_iHelp = Anzahl Vorgänger, m_dHelp = 0)
+        for ka in self.m_lKanten:
+            ka.m_iHelp = len(ka.m_lVorgaenger)
+            ka.m_dHelp = 0.0
+
+        # Alle Knoten mit Eingangskosten 0 initialisieren
+        for kn in self.m_lKnoten:
+            kn.m_dEinKostenVorgaenger = 0.0
+
+        if self.m_lStartKante is not None:
+            self._calc_proz_kosten_rek(self.m_lStartKante, d_ein_kosten)
+
+    def _calc_proz_kosten_rek(
+        self,
+        kante: "PDlplKante",
+        d_ein_kosten: float,
+    ) -> None:
+        """Wörtlich aus PDurchlaufplan.cpp:342-406."""
+        while kante is not None:
+            if kante.is_end_kante():
+                break
+
+            # Eingangs-Kosten in der Kante aufsummieren
+            kante.m_dHelp += d_ein_kosten
+
+            # Noch nicht alle Vorgänger eingetroffen → Abbruch
+            kante.m_iHelp -= 1
+            if kante.m_iHelp > 0:
+                break
+
+            kante_next = None
+            d_ein_kosten_next = -1.0
+            kantanzahl = len(kante.m_lNachfolger)
+            for i, knoten in enumerate(kante.m_lNachfolger):
+                knoten.prz_kosten_berechnen(d_ein_kosten / kantanzahl)
+                if i == 0:
+                    # Hauptweg
+                    kante_next = knoten.m_lKanteAus
+                    d_ein_kosten_next = knoten.get_knz_periodenkosten()
+                else:
+                    # Paralleler Weg rekursiv
+                    if knoten.m_lKanteAus is not None:
+                        self._calc_proz_kosten_rek(
+                            knoten.m_lKanteAus, knoten.get_knz_periodenkosten()
+                        )
+
+            kante = kante_next  # type: ignore[assignment]
+            if d_ein_kosten_next >= 0.0:
+                d_ein_kosten = d_ein_kosten_next
+
+    def get_knz_periodenkosten(self, k_klass: Any = None) -> float:
+        """Periodenkosten = Summe über alle Endknoten.
+
+        Wörtlich aus PDurchlaufplan.cpp:409-427.
+        """
+        if self.m_lEndKante is None or self.m_lEndKante.is_start_kante():
+            return super().get_knz_periodenkosten(k_klass)
+
+        d_proz_kosten = 0.0
+        for kn in self.m_lEndKante.m_lVorgaenger:
+            d_proz_kosten += kn.get_knz_periodenkosten(k_klass)
+        return d_proz_kosten
+
+    def min_prz_kosten_berechnen(self, d_min_ein_kosten: float) -> None:
+        """Min-Variante von prz_kosten_berechnen. PDurchlaufplan.cpp:433-457."""
+        super().min_prz_kosten_berechnen(d_min_ein_kosten)
+
+        for ka in self.m_lKanten:
+            ka.m_iMinHelp = len(ka.m_lVorgaenger)
+            ka.m_dMinHelp = 0.0
+
+        for kn in self.m_lKnoten:
+            kn.m_dEinMinKostenVorgaenger = 0.0
+
+        if self.m_lStartKante is not None:
+            self._calc_min_proz_kosten_rek(self.m_lStartKante, d_min_ein_kosten)
+
+    def _calc_min_proz_kosten_rek(
+        self,
+        kante: "PDlplKante",
+        d_min_ein_kosten: float,
+    ) -> None:
+        """Wörtlich aus PDurchlaufplan.cpp:458-520."""
+        while kante is not None:
+            if kante.is_end_kante():
+                break
+
+            kante.m_dMinHelp += d_min_ein_kosten
+            kante.m_iMinHelp -= 1
+            if kante.m_iMinHelp > 0:
+                break
+
+            kante_next = None
+            d_next = -1.0
+            kantanzahl = len(kante.m_lNachfolger)
+            for i, knoten in enumerate(kante.m_lNachfolger):
+                knoten.min_prz_kosten_berechnen(d_min_ein_kosten / kantanzahl)
+                if i == 0:
+                    kante_next = knoten.m_lKanteAus
+                    d_next = knoten.get_knz_min_periodenkosten()
+                else:
+                    if knoten.m_lKanteAus is not None:
+                        self._calc_min_proz_kosten_rek(
+                            knoten.m_lKanteAus, knoten.get_knz_min_periodenkosten()
+                        )
+
+            kante = kante_next  # type: ignore[assignment]
+            if d_next >= 0.0:
+                d_min_ein_kosten = d_next
+
+    def get_knz_min_periodenkosten(self, k_klass: Any = None) -> float:
+        """Min-Periodenkosten = Summe über alle Endknoten."""
+        if self.m_lEndKante is None or self.m_lEndKante.is_start_kante():
+            return super().get_knz_min_periodenkosten(k_klass)
+
+        d_min = 0.0
+        for kn in self.m_lEndKante.m_lVorgaenger:
+            d_min += kn.get_knz_min_periodenkosten(k_klass)
+        return d_min

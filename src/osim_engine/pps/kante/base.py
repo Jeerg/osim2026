@@ -87,6 +87,20 @@ class PDlplKante(PSimObj):
         self.m_iPtkUebergangCount = 0
 
     # ------------------------------------------------------------------
+    # KPI-Methoden (V3)
+    # ------------------------------------------------------------------
+
+    def get_knz_min_dlfz(self, z_klass: Any = None) -> float:
+        """Minimale Durchlaufzeit der Kante. Basis: 0 (keine Übergangs-Zeit).
+
+        Subklassen wie PDpKaUebergang/PDpKaVerteilung überschreiben.
+        """
+        return 0.0
+
+    def get_knz_sum_zeit(self, z_klass: Any = None) -> float:
+        return 0.0
+
+    # ------------------------------------------------------------------
     # Start-/End-Kante (PDlplKante.cpp:93-108)
     # ------------------------------------------------------------------
 

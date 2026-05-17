@@ -91,6 +91,17 @@ class PDpKaUebergang(PDlplKante):
         if not self.is_start_kante():
             del proz   # Hint für Garbage Collector
 
+    def get_knz_min_dlfz(self, z_klass=None) -> float:
+        """Übergangs-Kante: Min-DLZ = m_iUebergangszeit.
+
+        C++ PDlplKante.cpp:834-837.
+        """
+        return float(self.m_iUebergangszeit)
+
+    def get_knz_sum_zeit(self, z_klass=None) -> float:
+        """C++ PDlplKante.cpp:840-843."""
+        return float(self.m_iKummUebergangszeit)
+
     def _make_spiegel(self, proz: "PtProzess", ent: Any, suffix: str) -> "PtProzess":
         """Klont einen Prozess fürs Spiegelprozess-Pattern.
 
