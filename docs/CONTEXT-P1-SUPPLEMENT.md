@@ -901,3 +901,54 @@ Ergebnis: lebenslange C++-Referenz). Trigger:
 - V2 produziert ≥2 unerklärbare Divergenzen → Option D wird aktiv, vor V3
 
 Siehe `docs/CONTEXT-P1-DIFFTEST.md` § 6 für die Entscheidungs-Kriterien.
+
+---
+
+## § 7 — Option-D-Evaluation nach V3 (2026-05-17)
+
+**Ergebnis: Option D bleibt deaktiviert. Entscheidung erst zu Phase-2-Start
+neu bewerten.**
+
+### Beobachtungen V1/V2/V3
+
+| Slice | Lief glatt? | Unerklärbare Divergenzen | Erklärbare C++-Eigenheiten (= dokumentiert + 1:1 portiert) |
+|---|---|---|---|
+| V1 | ja | 0 | — |
+| V2 | ja | 0 | — |
+| V3 | ja | 0 | 1× `CalcProzKostenRek` propagiert nur Hauptweg-Kosten an Nachfolger nach Join, nicht die akkumulierte Summe (kJ.m_dHelp). Möglicherweise ein C++-Logikfehler, aber 1:1 portiert. Dokumentiert in `tests/integration/test_v3_kpi.py::test_kosten_verteilung_split_propagiert_hauptweg`. |
+
+**Schwellenwert: ≥ 2 unerklärbare Divergenzen** (CONTEXT-P1-DIFFTEST.md § 6).
+Aktuell: 0. Damit nicht ausgelöst.
+
+### Was die V3-Validierung leistet
+
+- 88 Tests grün (33 Stochastik bit-genau + 28 V1-Sim-Lifecycle + 18 V2-Plan-
+  Graph + 9 V3-KPI/Three-Plans)
+- 3 Hand-Trace-Vergleiche (V1, V2, plus C0-S Event-Pool synthetisch)
+- Kritischer Weg gegen analytisch berechnete Werte (linear, Diamond, Three-
+  Plans)
+- Kosten-Verteilung gegen analytisch berechnete Werte (linear, Diamond)
+- 3 unabhängige Pläne mit je eigenem Auslöser laufen parallel im selben
+  Event-Pool ohne Konflikte
+
+### Was die V3-Validierung NICHT leistet
+
+- **Kein direkter Bit-genauer Vergleich mit OSim2004**, weil das C++-Projekt
+  nicht baubar ist (VC6/MFC) und keine Trace-Files produziert hat
+- **Keine Diss-Tabellen-Validierung** (Diss-PDF + Tabellen-Pfade vom User
+  noch nicht nachgereicht — siehe DIFFTEST.md § 5 Frage 1)
+- **Kein Test gegen reale `.otx`-Datei** (`test.otx` als OArchive-Fragment
+  nicht direkt parsbar — siehe DIFFTEST.md § 5 Frage 2)
+
+Diese drei Lücken werden in Phase 2 (Ressourcen) relevant, nicht in Phase 1.
+
+### Empfehlung für Phase-2-Start
+
+Bei Phase-2-Beginn (Ressourcen, Aktoren, Speicher) neu evaluieren:
+
+| Wenn... | Dann... |
+|---|---|
+| Diss-PDF + Tabellen-Pfade jetzt vorhanden | Diss-Tabellen-Vergleich als Plausibilitäts-Anker hinzu |
+| OArchive-Parsing für `.otx` möglich (vielleicht Subset, das die `test.otx`-Datei abdeckt) | reale `.otx`-Files als Integration-Tests hinzu |
+| Mehrere unerklärbare Divergenzen in Ressourcen-Implementation auftauchen | **Option D aktivieren** (Aufwand 1-2 Wochen, lebenslange Referenz für P2-P5) |
+| Phase 2 läuft ähnlich glatt wie P1 | Option D bleibt verschoben bis P3 oder später |
