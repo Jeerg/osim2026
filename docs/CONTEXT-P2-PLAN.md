@@ -89,15 +89,37 @@ Bearbeitung. Wenn M belegt → Prozess wartet im m_oWarteSchl.
 - `tests/diff/hand_trace/test_v4_one_node_one_ress.py`
 - `tests/diff/hand_trace/v4_one_node_one_ress.md` (Erwartungs-Tabelle)
 
-### V5 — "Material/Speicher" (NÄCHSTES)
+### V5 — "Material" (Mengen-Slice) ✅ ABGESCHLOSSEN
 
-**Modell:** + PRessMenge (Bestand), PSpeicherProz (Material-Container).
+**Modell:** PRessMenge (Bestand). Knoten kann Material verbrauchen/erzeugen/abfragen.
 
-**Klassen:** PRessMenge, PAszMenge, PAszSpeicher, PSpeicherProz, PEntitaet.
+**Implementiert:**
+- `PRessMenge` + `PRessLager` — `src/osim_engine/resources/menge.py`
+- `PAssozMenge` (abstract) + `PAssozMengeErzgt` / `PAssozMengeVerbr` /
+  `PAssozMengeVerbrZwischen` / `PAssozMengeAbfr` —
+  `resources/assoziation/menge.py`
+- `PtRelationMenge` — `resources/relation.py`
+- Bounded-Storage-Logik mit `m_lErlZubuchung`-Reservierung (1:1 C++)
+- `PSimulator.m_lRessMenge` aktive Liste + `register_ress_menge()`
 
-**Erweiterungen:** Knoten kann Material verbrauchen/produzieren.
+**Tests:** 10 neu (8 Integration + 2 Hand-Trace).
+- `tests/integration/test_v5_material.py`
+- `tests/diff/hand_trace/test_v5_erzeuger_verbraucher.py` + `.md`
 
-**Aufwand:** 1-2 Tage.
+**Semantik:**
+| Subtyp | RessVerfuegbar | OnProzBeginn | OnProzEnde |
+|---|---|---|---|
+| Erzgt | Zubuchung möglich? | — | RessZubuchen |
+| Verbr | Bestand ≥ menge? | RessAbbuchen | — |
+| Abfr | Bestand ≥ menge? | — | — |
+
+### V5.5 — "Speicher" (Entity-Slice, OFFEN)
+
+PSpeicherProz (Material-Container mit individuellen Entitäten),
+PEntitaet (Material-Identität), PAszSpeicher. Erlaubt FIFO/LIFO-Logik
+über konkreten Material-Instanzen, individuelle Tracking. Vom Mengen-
+Slice (V5) klar abgegrenzt — V5 reicht bereits für stückzahlbasierte
+Bestandsführung, Engpass-Analyse, Wartepfade.
 
 ### V6 — "Einsatzzeit"
 
@@ -191,8 +213,15 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   `PPerson`, `PtRelation`, `PtRelationBeleg`. Wartepfad mit
   `ProzWartAusloesen` läuft Hand-Trace-validiert. Mehrfachvererbung
   `PRessBeleg(PRessource, PAktor)` 1:1 via Python-MRO.
+- **V5 (Mengen-Slice) abgeschlossen (106 Tests, +10 V5-Tests).**
+  PRessMenge + Erzgt/Verbr/Abfr + PtRelationMenge. Bounded-Storage mit
+  Reservierungs-Liste 1:1. Wartepfad in beide Richtungen (Verbr wartet
+  bei leerem Lager, Erzgt wartet bei vollem Lager).
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
-**Nächster Schritt:** V5 — Material/Speicher (`PRessMenge`, `PAszMenge`,
-`PSpeicherProz`, `PAszSpeicher`, `PEntitaet`).
+**Nächste Schritte (Auswahl):**
+- V5.5 — PSpeicherProz / PEntitaet / PAszSpeicher (Entity-Identität)
+- V6 — PEinsatzzeit (Einsatzzeiten/Pausen für PRessBeleg)
+- V7 — PRessKollektion (Pool austauschbarer Ressourcen)
+- V8 — PtRelation für Multi-Knoten-Ressourcenbindung in Plänen
