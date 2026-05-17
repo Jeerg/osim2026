@@ -159,7 +159,11 @@ class PDlplKnoten(PSimObj):
 
         V2-Routing:
             - Wenn is_ptk: Counter++
-            - DLZ akkumulieren (Sample für KPI)
+            - DLZ akkumulieren (Sample für KPI; C++ `PtkIntervallEnd`).
+              Bei zwischenzeitlich unterbrochenen Prozessen (V6) ist
+              `_knoten_begin_zeit` der Anchor des LETZTEN aktiven
+              Intervalls (Resume-Zeitpunkt); ältere Intervalle wurden
+              bereits in `on_proz_unterbr` akkumuliert.
             - Listener notifizieren (on_proz_bearbeit_ende)
             - Prozess aus Liste entfernen
             - Routing:
@@ -171,10 +175,11 @@ class PDlplKnoten(PSimObj):
         if self.is_ptk:
             self.m_iPtkAusloesungCount += 1
 
-        # DLZ akkumulieren (V3 KPI)
+        # DLZ akkumulieren (V3 KPI, V6 mit Unterbrechungs-Anteil)
         begin = getattr(proz, "_knoten_begin_zeit", None)
         if begin is not None:
             self.m_dPtkDurchlaufzeit += float(self.p_simulator.evt_curr_time() - begin)
+            proz._knoten_begin_zeit = None  # type: ignore[attr-defined]
 
         for listener in list(self._listeners):
             listener.on_proz_bearbeit_ende(proz)
@@ -195,6 +200,27 @@ class PDlplKnoten(PSimObj):
         V2 minimale Implementation: leitet an on_proz_beendet weiter.
         """
         self.on_proz_beendet(proz, ent)
+
+    def on_proz_unterbr(self, proz: "PtProzess", ent: Any) -> None:
+        """C++: `PDlplKnoten::OnProzUnterbr` (PDlplKnoten.cpp:69-74) +
+        `PDlplKnoten::OnProzBearbeitUnterbr` (PDlplKnoten.cpp:811-821).
+
+        Wird vom Prozess gerufen, wenn er extern unterbrochen wird
+        (z. B. Einsatzzeit-Ende bei rsvStandard):
+            - DLZ-Intervall schließen (analog C++ PtkIntervallEnd)
+            - Listener `on_proz_bearbeit_unterbr` notifizieren
+            - Prozess bleibt in m_lProzesse (Resume per
+              proz_wart_ausloesen)
+        """
+        del ent  # V6 unbenutzt
+        # DLZ-Intervall schließen (V6 — Pausen-Zeit wird NICHT akkumuliert)
+        begin = getattr(proz, "_knoten_begin_zeit", None)
+        if begin is not None:
+            self.m_dPtkDurchlaufzeit += float(self.p_simulator.evt_curr_time() - begin)
+            proz._knoten_begin_zeit = None  # type: ignore[attr-defined]
+
+        for listener in list(self._listeners):
+            listener.on_proz_bearbeit_unterbr(proz)
 
     # ------------------------------------------------------------------
     # KPI-Methoden (V3)

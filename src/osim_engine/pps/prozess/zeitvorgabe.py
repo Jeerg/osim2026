@@ -43,6 +43,10 @@ class PtProzZeitvorgabe(PtProzess):
         super().__init__(simulator)
         self.m_iZeitinhaltAkt: int = 0
         self.m_iZeitinhaltGesamt: int = 0
+        # V6: Beginn der aktuellen Bearbeitung — gebraucht um bei
+        # Unterbrechung den noch nicht verarbeiteten Restzeitinhalt zu
+        # berechnen. C++: `PtProzess::m_iBearbeitBeginn`.
+        self.m_iBearbeitBeginn: int = 0
 
         # Handle des laufenden EvtBearbeitEnde-Events (für evtl. Stornieren)
         self._evt_bearbeit_ende_hdl: int | None = None
@@ -60,25 +64,39 @@ class PtProzZeitvorgabe(PtProzess):
     def bearbeit_beginnen(self) -> None:
         """Plant EvtBearbeitEnde.
 
-        Aus `PtProzess.cpp::PtProzZeitvorgabe::BearbeitBeginnen` (gekürzt
-        auf den Phase-1-Sim-Path; KPI-Detail in V2+):
+        C++: `PtProzZeitvorgabe::BearbeitBeginnen` (PtProzess.cpp:572-600).
+        Wichtig: Zeitinhalt wird NUR bei einem neuen Prozess gesetzt
+        (`status != PT_UNT`). Bei einem nach Unterbrechung wieder
+        aufgenommenen Prozess behält `m_iZeitinhaltAkt` den verbleibenden
+        Rest aus `bearbeit_unterbrechen`.
 
-        1. Zeitinhalt vom Knoten holen
-        2. Status setzen
-        3. EvtInsert(EvtBearbeitEnde, self, curr_time + zeitinhalt)
+        Reihenfolge:
+            1. (neu?) Zeitinhalt vom Knoten holen, m_iZeitinhaltGesamt setzen
+            2. m_iBearbeitBeginn = curr_time
+            3. super().bearbeit_beginnen → Status PT_BEARB + Relations/Aktor
+            4. EvtInsert(EvtBearbeitEnde, self, curr_time + zeitinhalt_akt)
         """
         from osim_engine.pps.knoten.zeitvorgabe import PDpKnZeitvorgabe
-
-        super().bearbeit_beginnen()  # Status setzen
 
         assert isinstance(self.m_oKnoten, PDpKnZeitvorgabe), (
             f"PtProzZeitvorgabe.m_oKnoten muss PDpKnZeitvorgabe sein, "
             f"ist aber {type(self.m_oKnoten).__name__}"
         )
-        self.m_iZeitinhaltAkt = self.m_oKnoten.get_durchfuehrungszeit(self)
-        self.m_iZeitinhaltGesamt = self.m_iZeitinhaltAkt
+
+        # 1) Zeitinhalt nur für neue Prozesse holen
+        if self.m_eStatus != PtStatus.PT_UNT:
+            self.m_iZeitinhaltAkt = self.m_oKnoten.get_durchfuehrungszeit(self)
+            self.m_iZeitinhaltGesamt = self.m_iZeitinhaltAkt
 
         sim = self.p_simulator
+
+        # 2) Bearbeitungsbeginn merken (für Restzeit bei Unterbrechung)
+        self.m_iBearbeitBeginn = sim.evt_curr_time()
+
+        # 3) Basisklasse: PT_BEARB + Aktor- / Relations-Notifikation
+        super().bearbeit_beginnen()
+
+        # 4) EvtBearbeitEnde planen
         ende_zeit = sim.evt_curr_time() + self.m_iZeitinhaltAkt
         self._evt_bearbeit_ende_hdl = sim.evt_insert(
             _EVT_BEARBEIT_ENDE, self, ende_zeit
@@ -118,3 +136,33 @@ class PtProzZeitvorgabe(PtProzess):
 
         # Relations notifizieren — V4-Pfad: ress_freigeben + proz_wart_ausloesen
         super().bearbeit_beenden()
+
+    def bearbeit_unterbrechen(self) -> None:
+        """C++: `PtProzZeitvorgabe::BearbeitUnterbrechen` (PtProzess.cpp:647-668).
+
+        Reihenfolge:
+            1. Status PT_UNT (vor zeitinhalt-Update, damit `bearbeit_beginnen`
+               beim Resume erkennt, dass m_iZeitinhaltAkt NICHT neu zu holen ist)
+            2. EvtBearbeitEnde stornieren
+            3. Restzeitinhalt aktualisieren: `m_iZeitinhaltAkt -= curr - m_iBearbeitBeginn`
+            4. knoten.on_proz_unterbr
+            5. super → relations + add_tail in Warteschlange
+        """
+        self.m_eStatus = PtStatus.PT_UNT
+
+        if self._evt_bearbeit_ende_hdl is not None:
+            self.p_simulator.evt_delete(self._evt_bearbeit_ende_hdl)
+            self._evt_bearbeit_ende_hdl = None
+
+        zeit = self.p_simulator.evt_curr_time()
+        self.m_iZeitinhaltAkt -= (zeit - self.m_iBearbeitBeginn)
+
+        self.p_simulator.bus.emit("proz.bearbeit.unterbr",
+                                  proz_id=self.m_sName,
+                                  knoten=self.m_oKnoten.m_sName if self.m_oKnoten else None,
+                                  rest_zeitinhalt=self.m_iZeitinhaltAkt)
+
+        assert self.m_oKnoten is not None
+        self.m_oKnoten.on_proz_unterbr(self, self.m_oEntitaet)
+
+        super().bearbeit_unterbrechen()

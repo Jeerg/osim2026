@@ -88,6 +88,8 @@ class RessBelegListener:
     def on_proz_beginn(self, proz: "PtProzess") -> None: ...
     def on_proz_ende(self, proz: "PtProzess") -> None: ...
     def on_proz_unterbr(self, proz: "PtProzess") -> None: ...
+    def on_einsatz_beginn(self) -> None: ...
+    def on_einsatz_ende(self) -> None: ...
 
 
 # ----------------------------------------------------------------------
@@ -333,6 +335,68 @@ class PRessBeleg(PRessource, PAktor):
         """PRessBeleg.cpp:738-747."""
         for listener in list(self._listeners):
             listener.on_proz_unterbr(proz)
+
+    # ------------------------------------------------------------------
+    # V6 — Einsatzzeit-Lifecycle
+    # ------------------------------------------------------------------
+
+    def on_einsatz_beginn(self, evttyp: Any = None, oezeit: Any = None) -> None:
+        """C++: `PRessBeleg::OnEinsatzBeginn` (PRessBeleg.cpp:754-795).
+
+        V6-Pfad (ohne Entscheider, ohne Aktor):
+            1. m_TryedPause = False
+            2. Listener notifizieren (`on_einsatz_beginn`)
+            3. set_status(RS_FREI), m_oProzCurrent = None
+            4. proz_wart_ausloesen (passiver Pfad, da m_bAktAsActor=False)
+        """
+        del evttyp, oezeit  # V6 unbenutzt — Pfade m_bIsEntFunktOn=False
+        self.m_TryedPause = False
+
+        for listener in list(self._listeners):
+            listener.on_einsatz_beginn()
+
+        self.set_status(RessStatus.RS_FREI)
+        self.m_oProzCurrent = None
+
+        self.p_simulator.bus.emit(
+            "ress.einsatz.beginn",
+            ressource=self.m_sName,
+        )
+
+        if not self.m_bAktAsActor:
+            self.proz_wart_ausloesen()
+
+    def on_einsatz_ende(self, evttyp: Any = None, oezeit: Any = None) -> None:
+        """C++: `PRessBeleg::OnEinsatzEnde` (PRessBeleg.cpp:798-933).
+
+        V6-Pfad — nur `rsvStandard`:
+            1. m_TryedPause = True
+            2. Listener notifizieren (`on_einsatz_ende`)
+            3. SetStatus(RS_PAUSE)
+            4. Falls aktuell ein Prozess läuft: `bearbeit_unterbrechen`
+        """
+        del evttyp, oezeit  # V6 unbenutzt
+        self.m_TryedPause = True
+
+        for listener in list(self._listeners):
+            listener.on_einsatz_ende()
+
+        self.p_simulator.bus.emit(
+            "ress.einsatz.ende",
+            ressource=self.m_sName,
+        )
+
+        if self.m_rsvPauseStatus == RessPauseVerhalten.RSV_STANDARD:
+            self.set_status(RessStatus.RS_PAUSE)
+            if self.m_oProzCurrent is not None:
+                self.m_oProzCurrent.bearbeit_unterbrechen()
+            return
+
+        # rsvRestBearb / rsvRestBearbProdEnd / rsvSelf — spätere Slices
+        # (Entscheider, V7+). Fallback: wie rsvStandard.
+        self.set_status(RessStatus.RS_PAUSE)
+        if self.m_oProzCurrent is not None:
+            self.m_oProzCurrent.bearbeit_unterbrechen()
 
     # ------------------------------------------------------------------
     # Helper

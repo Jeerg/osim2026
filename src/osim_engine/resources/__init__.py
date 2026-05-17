@@ -32,11 +32,19 @@ from osim_engine.resources.beleg import (
     RessPauseVerhalten,
     RessStatus,
 )
+from osim_engine.resources.einsatzzeit import (
+    EinsatzEvtTyp,
+    PEinsatzzeit,
+    PEinsatzzeitEvtMode,
+    PEinsatzzeitPause,
+    PPauseZyklus,
+)
 from osim_engine.resources.menge import PRessLager, PRessMenge
 from osim_engine.resources.relation import PtRelation, PtRelationBeleg, PtRelationMenge
 from osim_engine.resources.ressource import PRessource
 
 __all__ = [
+    "EinsatzEvtTyp",
     "PAktor",
     "PAssoziation",
     "PAssozBeleg",
@@ -47,6 +55,10 @@ __all__ = [
     "PAssozMengeVerbrZwischen",
     "PAssozRessource",
     "PBetriebsmittel",
+    "PEinsatzzeit",
+    "PEinsatzzeitEvtMode",
+    "PEinsatzzeitPause",
+    "PPauseZyklus",
     "PPerson",
     "PRessBeleg",
     "PRessLager",

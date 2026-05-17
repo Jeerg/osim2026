@@ -119,8 +119,11 @@ class PtProzess(PSimObj):
     def bearbeit_unterbrechen(self) -> None:
         """C++: `PtProzess::BearbeitUnterbrechen` (PtProzess.cpp:189-220).
 
-        V4 abgespeckt: Relationen notifizieren + abräumen, Status auf
-        PT_UNT. Aktor-Schlangen-Verwaltung folgt in V8.
+        V6 vollständig: Status PT_UNT, Relationen notifizieren + abräumen,
+        Prozess in die zentrale Warteschlange hängen, damit
+        `proz_wart_ausloesen` ihn nach Pause-Ende neu starten kann.
+
+        Aktor-Schlangen-Verwaltung folgt in V8.
         """
         self.m_eStatus = PtStatus.PT_UNT
 
@@ -128,6 +131,10 @@ class PtProzess(PSimObj):
             rel.on_proz_unterbr(self)
 
         self.m_oRelationen.clear()
+
+        # In zentrale Warteschlange — Aktor-Pfad fehlt V4-V7
+        if self.m_oAktor is None:
+            self.p_simulator.m_oWarteSchl.add_tail(self)
 
     def on_bearbeit_abgelehnt(self) -> None:
         """Bearbeitung wurde wegen Ressourcen-Konflikt abgelehnt.

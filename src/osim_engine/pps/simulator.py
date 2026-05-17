@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from osim_engine.pps.ausloeser.base import PAusloeser
     from osim_engine.pps.knoten.base import PDlplKnoten
     from osim_engine.resources.beleg import PRessBeleg
+    from osim_engine.resources.einsatzzeit import PEinsatzzeit
     from osim_engine.resources.menge import PRessMenge
 
 
@@ -54,7 +55,8 @@ class PSimulator(OSimulator):
         # V5 aktiv (Bestands-Ressourcen):
         self.m_lRessMenge: list["PRessMenge"] = []
         self.m_lSpeichProz: list = []
-        self.m_lEinsatz: list = []
+        # V6 aktiv (Einsatzzeiten/Pausen):
+        self.m_lEinsatz: list["PEinsatzzeit"] = []
         self.m_lExtVert: list = []
         self.m_lZelSystem: list = []
         self.m_lEntInfo: list = []
@@ -131,6 +133,17 @@ class PSimulator(OSimulator):
         """
         self.m_lRessMenge.append(ress)
         self._children.append(ress)
+
+    def register_einsatzzeit(self, einsatz: "PEinsatzzeit") -> None:
+        """Hängt eine PEinsatzzeit in m_lEinsatz + ins Tree-Lifecycle.
+
+        V6-Pragma: PEinsatzzeit.on_period_begin ruft `insert_events`, das
+        die EvtPause-Events für die kommende Periode in den Pool legt.
+        Die `attach_ressource()`-Beziehung muss bereits aufgebaut sein,
+        bevor sim.start() läuft.
+        """
+        self.m_lEinsatz.append(einsatz)
+        self._children.append(einsatz)
 
     # ------------------------------------------------------------------
     # Lifecycle-Hooks
