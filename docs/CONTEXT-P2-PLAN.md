@@ -121,14 +121,45 @@ PEntitaet (Material-Identität), PAszSpeicher. Erlaubt FIFO/LIFO-Logik
 Slice (V5) klar abgegrenzt — V5 reicht bereits für stückzahlbasierte
 Bestandsführung, Engpass-Analyse, Wartepfade.
 
-### V6 — "Einsatzzeit"
+### V6 — "Einsatzzeit" (Pause-Slice) ✅ ABGESCHLOSSEN
 
-**Modell:** PRessBeleg mit Tagesarbeitszeit. Außerhalb → rsPause. Pausen-
-Strategien (rsvStandard, rsvRestBearb, rsvRestBearbProdEnd).
+**Modell:** PRessBeleg mit wiederkehrenden Pausen via PEinsatzzeitPause.
+Pause → rsPause, lfd. Prozess wird unterbrochen, Resume mit Restzeit
+nach Pause-Ende. Tagesarbeitszeiten (`PEinsatzzeitTag`) und andere
+Pausen-Strategien (`rsvRestBearb`, `rsvRestBearbProdEnd`) sind separate
+spätere Slices.
 
-**Klassen:** PEinsatzzeit + Event-Mechanik in PRessBeleg.
+**Implementiert:**
+- `PEinsatzzeit` (abstract) + `PEinsatzzeitPause` + `PPauseZyklus`,
+  `PEinsatzzeitEvtMode`/`EinsatzEvtTyp`-Enums, `EvtPause` (sub_time=3)
+  — `src/osim_engine/resources/einsatzzeit.py`
+- `PRessBeleg.on_einsatz_beginn/ende` mit rsvStandard-Pfad
+  (PRessBeleg.cpp:754-933 vereinfacht: keine Entscheider-Pfade)
+- `RessBelegListener.on_einsatz_beginn/ende`
+- `PtProzess.bearbeit_unterbrechen` hängt Prozess in m_oWarteSchl
+- `PtProzZeitvorgabe.bearbeit_unterbrechen` storniert EvtBearbeitEnde,
+  rechnet Restzeitinhalt aus
+- `PtProzZeitvorgabe.bearbeit_beginnen` mit conditional zeitinhalt
+  (`status != PT_UNT` → neu holen; sonst Restwert behalten)
+- `PtProzZeitvorgabe.m_iBearbeitBeginn`-Feld
+- `PDlplKnoten.on_proz_unterbr` (DLZ-Intervall schließen + Listener)
+- `PDlplKnoten.on_proz_beendet`/`on_proz_unterbr` DLZ-Akkumulation
+  jetzt analog C++ `PtkIntervallBegin/End` — Pausen-Zeit zählt NICHT
+  zur Knoten-DLZ, aber zur Auslöser-DLZ (via m_iAuslZeitpunkt → curr)
+- `PSimulator.m_lEinsatz` aktive Liste + `register_einsatzzeit()`,
+  Lifecycle-Forwarding via `on_period_begin` → `insert_events`
 
-**Aufwand:** 1-2 Tage.
+**Tests:** 7 neu (5 Integration + 2 Hand-Trace).
+- `tests/integration/test_v6_einsatzzeit.py`
+- `tests/diff/hand_trace/test_v6_pause_unterbricht_proz.py` + `.md`
+
+**Bewusst vertagt:**
+- `PEinsatzzeitTag` (Tagesarbeitszeiten mit Wochenplan, PTagRess, PEM_INIT)
+- Pausen-Strategien `rsvRestBearb`, `rsvRestBearbProdEnd`, `rsvSelf`
+- Anwesenheits-Wahrscheinlichkeit `m_iAnwWahrsch < 100` (in V4 schon
+  implementiert, in V6 nicht zusätzlich getestet)
+
+### V5.5 — "Speicher" (Entity-Slice, OFFEN)
 
 ### V7 — "Pool/Kollektion"
 
@@ -217,11 +248,16 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   PRessMenge + Erzgt/Verbr/Abfr + PtRelationMenge. Bounded-Storage mit
   Reservierungs-Liste 1:1. Wartepfad in beide Richtungen (Verbr wartet
   bei leerem Lager, Erzgt wartet bei vollem Lager).
+- **V6 (Pause-Slice) abgeschlossen (113 Tests, +7 V6-Tests).**
+  PEinsatzzeitPause + PPauseZyklus + rsvStandard-Pfad in PRessBeleg.
+  PtProzZeitvorgabe.bearbeit_unterbrechen mit Restzeit-Berechnung;
+  Resume via proz_wart_ausloesen aus on_einsatz_beginn. DLZ
+  jetzt 1:1 zu C++ PtkIntervallBegin/End (Pause zählt nicht).
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
 **Nächste Schritte (Auswahl):**
 - V5.5 — PSpeicherProz / PEntitaet / PAszSpeicher (Entity-Identität)
-- V6 — PEinsatzzeit (Einsatzzeiten/Pausen für PRessBeleg)
+- V6.5 — PEinsatzzeitTag (Tagesarbeitszeiten mit Wochenplan)
 - V7 — PRessKollektion (Pool austauschbarer Ressourcen)
 - V8 — PtRelation für Multi-Knoten-Ressourcenbindung in Plänen
