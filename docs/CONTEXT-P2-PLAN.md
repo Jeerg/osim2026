@@ -59,40 +59,37 @@ Phase 2 macht den Simulator **lauffähig für reale PPS-Modelle**.
 
 ## Vertikale Slice-Aufteilung
 
-### V4 — "Passive Maschine"
+### V4 — "Passive Maschine" ✅ ABGESCHLOSSEN
 
 **Modell:** 1 Knoten, 1 Auslöser, 1 PRessBeleg (Maschine M). Knoten ist
 verbunden mit M via `PAssoziation`. Wenn M frei → Knoten startet
 Bearbeitung. Wenn M belegt → Prozess wartet im m_oWarteSchl.
 
-**Klassen:**
-- `PRessource` (Basis)
-- `PAktor` (Stub, da V4 nur passive Pfad nutzt)
-- `PRessBeleg` (m_rsStatus, RessBelegen/Freigeben, RessVerfuegbar)
-- `PAssoziation` (Basis)
-- `PAssozRessource` (Knoten→Liste)
-- `PAssozBeleg` (konkrete Belegung)
-- Erweiterung `PDlplKnoten`:
-  - `m_lAssozRess` als Liste aktiv
-  - `ress_verfuegbar(proz)` prüft alle m_lAssozRess
-  - `on_proz_beendet` ruft `RessFreigeben` an allen belegten Ressourcen
-- Erweiterung `PSimulator`:
-  - `m_lRessBeleg` mit Lifecycle-Forwarding
-  - `register_ressource()`-Helper
-- Erweiterung `PtProzZeitvorgabe.bearbeit_beginnen`:
-  - `RessBelegen(proz)` vor dem EvtBearbeitEnde plant
-- Erweiterung `PtProzZeitvorgabe.bearbeit_beenden`:
-  - `RessFreigeben(proz)` nach `on_proz_beendet`
+**Implementiert:**
+- `PRessource` (Basis) — `src/osim_engine/resources/ressource.py`
+- `PAktor` (Stub) — `src/osim_engine/resources/aktor.py`
+- `PRessBeleg` + Subtypen `PBetriebsmittel`, `PPerson` — `resources/beleg.py`
+- `PAssoziation` + `PAssozRessource` (abstract) — `resources/assoziation/base.py`
+- `PAssozBeleg` (passive Belegung) — `resources/assoziation/beleg.py`
+- `PtRelation`, `PtRelationBeleg` — `resources/relation.py`
+- Mehrfachvererbung `PRessBeleg(PRessource, PAktor)` 1:1 via Python-MRO
+- Erweiterung `PDlplKnoten`: `m_lAssozRess` aktive Liste,
+  `add_assoziation()`-Helper, `bearbeit_beginnen` restrukturiert nach
+  C++ (Counter immer, dann ress_verfuegbar, dann notify+begin ODER
+  on_bearbeit_abgelehnt)
+- Erweiterung `PtProzess`: `ress_verfuegbar()`, `ress_anwesend()`,
+  `on_bearbeit_abgelehnt()`, Relations-Notifikation in
+  `bearbeit_beginnen`/`bearbeit_beenden`
+- Erweiterung `PSimulator`: `m_lRessBeleg` aktive Liste,
+  `register_ressource()` mit Lifecycle-Forwarding
+- `proz_wart_ausloesen` auf PRessBeleg — Snapshot-Iteration
 
-**Test:**
-- Smoke: 1 Knoten + 1 PRessBeleg + 2 Auslöser zu unterschiedlichen Zeiten
-  → erster Auftrag belegt M, zweiter wartet, dann läuft zweiter
-- Counter: m_iPtkBeiAnfrageAnwesend, m_iPtkAnfragenGesamt
-- Hand-Trace gegen Papier
+**Tests:** 8 neue (6 Integration + 2 Hand-Trace), alle grün.
+- `tests/integration/test_v4_passive_ressource.py`
+- `tests/diff/hand_trace/test_v4_one_node_one_ress.py`
+- `tests/diff/hand_trace/v4_one_node_one_ress.md` (Erwartungs-Tabelle)
 
-**Aufwand:** geschätzt 1-2 Tage.
-
-### V5 — "Material/Speicher"
+### V5 — "Material/Speicher" (NÄCHSTES)
 
 **Modell:** + PRessMenge (Bestand), PSpeicherProz (Material-Container).
 
@@ -188,9 +185,14 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
 
 - Phase 1 abgeschlossen (88 Tests).
 - M1 (PtProzDurchlaufplan Konsistenz-Check) gefixt vor Phase 2.
+- **V4 abgeschlossen (96 Tests, +8 V4-Tests).** Passive Ressourcen-Pfad
+  funktioniert: `PRessource`, `PAktor` (Stub), `PAssoziation`,
+  `PAssozRessource`, `PAssozBeleg`, `PRessBeleg`, `PBetriebsmittel`,
+  `PPerson`, `PtRelation`, `PtRelationBeleg`. Wartepfad mit
+  `ProzWartAusloesen` läuft Hand-Trace-validiert. Mehrfachvererbung
+  `PRessBeleg(PRessource, PAktor)` 1:1 via Python-MRO.
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
-**Nächster Schritt:** V4 anfangen — `PRessource`, `PAktor` (Stub),
-`PAssoziation`, `PAssozRessource`, `PAssozBeleg`, `PRessBeleg` (minimaler
-Path, ohne Einsatzzeit/Pause).
+**Nächster Schritt:** V5 — Material/Speicher (`PRessMenge`, `PAszMenge`,
+`PSpeicherProz`, `PAszSpeicher`, `PEntitaet`).
