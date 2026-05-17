@@ -39,6 +39,7 @@ from osim_engine.resources.einsatzzeit import (
     PEinsatzzeitPause,
     PPauseZyklus,
 )
+from osim_engine.resources.kollektion import PRessKollEinheiten, PRessKollektion
 from osim_engine.resources.menge import PRessLager, PRessMenge
 from osim_engine.resources.relation import PtRelation, PtRelationBeleg, PtRelationMenge
 from osim_engine.resources.ressource import PRessource
@@ -61,6 +62,8 @@ __all__ = [
     "PPauseZyklus",
     "PPerson",
     "PRessBeleg",
+    "PRessKollEinheiten",
+    "PRessKollektion",
     "PRessLager",
     "PRessMenge",
     "PRessource",
