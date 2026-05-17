@@ -4,6 +4,10 @@ Provenienz: `OSimPro/PDlplKnoten.odh` + `OSimPro/PDlplKnoten.cpp`.
 
 V1: minimal, ohne Plan-Graph-Routing.
 V2: m_lKanteAus-Routing in on_proz_beendet, KnotenListener, on_proz_sub_beendet.
+V4: m_lAssozRess wird aktive Liste; bearbeit_beginnen wird C++-konform
+restrukturiert (Counter immer, dann ress_verfuegbar, dann
+on_proz_bearbeit_beginn + proz.bearbeit_beginnen ODER
+proz.on_bearbeit_abgelehnt).
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ if TYPE_CHECKING:
     from osim_engine.pps.kante.base import PDlplKante
     from osim_engine.pps.prozess.base import PtProzess
     from osim_engine.pps.simulator import PSimulator
+    from osim_engine.resources.assoziation.base import PAssozRessource
 
 
 class KnotenListener:
@@ -58,6 +63,9 @@ class PDlplKnoten(PSimObj):
         self.m_lKanteEin: "PDlplKante | None" = None
         self.m_lKanteAus: "PDlplKante | None" = None
         self.m_lKnotenOber: "PDlplKnoten | None" = None
+
+        # Ressourcen-Assoziationen — in V4 aktiv
+        self.m_lAssozRess: list["PAssozRessource"] = []
         self.m_lAssozSpeich: Any = None    # PAssozSpeicher (P3)
 
         # Protokoll-Counter
@@ -97,33 +105,54 @@ class PDlplKnoten(PSimObj):
         except ValueError:
             pass
 
+    # ------------------------------------------------------------------
+    # Assoziations-Helper (V4)
+    # ------------------------------------------------------------------
+
+    def add_assoziation(self, assoz: "PAssozRessource") -> None:
+        """Hängt eine PAssozRessource (z. B. PAssozBeleg) an den Knoten.
+
+        Setzt den Rück-Link `assoz.m_lKnoten = self`. Die Assoziation wird
+        NICHT separat ins Simulator-Lifecycle eingehängt — in V4 reicht das,
+        da PAssozBeleg.on_sim_* nur Entscheider-State zurücksetzt (in V4
+        deaktiviert) bzw. Protokoll-Arrays initialisiert (V6+).
+        """
+        assoz.m_lKnoten = self
+        self.m_lAssozRess.append(assoz)
+
     def ress_verfuegbar(self, proz: "PtProzess") -> bool:
-        """In V1/V2 immer True (keine Ressourcen-Logik)."""
-        return True
+        """Default-Delegate an `proz.ress_verfuegbar()`.
+
+        Ohne Assoziationen (V1-V3-Pfad) → immer True. Mit Assoziationen
+        (V4+) iteriert die Prozess-Seite alle PAssozRessource des Knotens.
+        """
+        return proz.ress_verfuegbar()
 
     def bearbeit_beginnen(self, proz: "PtProzess") -> bool:
-        """Bearbeitung initiieren.
+        """Bearbeitung initiieren — C++-konform.
 
-        Reihenfolge:
-            1. ress_verfuegbar prüfen → bei False return False
-            2. m_iPtkBegAusloesungCount++
-            3. Begin-Zeitpunkt am Prozess merken (für DLZ-Akkumulation)
-            4. Listener-Notifikation (V2+)
-            5. proz.bearbeit_beginnen()
-            6. return True
+        C++ `PDlplKnoten::BearbeitBeginnen` (PDlplKnoten.cpp:35-57):
+            1. m_iPtkBegAusloesungCount++  (zählt JEDE Auslösung, auch refused)
+            2. ress_verfuegbar prüfen
+               True  → OnProzBearbeitBeginn (Listener) + proz.bearbeit_beginnen
+               False → proz.on_bearbeit_abgelehnt + return False
         """
-        if not self.ress_verfuegbar(proz):
-            return False
         self.m_iPtkBegAusloesungCount += 1
 
-        # DLZ-Akkumulation vorbereiten: Begin am Prozess merken
-        proz._knoten_begin_zeit = self.p_simulator.evt_curr_time()  # type: ignore[attr-defined]
+        if self.ress_verfuegbar(proz):
+            # DLZ-Akkumulation vorbereiten: Begin am Prozess merken
+            proz._knoten_begin_zeit = self.p_simulator.evt_curr_time()  # type: ignore[attr-defined]
 
-        for listener in list(self._listeners):
-            listener.on_proz_bearbeit_beginn(proz)
+            for listener in list(self._listeners):
+                listener.on_proz_bearbeit_beginn(proz)
 
-        proz.bearbeit_beginnen()
-        return True
+            proz.bearbeit_beginnen()
+            return True
+
+        # Ressource(n) nicht verfügbar: Relationen aufräumen, Refuse-Counter
+        proz.on_bearbeit_abgelehnt()
+        self.m_iPtkProzRefuseCount += 1
+        return False
 
     def on_proz_beendet(self, proz: "PtProzess", ent: Any) -> None:
         """Wird vom Prozess gerufen, wenn er fertig ist.

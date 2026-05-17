@@ -90,7 +90,21 @@ class PtProzZeitvorgabe(PtProzess):
                      ende_zeit=ende_zeit)
 
     def bearbeit_beenden(self) -> None:
-        """Beendet die Bearbeitung. Notifiziert den Knoten."""
+        """Beendet die Bearbeitung.
+
+        Reihenfolge (C++ `PtProzZeitvorgabe::BearbeitBeenden`,
+        PtProzess.cpp:603-638):
+            1. Status PT_ENDE setzen
+            2. EventBus-Trace
+            3. knoten.on_proz_beendet (Routing zum Nachfolger)
+            4. super().bearbeit_beenden (Relations → ress_freigeben →
+               proz_wart_ausloesen)
+
+        Die Ressourcen-Freigabe nach dem Routing entspricht 1:1 dem C++-Pfad
+        — ein nachfolgender Knoten, der dieselbe Ressource benötigt, sieht
+        sie zuerst belegt und wandert in die Warteschlange; die anschließende
+        Freigabe triggert das Wiederaufnahme-Event.
+        """
         self.m_eStatus = PtStatus.PT_ENDE
         self._evt_bearbeit_ende_hdl = None
 
@@ -101,3 +115,6 @@ class PtProzZeitvorgabe(PtProzess):
                                   knoten=self.m_oKnoten.m_sName)
 
         self.m_oKnoten.on_proz_beendet(self, self.m_oEntitaet)
+
+        # Relations notifizieren — V4-Pfad: ress_freigeben + proz_wart_ausloesen
+        super().bearbeit_beenden()

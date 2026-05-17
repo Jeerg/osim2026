@@ -23,6 +23,7 @@ from osim_engine.pps.prozess_dll import PProzessDLL
 if TYPE_CHECKING:
     from osim_engine.pps.ausloeser.base import PAusloeser
     from osim_engine.pps.knoten.base import PDlplKnoten
+    from osim_engine.resources.beleg import PRessBeleg
 
 
 class PGeneratorStub:
@@ -47,8 +48,9 @@ class PSimulator(OSimulator):
         self.m_lDlpl: list = []                    # PDurchlaufplan — V1 leer
         self.m_oWarteSchl: PProzessDLL = PProzessDLL()
         self.m_lKlassen: list = []                  # PKlasse — V1 leer
-        # In V1 ungenutzt (deklariert für API-Treue):
-        self.m_lRessBeleg: list = []
+        # V4 aktiv (passive Belegungs-Ressourcen):
+        self.m_lRessBeleg: list["PRessBeleg"] = []
+        # In V1-V3 ungenutzt (deklariert für API-Treue):
         self.m_lRessMenge: list = []
         self.m_lSpeichProz: list = []
         self.m_lEinsatz: list = []
@@ -105,6 +107,19 @@ class PSimulator(OSimulator):
         """
         self.m_lDlpl.append(plan)
         self._children.append(plan)
+
+    def register_ressource(self, ress: "PRessBeleg") -> None:
+        """Hängt eine PRessBeleg in m_lRessBeleg + ins Tree-Lifecycle.
+
+        V4-Pragma: PRessBeleg hat eigene on_sim_begin/on_sim_reset/on_rec_init
+        (siehe `resources/beleg.py`). Die Lifecycle-Hooks laufen automatisch
+        über `self._children`.
+
+        Assoziationen (PAssozBeleg) werden separat über `register_assoziation`
+        am Knoten gehängt — sie sind nicht direkt Simulator-Children.
+        """
+        self.m_lRessBeleg.append(ress)
+        self._children.append(ress)
 
     # ------------------------------------------------------------------
     # Lifecycle-Hooks
