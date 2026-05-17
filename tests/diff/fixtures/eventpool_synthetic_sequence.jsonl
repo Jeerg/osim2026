@@ -1,0 +1,6 @@
+{"pop_order":0,"combined":2002,"decoded_time":500,"sub_time":2,"name":"X1"}
+{"pop_order":1,"combined":4000,"decoded_time":1000,"sub_time":0,"name":"A1"}
+{"pop_order":2,"combined":4000,"decoded_time":1000,"sub_time":0,"name":"A2"}
+{"pop_order":3,"combined":4001,"decoded_time":1000,"sub_time":1,"name":"B1"}
+{"pop_order":4,"combined":4003,"decoded_time":1000,"sub_time":3,"name":"C1"}
+{"pop_order":5,"combined":6000,"decoded_time":1500,"sub_time":0,"name":"D1"}
