@@ -161,13 +161,38 @@ spätere Slices.
 
 ### V5.5 — "Speicher" (Entity-Slice, OFFEN)
 
-### V7 — "Pool/Kollektion"
+### V7 — "Pool/Kollektion" ✅ ABGESCHLOSSEN
 
-**Modell:** N austauschbare Ressourcen, Knoten greift auf irgendeine freie zu.
+**Modell:** N austauschbare Ressourcen pro Assoz, Knoten greift auf die
+erste freie zu (linear-first-free).
 
-**Klassen:** PRessKollektion + ressourcen-Auswahl-Logik.
+**Wichtige Erkenntnis:** Die Pool-Semantik sitzt seit V4 **schon
+vollständig** in `PAssozBeleg.ress_verfuegbar` — der iteriert
+`m_lRessourcen` und nimmt die erste freie. `PRessKollektion` ist im
+C++-Original ein **reiner Stub** (alle Sim-Methoden werfen). V7
+implementiert daher (a) die Stub-Klasse 1:1 für Klassenhierarchie-Treue
+und (b) verifiziert die bereits vorhandene Pool-Semantik durch dedizierte
+Tests + Hand-Trace.
 
-**Aufwand:** 1 Tag.
+**Implementiert:**
+- `PRessKollektion` + `PRessKollEinheiten` — `src/osim_engine/resources/kollektion.py`,
+  1:1 zu C++ inkl. `NotImplementedError`-Stubs für `ress_belegen`/
+  `ress_freigeben`. `get_ress_anzahl` liefert Listenlänge bzw.
+  `m_iEinheiten`.
+- Keine Änderung an `PAssozBeleg` nötig — die Pool-Semantik war bereits
+  in V4 vorhanden.
+
+**Tests:** 9 neu (7 Integration + 2 Hand-Trace).
+- `tests/integration/test_v7_pool.py` — 3-Maschinen-parallel,
+  4-Job-mit-Warte, first-free-Bevorzugung, Pool-mit-1-Resource entspricht
+  V4-Einzel, PRessKollektion-Stub-Verifikation.
+- `tests/diff/hand_trace/test_v7_pool_three_machines.py` + `.md` —
+  papier-genaues Trace-Matrix-Beispiel.
+
+**Pool-Strategie:** `linear-first-free` (1:1 zu C++ `PAssozBeleg::
+RessVerfuegbar` Pfad `!IsEntFunktOn`, PAssozRessource.cpp:601-624).
+Entscheider-basierte Pool-Strategien (`ABL_PREFER`/`ABL_STD`/
+`ABL_IF_NEEDED`) folgen mit Phase 5 (Entscheider).
 
 ### V8 — "PtRelation"
 
@@ -253,11 +278,14 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   PtProzZeitvorgabe.bearbeit_unterbrechen mit Restzeit-Berechnung;
   Resume via proz_wart_ausloesen aus on_einsatz_beginn. DLZ
   jetzt 1:1 zu C++ PtkIntervallBegin/End (Pause zählt nicht).
+- **V7 (Pool-Slice) abgeschlossen (122 Tests, +9 V7-Tests).**
+  PRessKollektion + PRessKollEinheiten als 1:1-Stub-Klassen. Pool-
+  Semantik selbst war seit V4 implementiert (in PAssozBeleg);
+  V7 verifiziert sie durch dedizierte Tests + Hand-Trace.
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
 **Nächste Schritte (Auswahl):**
 - V5.5 — PSpeicherProz / PEntitaet / PAszSpeicher (Entity-Identität)
 - V6.5 — PEinsatzzeitTag (Tagesarbeitszeiten mit Wochenplan)
-- V7 — PRessKollektion (Pool austauschbarer Ressourcen)
 - V8 — PtRelation für Multi-Knoten-Ressourcenbindung in Plänen
