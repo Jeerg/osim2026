@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from osim_engine.pps.simulator import PSimulator
     from osim_engine.resources.assoziation.base import PAssozRessource
     from osim_engine.resources.beleg import PRessBeleg
+    from osim_engine.resources.menge import PRessMenge
 
 
 class PtRelation(PSimObj):
@@ -55,3 +56,15 @@ class PtRelationBeleg(PtRelation):
     def __init__(self, simulator: "PSimulator | None") -> None:
         super().__init__(simulator)
         self.m_oRessBeleg: "PRessBeleg | None" = None
+
+
+class PtRelationMenge(PtRelation):
+    """C++-Äquivalent: `PtRelationMenge` (`PtRelation.odh:60`).
+
+    Hält den Rück-Link auf die `PRessMenge`, damit `PAssozMenge*.on_proz_*`
+    direkt zubuchen/abbuchen kann ohne erneuten Lookup.
+    """
+
+    def __init__(self, simulator: "PSimulator | None") -> None:
+        super().__init__(simulator)
+        self.m_oRessMenge: "PRessMenge | None" = None

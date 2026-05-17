@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from osim_engine.pps.ausloeser.base import PAusloeser
     from osim_engine.pps.knoten.base import PDlplKnoten
     from osim_engine.resources.beleg import PRessBeleg
+    from osim_engine.resources.menge import PRessMenge
 
 
 class PGeneratorStub:
@@ -50,8 +51,8 @@ class PSimulator(OSimulator):
         self.m_lKlassen: list = []                  # PKlasse — V1 leer
         # V4 aktiv (passive Belegungs-Ressourcen):
         self.m_lRessBeleg: list["PRessBeleg"] = []
-        # In V1-V3 ungenutzt (deklariert für API-Treue):
-        self.m_lRessMenge: list = []
+        # V5 aktiv (Bestands-Ressourcen):
+        self.m_lRessMenge: list["PRessMenge"] = []
         self.m_lSpeichProz: list = []
         self.m_lEinsatz: list = []
         self.m_lExtVert: list = []
@@ -119,6 +120,16 @@ class PSimulator(OSimulator):
         am Knoten gehängt — sie sind nicht direkt Simulator-Children.
         """
         self.m_lRessBeleg.append(ress)
+        self._children.append(ress)
+
+    def register_ress_menge(self, ress: "PRessMenge") -> None:
+        """Hängt eine PRessMenge in m_lRessMenge + ins Tree-Lifecycle.
+
+        V5-Pragma: PRessMenge.on_sim_begin setzt Bestand auf Anfangsbestand,
+        on_rec_init nullt die Protokoll-Counter. Forwarding über
+        `self._children`.
+        """
+        self.m_lRessMenge.append(ress)
         self._children.append(ress)
 
     # ------------------------------------------------------------------
