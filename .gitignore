@@ -28,3 +28,9 @@ result.json
 
 # Local fixtures (große .otx-Files werden separat versioniert)
 tests/fixtures/large/
+
+# osim2004-trace Build-Output
+osim2004-trace/bin/
+osim2004-trace/*.exe
+osim2004-trace/*.obj
+osim2004-trace/*.o
