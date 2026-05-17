@@ -86,13 +86,16 @@ class PAusloeser(PSimObj):
                                   trigger_id=trigger.m_sName,
                                   target=self.m_lDlpl.m_sName)
 
-        # In V1: Trigger als Wurzel-Prozess-Identität für die Knoten-Hierarchie.
-        # Wir erzeugen einen Pseudo-"Prozess-Ober", indem wir den Trigger selbst
-        # als Trigger-Ref übergeben. Die proz_weitergeben-Logik in
-        # PDpKnZeitvorgabe nutzt proz_ober.m_oTrigger — wir basteln also ein
-        # einfaches Objekt mit den nötigen Attributen.
-        root_proz_ober = _RootProzOber(self.m_sName, trigger)
-        self.m_lDlpl.proz_weitergeben(root_proz_ober, self.m_lEntitaet)
+        # Duck-Typing für V1/V2-Kompatibilität:
+        # - V2: m_lDlpl ist PDurchlaufplan → hat dlpl_ausloesen(trigger, ober, ent)
+        # - V1: m_lDlpl ist PDpKnKonstant direkt → hat nur proz_weitergeben
+        if hasattr(self.m_lDlpl, "dlpl_ausloesen"):
+            # V2-Pfad: echter Plan
+            self.m_lDlpl.dlpl_ausloesen(trigger, None, self.m_lEntitaet)
+        else:
+            # V1-Pfad: direkter Knoten ohne Plan (für Kompatibilität)
+            root_proz_ober = _RootProzOber(self.m_sName, trigger)
+            self.m_lDlpl.proz_weitergeben(root_proz_ober, self.m_lEntitaet)
 
     def on_dlpl_beendet(self, trigger: "PtTrigger", proz: "PtProzess") -> None:
         """Wird vom Trigger gerufen, wenn der ausgelöste Plan/Knoten fertig ist."""

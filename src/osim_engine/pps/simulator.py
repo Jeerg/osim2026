@@ -86,9 +86,25 @@ class PSimulator(OSimulator):
         self._children.append(ausl)
 
     def register_knoten(self, knoten: "PDlplKnoten") -> None:
-        """Hängt einen Knoten in m_lKnoten + ins Tree-Lifecycle (V1-Pragma)."""
+        """Hängt einen Knoten direkt in m_lKnoten + ins Tree-Lifecycle.
+
+        V1-Pragma: in V1 hat der Auslöser den Knoten direkt als m_lDlpl.
+        V2+: stattdessen register_plan() verwenden — der Plan kapselt seine
+        eigenen Knoten via add_knoten() und übernimmt das Lifecycle-
+        Forwarding.
+        """
         self.m_lKnoten.append(knoten)
         self._children.append(knoten)
+
+    def register_plan(self, plan) -> None:
+        """Hängt einen PDurchlaufplan in m_lDlpl + ins Tree-Lifecycle.
+
+        Die inneren Knoten/Kanten des Plans werden NICHT separat im
+        Simulator registriert — der Plan-Container leitet on_*-Hooks
+        an seine inneren Container weiter.
+        """
+        self.m_lDlpl.append(plan)
+        self._children.append(plan)
 
     # ------------------------------------------------------------------
     # Lifecycle-Hooks

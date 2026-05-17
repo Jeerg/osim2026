@@ -103,3 +103,46 @@ class PDpKnKonstant(PDpKnZeitvorgabe):
         self.m_iPtkKumDurchfuehrungszeit += self.m_iDurchfuehrungszeit
         self.m_iPtkDurchfuehrungszeitCount += 1
         return self.m_iDurchfuehrungszeit
+
+
+class PDpKnVerteilung(PDpKnZeitvorgabe):
+    """Verteilte Durchführungszeit. C++: `PDpKnVerteilung` (PDpKnZeitvorgabe.odh:176).
+
+    Wörtlich aus PDpKnZeitvorgabe.cpp:374-397 (siehe SUPPLEMENT § 1.4).
+
+    Zwei Modi (gesteuert über `simulator.pre_compute_kante_verteilung`):
+        - lazy (Default, False): m_iVerteilZeit wird in get_durchfuehrungszeit
+          gezogen; rejection-loop bis wert > 0
+        - eager (True): m_iVerteilZeit wird in on_sim_begin schon gezogen
+    """
+
+    def __init__(self, simulator: "PSimulator | None") -> None:
+        super().__init__(simulator)
+        self.m_iVerteilZeit: int = 0
+        # m_lVerteil: Optional[OVerteilung] — von außen gesetzt
+        self.m_lVerteil: Any = None
+
+    def on_sim_begin(self, sim, deep: bool = True) -> None:
+        super().on_sim_begin(sim, deep=deep)
+        if not getattr(self.p_simulator, "pre_compute_kante_verteilung", False):
+            self.m_iVerteilZeit = 0
+        else:
+            assert self.m_lVerteil is not None, "PDpKnVerteilung ohne m_lVerteil"
+            self.m_iVerteilZeit = -1
+            while self.m_iVerteilZeit <= 0:
+                self.m_iVerteilZeit = int(self.m_lVerteil.hole_zufallswert())
+
+    def get_durchfuehrungszeit(self, proz: "PtProzess") -> int:
+        sim = self.p_simulator
+        if not getattr(sim, "pre_compute_kante_verteilung", False):
+            assert self.m_lVerteil is not None, "PDpKnVerteilung ohne m_lVerteil"
+            zeit = -1
+            while zeit <= 0:
+                zeit = int(self.m_lVerteil.hole_zufallswert())
+            self.m_iVerteilZeit = zeit
+        if sim.m_bIsProduktionEnde and self.m_iZeitRedBeiProzEnde > 0:
+            red_wert = 1 - self.m_iZeitRedBeiProzEnde / 100
+            return int(self.m_iVerteilZeit * red_wert)
+        self.m_iPtkKumDurchfuehrungszeit += self.m_iVerteilZeit
+        self.m_iPtkDurchfuehrungszeitCount += 1
+        return self.m_iVerteilZeit
