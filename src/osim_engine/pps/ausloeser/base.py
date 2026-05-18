@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from osim_engine.pps.parameter import PParameterLList
 from osim_engine.pps.sim_object import PSimObj
 
 if TYPE_CHECKING:
@@ -32,7 +33,10 @@ class PAusloeser(PSimObj):
         super().__init__(simulator)
         # Verknüpfungen
         self.m_lTrigger: list["PtTrigger"] = []
-        self.m_lParameter: list = []            # PParameter (V4)
+        # PParameterLList = list-Subklasse mit hole_parameter_int. P4-B
+        # nutzt sie für PDpKnAlternativTypID; weitere PParameter-Subtypen
+        # (Menge, Prioritaet, ...) folgen in P4-F.
+        self.m_lParameter: PParameterLList = PParameterLList()
         self.m_lEntitaet: Any = None            # PEntitaet (P4)
         # V1: m_lDlpl ist direkter Knoten oder Plan — beides hat proz_weitergeben
         self.m_lDlpl: "PDlplKnoten | None" = None
