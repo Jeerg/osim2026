@@ -113,13 +113,38 @@ Bearbeitung. Wenn M belegt → Prozess wartet im m_oWarteSchl.
 | Verbr | Bestand ≥ menge? | RessAbbuchen | — |
 | Abfr | Bestand ≥ menge? | — | — |
 
-### V5.5 — "Speicher" (Entity-Slice, OFFEN)
+### V5.5 — "Entity + Speicher-Infrastruktur" ✅ ABGESCHLOSSEN
 
-PSpeicherProz (Material-Container mit individuellen Entitäten),
-PEntitaet (Material-Identität), PAszSpeicher. Erlaubt FIFO/LIFO-Logik
-über konkreten Material-Instanzen, individuelle Tracking. Vom Mengen-
-Slice (V5) klar abgegrenzt — V5 reicht bereits für stückzahlbasierte
-Bestandsführung, Engpass-Analyse, Wartepfade.
+**Modell:** PEntitaet-Familie als typisierte Marker durch die Pipeline.
+PSpeicherProz als Wartelisten-Container zwischen Knoten und Aktor.
+PAssozSpeicher mit Load-Balanced-HoleSpeicher. `PDpKnZeitvorgabe.
+proz_weitergeben` mit Speicher-Branch.
+
+**Implementiert:**
+- `PEntitaet` (abstract) + `PEntEinzel` (m_iEinheiten=1 default) +
+  `PEntWeitergabe` + `PEntExtern` mit Klonen/Abspalten/Zusammenfuehren
+  als NotImplementedError-Stubs (1:1 zu C++ Stub-Methoden).
+- `PSpeicherProz` (m_lProzesse, m_lRessourcen, proz_einfuegen,
+  is_waiting, delete_proz, on_proz_entnommen, get_proz_anzahl,
+  get_bestand-Stub) + `SpeicherProzListener`.
+- `PAssozSpeicher` (m_lKnoten, m_lSpeicher, platziere_proz,
+  hole_speicher mit Load-Balancing `<=`-Strategie, is_waiting,
+  delete_proz, is_empty) + `PAssozSpeichBestand` als Stub.
+- `PDlplKnoten.m_lAssozSpeich` typisiert als `PAssozSpeicher | None`
+  + `set_assoziation_speicher()`-Helper.
+- `PDpKnZeitvorgabe.proz_weitergeben` mit Speicher-Branch: wenn
+  `m_lAssozSpeich` gesetzt → `platziere_proz` und return (kein
+  bearbeit_beginnen).
+- `PSimulator.m_lSpeichProz` aktive Liste + `register_speicher_proz()`.
+
+**Tests:** 15 neu (13 Integration + 2 Hand-Trace).
+- `tests/integration/test_v5_5_speicher.py`
+- `tests/diff/hand_trace/test_v5_5_speicher_load_balanced.py` + `.md`
+
+**Bewusst vertagt:** Aktor-Pipeline (`PRessBeleg.m_bAktAsActor=True`
+mit `proz_waehlen`/`bearbeit_beginnen`/`on_akt_*` aktiv). Phase 3 macht
+das scharf — V5.5 stellt nur die Container-Infrastruktur bereit.
+EventBus-Topics: `speicher.einfuegen`, `speicher.entnommen`.
 
 ### V6 — "Einsatzzeit" (Pause-Slice) ✅ ABGESCHLOSSEN
 
@@ -158,8 +183,6 @@ spätere Slices.
 - Pausen-Strategien `rsvRestBearb`, `rsvRestBearbProdEnd`, `rsvSelf`
 - Anwesenheits-Wahrscheinlichkeit `m_iAnwWahrsch < 100` (in V4 schon
   implementiert, in V6 nicht zusätzlich getestet)
-
-### V5.5 — "Speicher" (Entity-Slice, OFFEN)
 
 ### V7 — "Pool/Kollektion" ✅ ABGESCHLOSSEN
 
@@ -227,8 +250,6 @@ die Relationen auf — aber die Reservierung bleibt stale. Der C++-Code hat
 denselben Bug (siehe PRessMenge.cpp:27-75). Wir markieren das in V8 mit
 `pytest.mark.xfail` und dokumentieren es; ein Fix wäre eine bewusste
 Abweichung von der 1:1-Treue.
-
-### V5.5 — "Speicher" (Entity-Slice, OFFEN)
 
 **Gesamt-Aufwand Phase 2:** 5-8 Tage (vergleichbar Phase 1 mit 4 Slices in
 ca. 8 Tagen geschafft).
@@ -314,15 +335,20 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   mit derselben Ressource. Keine Source-Änderungen — PtRelation-Familie
   war seit V4/V5 vollständig. C++-Bug `m_lErlZubuchung`-Reservierungs-
   Leak als xfail dokumentiert.
-- **Phase 2 vollständig (V4-V8 abgeschlossen).**
+- **V5.5 (Entity + Speicher-Infrastruktur) abgeschlossen (144 Tests +
+  1 xfailed, +15 V5.5-Tests).** PEntitaet-Familie + PSpeicherProz +
+  PAssozSpeicher inkl. Load-Balanced-HoleSpeicher.
+  PDpKnZeitvorgabe.proz_weitergeben mit Speicher-Branch. Aktor-Pipeline
+  selbst bleibt für Phase 3 offen — V5.5 liefert die passive
+  Container-Infrastruktur.
+- **Phase 2 vollständig + V5.5 ergänzt.**
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
 **Nächste Schritte (Auswahl):**
-- V5.5 — PSpeicherProz / PEntitaet / PAszSpeicher (Entity-Identität)
 - V6.5 — PEinsatzzeitTag (Tagesarbeitszeiten mit Wochenplan)
-- **Phase 3** — Aktoren, PtRelation aktiv genutzt (Aktor-Pfad in
-  bearbeit_unterbrechen)
+- **Phase 3** — Aktoren aktiv (PAktor.bearbeit_beginnen, ProzWaehlen,
+  Aktor-Pipeline via PSpeicherProz)
 - **Phase 4** — Entitäten + Erweiterte Knoten (Rücksprung, Alternativ,
   Menge, Rüsten)
 - **Phase 5** — Entscheider + Generator + OSimAZeit + OSimINSIGHTS
