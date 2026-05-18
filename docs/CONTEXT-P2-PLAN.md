@@ -432,7 +432,18 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   Rüst-Phase oder externe Steuerung wäre eine Diss-basierte
   Erweiterung (Jonsson 2003) und ist NICHT Gegenstand der
   1:1-Portierung.
-- **Phase 2 + V5.5 + V6.5 + Phase 3 + Phase 4-A + 4-B + 4-C + 4-D + 4-E vollständig.**
+- **Phase 4-F (PParameter-Familie vollständig) abgeschlossen
+  (217 Tests + 1 xfailed, +20 P4-F-Unit-Tests).** PParameter-
+  Refactor mit internem `_hole_int/_hole_float/_hole_string`-
+  Hook (1:1-Mapping des C++-Patterns BOOL + out-Parameter).
+  Alle sechs Int-Subtypen ergänzt mit korrekter (ID, Name)-
+  Lookup-Logik: PParameterMenge / PParameterID / PParameter-
+  Prioritaet / PParameterKrzRscEinsatz / PParameterZstInt-
+  Begin / PParameterZstIntEnd. Plus generische PParameterInt
+  / PParameterFloat / PParameterString (Name-Lookup only).
+  PParameterLList mit sechs Lookup-Methoden (name- + id-based
+  je Typ). PARAM_*-Konstanten 1:1 aus C++ PParameter.odh:23-29.
+- **Phase 2 + V5.5 + V6.5 + Phase 3 + Phase 4 vollständig.**
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
