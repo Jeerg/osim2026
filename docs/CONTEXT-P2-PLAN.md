@@ -408,7 +408,18 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   mit `hole_parameter_int`) für TypID-Lookup ko-portiert; volle
   Familie folgt in P4-F. P4-B Hand-Trace + ELogik-Subtyp
   (Entscheider, gehört zu Phase 5) ausgelagert.
-- **Phase 2 + V5.5 + V6.5 + Phase 3 + Phase 4-A + Phase 4-B vollständig.**
+- **Phase 4-C (Menge-Knoten) gestartet (186 Tests + 1 xfailed,
+  +11 P4-C-Tests).** PDpKnMenge (Dauer = Menge × Dfz/Einheit)
+  + PDpKnMengeRuesten (zusätzliche, mengenunabhängige Rüstzeit)
+  als Subtypen von PDpKnZeitvorgabe. Menge wird aus dem
+  Auslöser-Parameter `"menge"` (PARAM_MENGE) gelesen — Default 0
+  bei nicht gesetztem Parameter. PParameterMenge ergänzt.
+  ProduktionEnde-Branch (m_iZeitRedBeiProzEnde) reduziert NUR
+  den Mengen-Anteil — Rüstzeit bleibt voll (1:1 zu C++
+  PDpKnZeitvorgabe.cpp:828-832, ggf. Bug im Original).
+  PtProzess.get_ausloeser-Helper neu, 1:1 zu C++ via
+  `m_oTrigger.m_oAusloeser`.
+- **Phase 2 + V5.5 + V6.5 + Phase 3 + Phase 4-A + 4-B + 4-C vollständig.**
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
