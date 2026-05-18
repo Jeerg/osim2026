@@ -119,11 +119,15 @@ class PtProzess(PSimObj):
     def bearbeit_unterbrechen(self) -> None:
         """C++: `PtProzess::BearbeitUnterbrechen` (PtProzess.cpp:189-220).
 
-        V6 vollständig: Status PT_UNT, Relationen notifizieren + abräumen,
-        Prozess in die zentrale Warteschlange hängen, damit
-        `proz_wart_ausloesen` ihn nach Pause-Ende neu starten kann.
-
-        Aktor-Schlangen-Verwaltung folgt in V8.
+        Reihenfolge (Phase 3 vollständig):
+            1. Status PT_UNT
+            2. Relationen notifizieren + abräumen
+            3. Wenn `m_oAktor` gesetzt → `on_akt_unterbr` rufen. Wenn der
+               Aktor True liefert (= Proz wurde in seinen Speicher
+               zurückgelegt), KEIN add_tail in zentraler Warteschlange.
+            4. m_oAktor = None
+            5. Sonst: add_tail in zentraler Warteschlange (für
+               `proz_wart_ausloesen`-Resume).
         """
         self.m_eStatus = PtStatus.PT_UNT
 
@@ -132,8 +136,13 @@ class PtProzess(PSimObj):
 
         self.m_oRelationen.clear()
 
-        # In zentrale Warteschlange — Aktor-Pfad fehlt V4-V7
-        if self.m_oAktor is None:
+        is_in_aktor_schlange = False
+        if self.m_oAktor is not None:
+            is_in_aktor_schlange = bool(self.m_oAktor.on_akt_unterbr(self))
+
+        self.m_oAktor = None
+
+        if not is_in_aktor_schlange:
             self.p_simulator.m_oWarteSchl.add_tail(self)
 
     def on_bearbeit_abgelehnt(self) -> None:

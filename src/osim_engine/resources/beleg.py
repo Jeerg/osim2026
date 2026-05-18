@@ -30,6 +30,7 @@ from osim_engine.resources.ressource import PRessource
 if TYPE_CHECKING:
     from osim_engine.pps.prozess.base import PtProzess
     from osim_engine.pps.simulator import PSimulator
+    from osim_engine.resources.speicher import PSpeicherProz
 
 
 # ----------------------------------------------------------------------
@@ -124,8 +125,15 @@ class PRessBeleg(PRessource, PAktor):
         self.m_fKostVar: float = 0.0
         self.m_sGroupName: str = ""
 
-        # Aktor-Flag (C++: m_bAktAsActor) — V4: immer False (passiv)
+        # Aktor-Flag (C++: m_bAktAsActor) — V4 immer False (passiv);
+        # ab Phase 3 wird es im aktiven Aktor-Pfad (on_proz_eingefuegt)
+        # auf True gesetzt.
         self.m_bAktAsActor: bool = False
+
+        # Phase 3 (Aktor): Liste der Speicher, die dieser Aktor bedient.
+        # 1:1 zu C++ PRessBeleg.odh:199 (`m_lSpeicher`). Pflege via
+        # `attach_speicher` (bidirektional mit PSpeicherProz.m_lRessourcen).
+        self.m_lSpeicher: list["PSpeicherProz"] = []
 
         # Counter (C++: m_iPtkAnfragenGesamt, m_iPtkBeiAnfrageAnwesend,
         # m_iPtkAnfrageErfuellt) — vollständig 1:1 in V4 aktiv
@@ -363,8 +371,15 @@ class PRessBeleg(PRessource, PAktor):
             ressource=self.m_sName,
         )
 
+        # Phase 3: Aktor-Zweig — wenn m_bAktAsActor, sucht der Aktor
+        # aktiv den nächsten Proz aus seinen Speichern (statt passiv
+        # die zentrale Warteschlange durchzugehen).
         if not self.m_bAktAsActor:
             self.proz_wart_ausloesen()
+        else:
+            next_proz = self.proz_waehlen()
+            if next_proz is not None:
+                self.bearbeit_beginnen_aktiv(next_proz)
 
     def on_einsatz_ende(self, evttyp: Any = None, oezeit: Any = None) -> None:
         """C++: `PRessBeleg::OnEinsatzEnde` (PRessBeleg.cpp:798-933).
@@ -405,6 +420,162 @@ class PRessBeleg(PRessource, PAktor):
     def is_aktive_ress(self) -> bool:
         """PRessBeleg.odh:363 (`IsAktiveRess`). V4: immer False."""
         return self.m_bAktAsActor
+
+    # ------------------------------------------------------------------
+    # Phase 3 — Aktor-Pfad (überschreibt PAktor-Stubs)
+    # ------------------------------------------------------------------
+
+    def attach_speicher(self, speicher: "PSpeicherProz") -> None:
+        """Bidirektionale Aktor↔Speicher-Verknüpfung.
+
+        Fügt diesen Aktor in `speicher.m_lRessourcen` und den Speicher in
+        `self.m_lSpeicher` ein. Damit bekommt der Aktor `on_proz_eingefuegt`-
+        Notifikationen für jeden in den Speicher gelegten Prozess und kann
+        in `on_akt_ende` aus seinen Speichern den nächsten Prozess wählen.
+        """
+        if speicher not in self.m_lSpeicher:
+            self.m_lSpeicher.append(speicher)
+        if self not in speicher.m_lRessourcen:
+            speicher.m_lRessourcen.append(self)
+
+    def on_proz_eingefuegt(
+        self, speicher: "PSpeicherProz", proz: "PtProzess"
+    ) -> None:
+        """C++: `PRessBeleg::OnProzEingefuegt` (PRessBeleg.cpp:1145-1157).
+
+        Speicher hat einen neuen Prozess bekommen → Aktor reagiert:
+        m_bAktAsActor=True, ProzWaehlen mit dem konkreten Proz und
+        anschließend bearbeit_beginnen_aktiv.
+        """
+        self.m_bAktAsActor = True
+        own_proz = self.proz_waehlen(proz, speicher)
+        self.bearbeit_beginnen_aktiv(own_proz)
+
+    def proz_waehlen(
+        self,
+        proz: "PtProzess | None" = None,
+        speicher: "PSpeicherProz | None" = None,
+    ) -> "PtProzess | None":
+        """C++: `PRessBeleg::ProzWaehlen` (PRessBeleg.cpp:1166-1192).
+
+        Auswahl-Strategie:
+        - mit `proz` und `speicher`: Aktor nimmt genau diesen Prozess
+          (z. B. nach `on_proz_eingefuegt`). m_oSpeiProz wird gesetzt.
+        - ohne Args: iteriere `m_lSpeicher`, gib den TAIL-Prozess des
+          ersten nicht-leeren Speichers zurück. C++-Default-Strategie.
+        """
+        if proz is not None:
+            assert speicher is not None, (
+                "PRessBeleg.proz_waehlen: speicher darf nicht None sein, "
+                "wenn proz übergeben wird"
+            )
+            self.m_oSpeiProz = speicher
+            return proz
+
+        if not self.m_lSpeicher:
+            raise RuntimeError(
+                "PRessBeleg.proz_waehlen: Aktor besitzt keine zugeordneten "
+                "Prozesspeicher (m_lSpeicher leer). Vorher attach_speicher() "
+                "aufrufen."
+            )
+
+        for sp in self.m_lSpeicher:
+            if sp.m_lProzesse:
+                self.m_oSpeiProz = sp
+                return sp.m_lProzesse[-1]  # Tail
+        return None
+
+    def bearbeit_beginnen_aktiv(self, proz: "PtProzess | None") -> bool:
+        """C++: `PRessBeleg::BearbeitBeginnen` (PRessBeleg.cpp:1200-1224).
+
+        Aktor-Pfad (ersetzt für Aktoren den passiven knoten.bearbeit_beginnen-
+        Aufruf). Reihenfolge:
+            1. proz None → False (leere Speicher)
+            2. proz.m_oAktor schon belegt → False (anderer Aktor war schneller)
+            3. self.ress_verfuegbar(proz) (PRessBeleg-Selbst-Check) → bei
+               False return False
+            4. proz.m_oAktor = self
+            5. proz.m_oKnoten.bearbeit_beginnen(proz): klassischer Knoten-Pfad.
+               Bei FALSE: m_oAktor wieder None (Rollback).
+        """
+        if proz is None:
+            return False
+        if proz.m_oAktor is not None:
+            return False
+        if not self.ress_verfuegbar(proz):
+            return False
+
+        proz.m_oAktor = self
+        assert proz.m_oKnoten is not None
+        if not proz.m_oKnoten.bearbeit_beginnen(proz):
+            proz.m_oAktor = None
+            return False
+        return True
+
+    def on_akt_beginn(self, proz: "PtProzess") -> None:
+        """C++: `PRessBeleg::OnAktBeginn` (PRessBeleg.cpp:1230-1261).
+
+        Wird von `PtProzess.bearbeit_beginnen` (super-Kette via
+        `aktor.on_akt_beginn`) gerufen, wenn proz.m_oAktor != None:
+            1. Proz aus m_oSpeiProz.m_lProzesse entfernen
+            2. m_oSpeiProz.on_proz_entnommen (Listener + Bus)
+            3. self.ress_belegen(proz) — Aktor belegt sich selbst
+        """
+        assert self.m_oSpeiProz is not None, (
+            "PRessBeleg.on_akt_beginn: m_oSpeiProz ist None — wurde "
+            "proz_waehlen vor bearbeit_beginnen_aktiv aufgerufen?"
+        )
+
+        try:
+            self.m_oSpeiProz.m_lProzesse.remove(proz)
+        except ValueError as e:
+            raise RuntimeError(
+                f"PRessBeleg.on_akt_beginn: proz {proz.m_sName!r} nicht in "
+                f"m_oSpeiProz.m_lProzesse"
+            ) from e
+
+        self.m_oSpeiProz.on_proz_entnommen(proz)
+        self.ress_belegen(proz)
+
+    def on_akt_ende(self, proz: "PtProzess") -> None:
+        """C++: `PRessBeleg::OnAktEnde` (PRessBeleg.cpp:1264-1281).
+
+        Wird von `PtProzess.bearbeit_beenden` (super) gerufen. Reihenfolge:
+            1. on_proz_ende(proz) — Listener
+            2. m_oProzCurrent = None
+            3. set_status(RS_FREI) — KEIN ress.freigeben-Bus-Emit (1:1 zu C++,
+               das emittiert auch nicht aus OnAktEnde)
+            4. bearbeit_beginnen_aktiv(proz_waehlen()) — nächster Proz aus
+               einem der angeschlossenen Speicher
+        """
+        self.on_proz_ende(proz)
+        self.m_oProzCurrent = None
+        self.set_status(RessStatus.RS_FREI)
+
+        # Nächsten Proz holen — proz_waehlen() ohne Args wirft, wenn
+        # m_lSpeicher leer wäre. Im Aktor-Pfad ist m_lSpeicher nie leer,
+        # weil on_proz_eingefuegt vorher gefeuert hätte.
+        next_proz = self.proz_waehlen()
+        if next_proz is not None:
+            self.bearbeit_beginnen_aktiv(next_proz)
+
+    def on_akt_unterbr(self, proz: "PtProzess") -> bool:
+        """C++: `PRessBeleg::OnAktUnterbr` (PRessBeleg.cpp:1284-1299).
+
+        Wird von `PtProzess.bearbeit_unterbrechen` gerufen. Legt den proz
+        zurück in den Speicher (m_oSpeiProz falls gesetzt, sonst ersten
+        in m_lSpeicher). Returnt True: damit landet der proz NICHT
+        zusätzlich in der zentralen Warteschlange.
+        """
+        if self.m_oSpeiProz is not None:
+            self.m_oSpeiProz.proz_einfuegen(proz)
+            self.m_bAktAsActor = True
+            return True
+        if self.m_lSpeicher:
+            self.m_lSpeicher[0].proz_einfuegen(proz)
+            self.m_bAktAsActor = True
+            return True
+        return False
 
 
 # ----------------------------------------------------------------------

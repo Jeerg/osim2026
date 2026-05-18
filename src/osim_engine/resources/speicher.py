@@ -82,18 +82,21 @@ class PSpeicherProz(PSimObj):
     def proz_einfuegen(self, proz: "PtProzess") -> None:
         """C++: `PSpeicherProz::ProzEinfuegen` (PSpeicherProz.cpp:22-45).
 
-        Fügt Prozess an. Notifiziert Listener und alle angeschlossenen
-        Aktoren (PRessBeleg.on_proz_eingefuegt — V8 / Phase 3 aktiv).
+        Reihenfolge (Phase 3 wichtig — Aktor-Notifikation kann synchron
+        entnehmen):
+            1. proz in m_lProzesse
+            2. Listener-Notify
+            3. Bus-Emit `speicher.einfuegen` (VOR der Aktor-Kaskade,
+               damit der Topic-Stream den Einfügungs-Zeitpunkt korrekt
+               vor einer eventuellen sofortigen Entnahme zeigt)
+            4. Aktor-Notifikation — Phase 3 macht das scharf
+               (PRessBeleg.on_proz_eingefuegt). In V5.5 ohne Wirkung
+               (PAktor-Stub).
         """
         self.m_lProzesse.append(proz)
 
         for listener in list(self._listeners):
             listener.on_proz_einfuegen(proz)
-
-        # Aktoren-Notifikation (V5.5 ohne Wirkung — PAktor.on_proz_eingefuegt
-        # ist Stub. Phase 3 macht das scharf.)
-        for ress in list(self.m_lRessourcen):
-            ress.on_proz_eingefuegt(self, proz)
 
         self.p_simulator.bus.emit(
             "speicher.einfuegen",
@@ -101,6 +104,12 @@ class PSpeicherProz(PSimObj):
             proz_id=proz.m_sName,
             anzahl=len(self.m_lProzesse),
         )
+
+        # Aktoren-Notifikation kann synchron `on_akt_beginn` → speicher-
+        # Remove triggern. Bus-Emit oben kommt zuerst, damit die Topic-
+        # Reihenfolge `einfuegen` → `entnommen` korrekt ist.
+        for ress in list(self.m_lRessourcen):
+            ress.on_proz_eingefuegt(self, proz)
 
     def is_waiting(
         self, trigger: "PtTrigger", knoten: "PDlplKnoten"
