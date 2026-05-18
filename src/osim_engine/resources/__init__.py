@@ -41,7 +41,10 @@ from osim_engine.resources.einsatzzeit import (
     PEinsatzzeit,
     PEinsatzzeitEvtMode,
     PEinsatzzeitPause,
+    PEinsatzzeitTag,
     PPauseZyklus,
+    PTagesEinsatzzeit,
+    PTagRess,
 )
 from osim_engine.resources.entitaet import (
     PEntEinzel,
@@ -72,6 +75,7 @@ __all__ = [
     "PEinsatzzeit",
     "PEinsatzzeitEvtMode",
     "PEinsatzzeitPause",
+    "PEinsatzzeitTag",
     "PEntEinzel",
     "PEntExtern",
     "PEntitaet",
@@ -85,6 +89,8 @@ __all__ = [
     "PRessMenge",
     "PRessource",
     "PSpeicherProz",
+    "PTagesEinsatzzeit",
+    "PTagRess",
     "PtRelation",
     "PtRelationBeleg",
     "PtRelationMenge",

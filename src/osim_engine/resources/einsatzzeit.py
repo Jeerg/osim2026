@@ -302,3 +302,220 @@ class PEinsatzzeitPause(PEinsatzzeit):
             self.m_isPause = False
             for beleg in list(self.m_lRessBeleg):
                 beleg.on_einsatz_beginn(EinsatzEvtTyp.EET_STD, self)
+
+
+# ----------------------------------------------------------------------
+# V6.5: PEinsatzzeitTag — Tagesarbeitszeit mit Wochenplan
+# ----------------------------------------------------------------------
+
+
+@dataclass
+class PTagesEinsatzzeit:
+    """C++-Äquivalent: `PTagesEinsatzzeit` (`PEinsatzzeit.odh:207`).
+
+    Eine Tages-Einsatzzeit (z. B. Vormittagsschicht 8.0-12.0 oder
+    Nachmittagsschicht 13.0-17.0). Mehrere Instanzen pro Tag möglich
+    (z. B. mit Mittagspause zwischen den Schichten).
+    """
+
+    m_iEinsatzAnfang: float = 0.0
+    m_iEinsatzEnde: float = 0.0
+
+
+@dataclass
+class PTagRess:
+    """C++-Äquivalent: `PTagRess` (`PEinsatzzeit.odh:230`).
+
+    Zuordnung: an `m_iTag` (Tag-Nr ab Sim-Beginn) ist `m_oRessBeleg`
+    eingesetzt mit dem in der `PEinsatzzeitTag` definierten Schicht-
+    Schema. Mehrere Einträge pro Ressource möglich (Wochenplan über
+    mehrere Tage).
+    """
+
+    m_iTag: int = 0
+    m_oRessBeleg: "Any" = None  # PRessBeleg, lazy-typed wegen Zyklus
+
+    def is_einsatz_tag(self, ez: "PEinsatzzeit", zeit: int) -> bool:
+        """C++: `PTagRess::IsEinsatzTag` (PEinsatzzeit.cpp:274-288).
+
+        TRUE, wenn `zeit` (Sim-Sekunden) in [Tag, Tag+1) fällt.
+        """
+        del ez  # C++ ignoriert ez im Vergleich (nur tag2szeit benötigt)
+        beg = self.m_iTag * 86400
+        end = (self.m_iTag + 1) * 86400
+        return beg <= zeit < end
+
+
+class PEinsatzzeitTag(PEinsatzzeitPause):
+    """C++-Äquivalent: `PEinsatzzeitTag` (`PEinsatzzeit.odh:261`).
+
+    Tagesarbeitszeit-Modell:
+    - `m_lTagesEinsatzzeit`: Schichten je Tag (Anfang/Ende in Stunden).
+    - `m_lTagRess`: zuordnung Tag-Nr ↔ PRessBeleg (Wochenplan).
+
+    Bei `OnPeriodBegin` legt `insert_events` für jeden gültigen Tag:
+    - 1× PEM_INIT am Tagesbeginn (setzt Ressource auf Pause als Default)
+    - PEM_BEGIN + PEM_END pro Schicht
+    - die LETZTE Schicht des Tages bekommt PEM_END_FOR_DAY statt PEM_END
+
+    Vererbt `m_isPause` aus PEinsatzzeitPause, nutzt aber eigenes
+    `m_isEinsatz` (semantische Umkehrung: True während Einsatz, False
+    während Pause).
+    """
+
+    def __init__(self, simulator: "PSimulator | None") -> None:
+        super().__init__(simulator)
+        self.m_lTagesEinsatzzeit: list[PTagesEinsatzzeit] = []
+        self.m_lTagRess: list[PTagRess] = []
+        # m_isEinsatz: True während Einsatz, False während Pause.
+        # C++ Default in Konstruktor: TRUE (PEinsatzzeit.odh:294); in
+        # on_sim_reset/on_rec_init: FALSE.
+        self.m_isEinsatz: bool = True
+
+    def on_sim_reset(self, deep: bool = True) -> None:
+        super().on_sim_reset(deep=deep)
+        self.m_isEinsatz = False
+
+    def on_rec_init(self, deep: bool = True) -> None:
+        super().on_rec_init(deep=deep)
+        self.m_isEinsatz = False
+
+    # ------------------------------------------------------------------
+    # Helper
+    # ------------------------------------------------------------------
+
+    def attach_tag_ress(self, tag: int, beleg: "PRessBeleg") -> PTagRess:
+        """V6.5-Helper: hängt eine PTagRess-Zuordnung an + (sicher) die
+        Ressource in `m_lRessBeleg` (für etwaige Pausen-Notifikation aus
+        der Basisklasse PEinsatzzeitPause)."""
+        entry = PTagRess(m_iTag=tag, m_oRessBeleg=beleg)
+        self.m_lTagRess.append(entry)
+        # Rück-Link wie attach_ressource
+        if beleg not in self.m_lRessBeleg:
+            self.attach_ressource(beleg)
+        return entry
+
+    def _is_p_tageseinsatzzeit_end_max(self, tagesein: PTagesEinsatzzeit) -> bool:
+        """C++: `PEinsatzzeitTag::IsPTagesEinsatzzeitEndMax`
+        (PEinsatzzeit.cpp:356-371).
+
+        TRUE wenn `tagesein.m_iEinsatzEnde` der MAXIMUM-Wert aller
+        Schichten ist (= letzte Schicht des Tages).
+        """
+        for listte in self.m_lTagesEinsatzzeit:
+            if listte.m_iEinsatzEnde > tagesein.m_iEinsatzEnde:
+                return False
+        return True
+
+    # ------------------------------------------------------------------
+    # InsertEvents — Tagesweise Schicht-Events
+    # ------------------------------------------------------------------
+
+    def insert_events(self) -> None:
+        """C++: `PEinsatzzeitTag::InsertEvents` (PEinsatzzeit.cpp:299-351).
+
+        Für jede `PTagRess`, deren Tag innerhalb der aktuellen Sim-Periode
+        liegt (und noch nicht für eine andere `PTagRess` gleichen Tags
+        verarbeitet wurde):
+
+        1. PEM_INIT @ Tag-Beginn (= Tag2SZeit(tag))
+        2. Pro Schicht in m_lTagesEinsatzzeit:
+           - PEM_BEGIN @ Tag-Beginn + Stunde2SZeit(anfang)
+           - PEM_END @ Tag-Beginn + Stunde2SZeit(ende) — bei der LETZTEN
+             Schicht stattdessen PEM_END_FOR_DAY
+        """
+        sim = self.p_simulator
+        akt_period_beginn = sim.m_periodLen * sim.m_periodNum
+        next_period_beginn = sim.m_periodLen * (sim.m_periodNum + 1)
+
+        verarbeitete_tage: set[int] = set()
+
+        for tagress in self.m_lTagRess:
+            sekunden = tagress.m_iTag * 86400
+            if not (akt_period_beginn <= sekunden < next_period_beginn):
+                continue
+            if tagress.m_iTag in verarbeitete_tage:
+                continue
+            verarbeitete_tage.add(tagress.m_iTag)
+
+            tag_beg_sek = tagress.m_iTag * 86400
+
+            # Init-Event am Tagesbeginn
+            self.create_einsatzzeit_event(
+                PEinsatzzeitEvtMode.PEM_INIT, tag_beg_sek
+            )
+
+            for tagesein in self.m_lTagesEinsatzzeit:
+                ev_begin = tag_beg_sek + _stunde_zu_szeit(tagesein.m_iEinsatzAnfang)
+                ev_end = tag_beg_sek + _stunde_zu_szeit(tagesein.m_iEinsatzEnde)
+
+                if akt_period_beginn <= ev_begin < next_period_beginn:
+                    self.create_einsatzzeit_event(
+                        PEinsatzzeitEvtMode.PEM_BEGIN, ev_begin
+                    )
+                if akt_period_beginn <= ev_end < next_period_beginn:
+                    if self._is_p_tageseinsatzzeit_end_max(tagesein):
+                        self.create_einsatzzeit_event(
+                            PEinsatzzeitEvtMode.PEM_END_FOR_DAY, ev_end
+                        )
+                    else:
+                        self.create_einsatzzeit_event(
+                            PEinsatzzeitEvtMode.PEM_END, ev_end
+                        )
+
+    # ------------------------------------------------------------------
+    # OnPauseEvent — 4 Branches (BEGIN, END, END_FOR_DAY, INIT)
+    # ------------------------------------------------------------------
+
+    def on_pause_event(self, pem: PEinsatzzeitEvtMode) -> None:
+        """C++: `PEinsatzzeitTag::OnPauseEvent` (PEinsatzzeit.cpp:630-692).
+
+        Asymmetrie zu PEinsatzzeitPause: hier ist `PEM_BEGIN` = Einsatz
+        beginnt (Pause endet) → `on_einsatz_beginn`, und `PEM_END` =
+        Einsatz endet (Pause beginnt) → `on_einsatz_ende`. (Bei
+        PEinsatzzeitPause war PEM_BEGIN = Pause beginnt!)
+
+        Tagess-Filter: nur Ressourcen am korrekten Tag werden notifiziert.
+        """
+        curr_time = self.p_simulator.evt_curr_time()
+
+        if pem == PEinsatzzeitEvtMode.PEM_BEGIN:
+            if self.m_isEinsatz:
+                return  # Schon im Einsatz (überlappende Schichten)
+            self.m_isEinsatz = True
+            for tagress in list(self.m_lTagRess):
+                if tagress.is_einsatz_tag(self, curr_time):
+                    tagress.m_oRessBeleg.on_einsatz_beginn(
+                        EinsatzEvtTyp.EET_STD, self
+                    )
+
+        elif pem == PEinsatzzeitEvtMode.PEM_END:
+            if not self.m_isEinsatz:
+                return
+            self.m_isEinsatz = False
+            for tagress in list(self.m_lTagRess):
+                if tagress.is_einsatz_tag(self, curr_time):
+                    tagress.m_oRessBeleg.on_einsatz_ende(
+                        EinsatzEvtTyp.EET_STD, self
+                    )
+
+        elif pem == PEinsatzzeitEvtMode.PEM_END_FOR_DAY:
+            if not self.m_isEinsatz:
+                return
+            self.m_isEinsatz = False
+            for tagress in list(self.m_lTagRess):
+                if tagress.is_einsatz_tag(self, curr_time):
+                    tagress.m_oRessBeleg.on_einsatz_ende(
+                        EinsatzEvtTyp.EET_END_FOR_DAY, self
+                    )
+
+        elif pem == PEinsatzzeitEvtMode.PEM_INIT:
+            # Init: Ressource auf Pause-Default setzen (unabhängig vom
+            # aktuellen Zustand). C++-Kommentar: "Zur Initialisierung
+            # wird die Person in die Pause geschickt".
+            self.m_isEinsatz = False
+            for tagress in list(self.m_lTagRess):
+                if tagress.is_einsatz_tag(self, curr_time):
+                    tagress.m_oRessBeleg.on_einsatz_ende(
+                        EinsatzEvtTyp.EET_INIT, self
+                    )
