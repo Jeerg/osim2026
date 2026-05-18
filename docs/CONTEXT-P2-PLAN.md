@@ -394,7 +394,21 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   `ruecksprung.beginn` / `ruecksprung.ende`. Hand-Trace und
   weitere P4-Slices (Alternativ, Menge, Rüsten, Extern) in
   separater Session.
-- **Phase 2 + V5.5 + V6.5 + Phase 3 + Phase 4-A vollständig.**
+- **Phase 4-B (Alternativ) gestartet (175 Tests + 1 xfailed,
+  +10 P4-B-Tests).** PDpKnAlternativ (abstract) +
+  PDpKnAlternativTypID (Auslöser-Parameter `"id"`-Lookup) +
+  PDpKnAlternativVerteilung (kumulative Wahrscheinlichkeits-
+  Intervalle, LCG) + PtProzAlternativ (m_oAlternative-Ref).
+  PAlternative-Familie (Basis + TypID + Verteilung) mit
+  m_iPtkAuswahlCount-Counter pro Alternative. Fallback "letzte
+  Alternative" 1:1 zu C++ bei kein Match. Sub-Plan-Routing via
+  OnProzSubBeendet → m_lKanteAus (statt erneutem Sub-Plan-Start
+  wie bei Rücksprung). Minimal-Subset der **PParameter-Familie**
+  (PParameter / PParameterInt / PParameterID / PParameterLList
+  mit `hole_parameter_int`) für TypID-Lookup ko-portiert; volle
+  Familie folgt in P4-F. P4-B Hand-Trace + ELogik-Subtyp
+  (Entscheider, gehört zu Phase 5) ausgelagert.
+- **Phase 2 + V5.5 + V6.5 + Phase 3 + Phase 4-A + Phase 4-B vollständig.**
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
