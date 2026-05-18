@@ -384,9 +384,17 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   on_proz_eingefuegt, proz_waehlen, bearbeit_beginnen_aktiv,
   on_akt_beginn/ende/unterbr + attach_speicher (bidirektional).
   PtProzess.bearbeit_unterbrechen mit Aktor-Pfad (on_akt_unterbr).
-  PRessBeleg.on_einsatz_beginn mit m_bAktAsActor-Branch (sucht
-  aktiv nächsten Proz aus Speichern statt passive Warteschlange).
-- **Phase 2 + V5.5 + V6.5 + Phase 3 vollständig.**
+  PRessBeleg.on_einsatz_beginn mit m_bAktAsActor-Branch.
+- **Phase 4-A (Rücksprung) gestartet (165 Tests + 1 xfailed,
+  +4 P4-Tests).** PDpKnRuecksprung (abstract) + PDpKnRueckKonstant
+  (m_iWiederholungenZiel) + PDpKnRueckVerteilung
+  (m_fSprungWahrschlkt) + PtProzRuecksprung (m_iWiederholungen).
+  Sub-Plan-Iteration via OnProzSubBeendet mit
+  ruecksprung_entscheiden-Hook. EventBus-Topics
+  `ruecksprung.beginn` / `ruecksprung.ende`. Hand-Trace und
+  weitere P4-Slices (Alternativ, Menge, Rüsten, Extern) in
+  separater Session.
+- **Phase 2 + V5.5 + V6.5 + Phase 3 + Phase 4-A vollständig.**
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
