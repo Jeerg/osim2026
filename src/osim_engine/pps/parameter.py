@@ -59,6 +59,17 @@ class PParameterID(PParameterInt):
         super().__init__(simulator, name="id", wert=wert)
 
 
+class PParameterMenge(PParameterInt):
+    """C++-Äquivalent: `PParameterMenge` (`PParameter.odh:130`).
+
+    Default-Name `"menge"`, Default-Wert `1`. Wird von den Menge-Knoten
+    (`PDpKnMenge`, `PDpKnMengeRuesten`) gelesen.
+    """
+
+    def __init__(self, simulator: "PSimulator | None", wert: int = 1) -> None:
+        super().__init__(simulator, name="menge", wert=wert)
+
+
 class PParameterLList(list):
     """C++-Äquivalent: `PParameterLList` (`PParameter.odh:49`).
 

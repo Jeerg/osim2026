@@ -5,6 +5,8 @@ Siehe `docs/CONTEXT-P1-SUPPLEMENT.md` § 1 für die volle Sektion.
 
 V1 implementiert PDpKnZeitvorgabe (abstract) + PDpKnKonstant.
 PDpKnVerteilung folgt in V2.
+P4-C ergänzt PDpKnMenge (Durchführungszeit = Menge × Dfz/Einheit) und
+PDpKnMengeRuesten (zusätzliche Rüstzeit).
 """
 
 from __future__ import annotations
@@ -178,3 +180,93 @@ class PDpKnVerteilung(PDpKnZeitvorgabe):
             return self.get_knz_mittl_dlfz(z_klass)
         # Fallback: letzter Sample-Wert (oder 0 wenn noch nicht gezogen)
         return float(self.m_iVerteilZeit)
+
+
+class PDpKnMenge(PDpKnZeitvorgabe):
+    """Mengenabhängige Durchführungszeit. C++: `PDpKnMenge`
+    (PDpKnZeitvorgabe.odh:274).
+
+    Durchführungszeit = `Menge × m_iDfzProEinheit`. Die Menge wird über
+    den Auslöser-Parameter `"menge"` (PARAM_MENGE) gelesen. Bei
+    Produktionsende mit `m_iZeitRedBeiProzEnde > 0` greift die
+    Zeit-Reduktion (Default 0 → keine Reduktion).
+    """
+
+    def __init__(self, simulator: "PSimulator | None") -> None:
+        super().__init__(simulator)
+        self.m_iDfzProEinheit: int = 0
+
+    def get_durchfuehrungszeit(self, proz: "PtProzess") -> int:
+        """C++: `PDpKnMenge::GetDurchfuehrungszeit` (PDpKnZeitvorgabe.cpp:612-636).
+
+        Reihenfolge wörtlich aus C++:
+            1. Auslöser holen (proz.get_ausloeser())
+            2. Parameter "menge" lesen (Default 0)
+            3. ProduktionEnde-Branch (Zeit-Reduktion)
+            4. Sonst: Kum-Counter aktualisieren + Menge × Dfz/Einheit zurück
+        """
+        sim = self.p_simulator
+        ausl = proz.get_ausloeser()
+        assert ausl is not None, (
+            f"PDpKnMenge {self.m_sName!r}.get_durchfuehrungszeit: "
+            "Prozess hat keinen Auslöser (Trigger oder m_oAusloeser fehlt)"
+        )
+        i_menge = ausl.m_lParameter.hole_parameter_int("menge", 0)
+
+        if sim.m_bIsProduktionEnde and self.m_iZeitRedBeiProzEnde > 0:
+            red_wert = 1 - self.m_iZeitRedBeiProzEnde / 100
+            erg = self.m_iDfzProEinheit * red_wert
+            return int(i_menge * erg)
+
+        self.m_iPtkKumDurchfuehrungszeit += i_menge * self.m_iDfzProEinheit
+        self.m_iPtkDurchfuehrungszeitCount += 1
+        return i_menge * self.m_iDfzProEinheit
+
+    def get_knz_min_dlfz(self, z_klass=None) -> float:
+        """C++ PDpKnZeitvorgabe.cpp:642-645 → GetKnzMittlDlfz()."""
+        return self.get_knz_mittl_dlfz(z_klass)
+
+
+class PDpKnMengeRuesten(PDpKnMenge):
+    """Menge + konstante Rüstzeit. C++: `PDpKnMengeRuesten`
+    (PDpKnZeitvorgabe.odh:352).
+
+    Durchführungszeit = `(Menge × m_iDfzProEinheit) + m_iRuestzeit`. Die
+    Rüstzeit ist Mengen-unabhängig (für die V1-Subklasse — die echte
+    Rüstprozess-Phase mit eigenen Bus-Topics gehört zu P4-D / PtProzRuesten).
+
+    Im ProduktionEnde-Branch wird C++-1:1 NUR der Mengen-Anteil reduziert,
+    die Rüstzeit bleibt voll (Zeitreduktion gilt für die Stück-Zeit, nicht
+    die Rüstung — vermutlich ist das im Original gewollt; ggf. Bug, aber
+    1:1-Treue siehe PDpKnZeitvorgabe.cpp:828-832).
+    """
+
+    def __init__(self, simulator: "PSimulator | None") -> None:
+        super().__init__(simulator)
+        self.m_iRuestzeit: int = 0
+
+    def get_durchfuehrungszeit(self, proz: "PtProzess") -> int:
+        """C++: `PDpKnMengeRuesten::GetDurchfuehrungszeit`
+        (PDpKnZeitvorgabe.cpp:807-837).
+        """
+        sim = self.p_simulator
+        ausl = proz.get_ausloeser()
+        assert ausl is not None, (
+            f"PDpKnMengeRuesten {self.m_sName!r}.get_durchfuehrungszeit: "
+            "Prozess hat keinen Auslöser"
+        )
+        i_menge = ausl.m_lParameter.hole_parameter_int("menge", 0)
+
+        if sim.m_bIsProduktionEnde and self.m_iZeitRedBeiProzEnde > 0:
+            red_wert = 1 - self.m_iZeitRedBeiProzEnde / 100
+            erg = self.m_iDfzProEinheit * red_wert
+            return int((i_menge * erg) + self.m_iRuestzeit)
+
+        gesamt = (i_menge * self.m_iDfzProEinheit) + self.m_iRuestzeit
+        self.m_iPtkKumDurchfuehrungszeit += gesamt
+        self.m_iPtkDurchfuehrungszeitCount += 1
+        return gesamt
+
+    def get_knz_min_dlfz(self, z_klass=None) -> float:
+        """C++ PDpKnZeitvorgabe.cpp:843-846 → GetKnzMittlDlfz()."""
+        return self.get_knz_mittl_dlfz(z_klass)

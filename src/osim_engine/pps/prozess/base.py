@@ -53,6 +53,20 @@ class PtProzess(PSimObj):
         self.m_oRelationen: list["PtRelation"] = []
 
     # ------------------------------------------------------------------
+    # Auslöser-Zugriff — C++ PtProzess.cpp:356-362
+    # ------------------------------------------------------------------
+
+    def get_ausloeser(self):
+        """C++: `oprPAusloeser PtProzess::GetAusloeser()` (PtProzess.cpp:356-362).
+
+        Liefert den Auslöser via Trigger-Ref. Returnt None, wenn kein
+        Trigger gesetzt ist (z. B. Top-Level-Prozesse ohne Auslöser-Kette).
+        """
+        if self.m_oTrigger is None:
+            return None
+        return self.m_oTrigger.m_oAusloeser
+
+    # ------------------------------------------------------------------
     # Ressourcen-Verfügbarkeit (V4) — C++ PtProzess.cpp:124-156
     # ------------------------------------------------------------------
 
