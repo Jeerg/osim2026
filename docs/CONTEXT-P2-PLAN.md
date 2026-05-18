@@ -179,10 +179,42 @@ spätere Slices.
 - `tests/diff/hand_trace/test_v6_pause_unterbricht_proz.py` + `.md`
 
 **Bewusst vertagt:**
-- `PEinsatzzeitTag` (Tagesarbeitszeiten mit Wochenplan, PTagRess, PEM_INIT)
+- ~~`PEinsatzzeitTag`~~ — abgeschlossen in V6.5
 - Pausen-Strategien `rsvRestBearb`, `rsvRestBearbProdEnd`, `rsvSelf`
 - Anwesenheits-Wahrscheinlichkeit `m_iAnwWahrsch < 100` (in V4 schon
   implementiert, in V6 nicht zusätzlich getestet)
+
+### V6.5 — "Tagesarbeitszeit / Wochenplan" ✅ ABGESCHLOSSEN
+
+**Modell:** PEinsatzzeitTag mit Schichten pro Tag (`PTagesEinsatzzeit`,
+z. B. Mittagspause 8-12 + 13-17) und Tag↔Ressource-Zuordnung
+(`PTagRess`). InsertEvents legt pro gültigem Tag: PEM_INIT am
+Tagesbeginn, PEM_BEGIN/PEM_END pro Schicht, PEM_END_FOR_DAY für die
+letzte Schicht des Tages.
+
+**Implementiert:**
+- `PTagesEinsatzzeit` (Schicht-Anfang/Ende in Stunden) +
+  `PTagRess` (Tag-Nr + Ressource, `is_einsatz_tag`-Helper) —
+  `src/osim_engine/resources/einsatzzeit.py`
+- `PEinsatzzeitTag(PEinsatzzeitPause)` mit `insert_events` (Tag-Filter,
+  Schicht-Iteration, EndMax-Helper) und `on_pause_event` (4 Branches:
+  PEM_BEGIN/PEM_END/PEM_END_FOR_DAY/PEM_INIT mit
+  `is_einsatz_tag`-Filter pro tagress)
+- `attach_tag_ress(tag, beleg)`-Helper als API-Front
+
+**Tests:** 11 neu (9 Integration + 2 Hand-Trace).
+- `tests/integration/test_v6_5_einsatzzeit_tag.py`: Data-Klassen,
+  IsPTagesEinsatzzeitEndMax, Single-/Doppel-Schicht, Status-Capture,
+  Multi-Ressource-Tag-Filter über 2 Tage, lfd. Proz unterbrochen
+  durch Mittagspause + Resume mit Restzeit.
+- `tests/diff/hand_trace/test_v6_5_einsatzzeit_tag_mittagspause.py` +
+  `.md`: 12 EventBus-Topics, vollständige Counter-Matrix mit
+  DLZ-Aufteilung Knoten vs. Auslöser.
+
+**Bewusst vertagt:**
+- `eetExt` / `eetExtEndForDay`-Pfade in `OnEinsatzEnde` (Entscheider-
+  spezifisch, Phase 5)
+- Pausen-Strategien `rsvRestBearb` etc. (Phase 5)
 
 ### V7 — "Pool/Kollektion" ✅ ABGESCHLOSSEN
 
@@ -341,12 +373,17 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   PDpKnZeitvorgabe.proz_weitergeben mit Speicher-Branch. Aktor-Pipeline
   selbst bleibt für Phase 3 offen — V5.5 liefert die passive
   Container-Infrastruktur.
-- **Phase 2 vollständig + V5.5 ergänzt.**
+- **V6.5 (Tagesarbeitszeit) abgeschlossen (155 Tests + 1 xfailed,
+  +11 V6.5-Tests).** PEinsatzzeitTag mit PTagesEinsatzzeit /
+  PTagRess. InsertEvents legt PEM_INIT + Schicht-BEGIN/END pro Tag,
+  letzte Schicht bekommt PEM_END_FOR_DAY. Mittagspause-Szenario
+  (lfd. Proz unterbrochen + nach Pause resumed) durch Hand-Trace
+  abgedeckt.
+- **Phase 2 + V5.5 + V6.5 vollständig.**
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
 **Nächste Schritte (Auswahl):**
-- V6.5 — PEinsatzzeitTag (Tagesarbeitszeiten mit Wochenplan)
 - **Phase 3** — Aktoren aktiv (PAktor.bearbeit_beginnen, ProzWaehlen,
   Aktor-Pipeline via PSpeicherProz)
 - **Phase 4** — Entitäten + Erweiterte Knoten (Rücksprung, Alternativ,
