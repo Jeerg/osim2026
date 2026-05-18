@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from osim_engine.resources.beleg import PRessBeleg
     from osim_engine.resources.einsatzzeit import PEinsatzzeit
     from osim_engine.resources.menge import PRessMenge
+    from osim_engine.resources.speicher import PSpeicherProz
 
 
 class PGeneratorStub:
@@ -54,7 +55,8 @@ class PSimulator(OSimulator):
         self.m_lRessBeleg: list["PRessBeleg"] = []
         # V5 aktiv (Bestands-Ressourcen):
         self.m_lRessMenge: list["PRessMenge"] = []
-        self.m_lSpeichProz: list = []
+        # V5.5 aktiv (Prozess-Speicher / Aktor-Warteliste):
+        self.m_lSpeichProz: list["PSpeicherProz"] = []
         # V6 aktiv (Einsatzzeiten/Pausen):
         self.m_lEinsatz: list["PEinsatzzeit"] = []
         self.m_lExtVert: list = []
@@ -144,6 +146,17 @@ class PSimulator(OSimulator):
         """
         self.m_lEinsatz.append(einsatz)
         self._children.append(einsatz)
+
+    def register_speicher_proz(self, speicher: "PSpeicherProz") -> None:
+        """Hängt einen PSpeicherProz in m_lSpeichProz + ins Tree-Lifecycle.
+
+        V5.5-Pragma: PSpeicherProz.on_sim_begin leert m_lProzesse
+        (PSpeicherProz.odh:74-83). Lifecycle-Forwarding über
+        `self._children`. Die Aktor-Schiene (PRessBeleg in
+        `speicher.m_lRessourcen`) wird in Phase 3 aktiv.
+        """
+        self.m_lSpeichProz.append(speicher)
+        self._children.append(speicher)
 
     # ------------------------------------------------------------------
     # Lifecycle-Hooks

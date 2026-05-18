@@ -25,6 +25,10 @@ from osim_engine.resources.assoziation.menge import (
     PAssozMengeVerbr,
     PAssozMengeVerbrZwischen,
 )
+from osim_engine.resources.assoziation.speicher import (
+    PAssozSpeichBestand,
+    PAssozSpeicher,
+)
 from osim_engine.resources.beleg import (
     PBetriebsmittel,
     PPerson,
@@ -39,10 +43,17 @@ from osim_engine.resources.einsatzzeit import (
     PEinsatzzeitPause,
     PPauseZyklus,
 )
+from osim_engine.resources.entitaet import (
+    PEntEinzel,
+    PEntExtern,
+    PEntitaet,
+    PEntWeitergabe,
+)
 from osim_engine.resources.kollektion import PRessKollEinheiten, PRessKollektion
 from osim_engine.resources.menge import PRessLager, PRessMenge
 from osim_engine.resources.relation import PtRelation, PtRelationBeleg, PtRelationMenge
 from osim_engine.resources.ressource import PRessource
+from osim_engine.resources.speicher import PSpeicherProz, SpeicherProzListener
 
 __all__ = [
     "EinsatzEvtTyp",
@@ -55,10 +66,16 @@ __all__ = [
     "PAssozMengeVerbr",
     "PAssozMengeVerbrZwischen",
     "PAssozRessource",
+    "PAssozSpeichBestand",
+    "PAssozSpeicher",
     "PBetriebsmittel",
     "PEinsatzzeit",
     "PEinsatzzeitEvtMode",
     "PEinsatzzeitPause",
+    "PEntEinzel",
+    "PEntExtern",
+    "PEntitaet",
+    "PEntWeitergabe",
     "PPauseZyklus",
     "PPerson",
     "PRessBeleg",
@@ -67,9 +84,11 @@ __all__ = [
     "PRessLager",
     "PRessMenge",
     "PRessource",
+    "PSpeicherProz",
     "PtRelation",
     "PtRelationBeleg",
     "PtRelationMenge",
     "RessPauseVerhalten",
     "RessStatus",
+    "SpeicherProzListener",
 ]

@@ -46,10 +46,17 @@ class PDpKnZeitvorgabe(PDlplKnoten):
         self.m_iPtkDurchfuehrungszeitCount = 0
 
     def proz_weitergeben(self, proz_ober: "PtProzess | None", ent: Any) -> None:
-        """Instanziiert PtProzZeitvorgabe und führt es durch BearbeitBeginnen.
+        """Instanziiert PtProzZeitvorgabe.
 
-        Wörtlich aus PDpKnZeitvorgabe.cpp:31-69 (siehe SUPPLEMENT § 1.2),
-        ohne den P3-Pfad für m_lAssozSpeich.
+        C++: PDpKnZeitvorgabe.cpp:31-69. Zwei Hauptpfade:
+            1. `m_lAssozSpeich is not None` (V5.5+, Aktor-Pipeline):
+               Prozess wird in den verbundenen Speicher abgelegt und
+               wartet dort auf Entnahme durch einen Aktor — KEIN
+               `bearbeit_beginnen`. Der Aktor-Pfad ist in V5.5 passiv;
+               der Prozess bleibt im Speicher, bis Phase 3 ihn entnimmt.
+            2. Sonst (V1-V4-Standardpfad): `add_prozess` +
+               `bearbeit_beginnen`; bei Fehlschlag in zentrale
+               Warteschlange.
         """
         from osim_engine.pps.prozess.zeitvorgabe import PtProzZeitvorgabe
 
@@ -69,9 +76,6 @@ class PDpKnZeitvorgabe(PDlplKnoten):
         if proz.m_oTrigger is not None:
             proz.m_oTrigger.on_prz_created(proz)
 
-        # P3-Pfad (m_lAssozSpeich) entfällt in V1 — direkt in Knoten-Liste
-        self.add_prozess(proz)
-
         # EventBus
         self.p_simulator.bus.emit("proz.create",
                                   proz_id=proz.m_sName,
@@ -79,9 +83,17 @@ class PDpKnZeitvorgabe(PDlplKnoten):
                                   trigger_id=(proz.m_oTrigger.m_sName
                                               if proz.m_oTrigger else None))
 
+        # V5.5: Speicher-Pfad — Prozess in Aktor-Warteliste ablegen
+        if self.m_lAssozSpeich is not None:
+            self.m_lAssozSpeich.platziere_proz(proz)
+            return
+
+        # V1-V4-Pfad: direkt in Knoten-Liste + BearbeitBeginnen
+        self.add_prozess(proz)
+
         if not self.bearbeit_beginnen(proz):
-            # Fehlschlag → in zentrale Warteschlange (V1 noch trivial, in V2
-            # wird das per Re-Try beim nächsten Ressourcen-Freigabe-Event aktiv)
+            # Fehlschlag → in zentrale Warteschlange (re-try beim nächsten
+            # Ressourcen-Freigabe-Event via proz_wart_ausloesen)
             self.p_simulator.m_oWarteSchl.add_tail(proz)
 
 

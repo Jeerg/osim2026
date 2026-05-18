@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from osim_engine.pps.prozess.base import PtProzess
     from osim_engine.pps.simulator import PSimulator
     from osim_engine.resources.assoziation.base import PAssozRessource
+    from osim_engine.resources.assoziation.speicher import PAssozSpeicher
 
 
 class KnotenListener:
@@ -66,7 +67,11 @@ class PDlplKnoten(PSimObj):
 
         # Ressourcen-Assoziationen — in V4 aktiv
         self.m_lAssozRess: list["PAssozRessource"] = []
-        self.m_lAssozSpeich: Any = None    # PAssozSpeicher (P3)
+        # Speicher-Assoziation (max. 1) — V5.5 aktiv. Wenn gesetzt, legt
+        # PDpKnZeitvorgabe.proz_weitergeben den neuen Prozess via
+        # PAssozSpeicher.platziere_proz im Speicher ab statt
+        # BearbeitBeginnen direkt aufzurufen.
+        self.m_lAssozSpeich: "PAssozSpeicher | None" = None
 
         # Protokoll-Counter
         self.m_iPtkAusloesungCount: int = 0
@@ -119,6 +124,20 @@ class PDlplKnoten(PSimObj):
         """
         assoz.m_lKnoten = self
         self.m_lAssozRess.append(assoz)
+
+    def set_assoziation_speicher(self, assoz: "PAssozSpeicher") -> None:
+        """V5.5: hängt einen PAssozSpeicher (max. 1 pro Knoten).
+
+        Setzt sowohl `m_lAssozSpeich` am Knoten als auch den Rück-Link
+        `assoz.m_lKnoten`. Wirft, wenn bereits ein Speicher gesetzt ist
+        (1:1 zur C++-Constraint in PAssozSpeicherDesignItem.OfferLinkIn:
+        ein Knoten darf nur EINEN PAssozSpeicher haben).
+        """
+        assert self.m_lAssozSpeich is None, (
+            f"PDlplKnoten {self.m_sName!r} hat bereits einen PAssozSpeicher"
+        )
+        assoz.m_lKnoten = self
+        self.m_lAssozSpeich = assoz
 
     def ress_verfuegbar(self, proz: "PtProzess") -> bool:
         """Default-Delegate an `proz.ress_verfuegbar()`.
