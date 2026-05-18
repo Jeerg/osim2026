@@ -419,7 +419,20 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   PDpKnZeitvorgabe.cpp:828-832, ggf. Bug im Original).
   PtProzess.get_ausloeser-Helper neu, 1:1 zu C++ via
   `m_oTrigger.m_oAusloeser`.
-- **Phase 2 + V5.5 + V6.5 + Phase 3 + Phase 4-A + 4-B + 4-C vollständig.**
+- **Phase 4-D (PtProzRuesten) und Phase 4-E (PDpKnExtern +
+  PtProzExtern) — C++-Stub-Slices (190 + 197 Tests + 1 xfailed,
+  +4 P4-D + +7 P4-E Tests).** Wichtiger Recherche-Befund: Im
+  C++-Original sind beide Klassen-Familien NUR DEKLARIERT und
+  im DLL registriert, aber alle Methoden werfen OException —
+  also unimplementiert. Konkret betrifft das PtProzRuesten
+  (3 Methoden), PDpKnExtern (proz_weitergeben), PtProzExtern
+  (6 Methoden) und PEntExtern (2 Methoden, bereits in V5.5
+  als Stub portiert). 1:1-Treue-Konvention: Stub-Methoden
+  werfen NotImplementedError mit Hinweis. Eine echte
+  Rüst-Phase oder externe Steuerung wäre eine Diss-basierte
+  Erweiterung (Jonsson 2003) und ist NICHT Gegenstand der
+  1:1-Portierung.
+- **Phase 2 + V5.5 + V6.5 + Phase 3 + Phase 4-A + 4-B + 4-C + 4-D + 4-E vollständig.**
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
