@@ -379,7 +379,14 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   letzte Schicht bekommt PEM_END_FOR_DAY. Mittagspause-Szenario
   (lfd. Proz unterbrochen + nach Pause resumed) durch Hand-Trace
   abgedeckt.
-- **Phase 2 + V5.5 + V6.5 vollständig.**
+- **Phase 3 (Aktor-Pipeline) gestartet (161 Tests + 1 xfailed,
+  +6 P3-Tests).** PRessBeleg-Aktor-Methoden scharf:
+  on_proz_eingefuegt, proz_waehlen, bearbeit_beginnen_aktiv,
+  on_akt_beginn/ende/unterbr + attach_speicher (bidirektional).
+  PtProzess.bearbeit_unterbrechen mit Aktor-Pfad (on_akt_unterbr).
+  PRessBeleg.on_einsatz_beginn mit m_bAktAsActor-Branch (sucht
+  aktiv nächsten Proz aus Speichern statt passive Warteschlange).
+- **Phase 2 + V5.5 + V6.5 + Phase 3 vollständig.**
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
