@@ -194,14 +194,41 @@ RessVerfuegbar` Pfad `!IsEntFunktOn`, PAssozRessource.cpp:601-624).
 Entscheider-basierte Pool-Strategien (`ABL_PREFER`/`ABL_STD`/
 `ABL_IF_NEEDED`) folgen mit Phase 5 (Entscheider).
 
-### V8 — "PtRelation"
+### V8 — "PtRelation" (Verifikations-Slice) ✅ ABGESCHLOSSEN
 
-**Modell:** Transiente Ressourcen-Belegung für Multi-Knoten-Plan (gleiche
-Ressource für mehrere Knoten innerhalb eines Plan-Laufs).
+**Modell:** Transiente Ressourcen-Belegung für Multi-Assoz an einem
+Knoten + Multi-Knoten-Plan mit derselben Ressource.
 
-**Klassen:** PtRelation.
+**Wichtige Erkenntnis:** `PtRelation` / `PtRelationBeleg` /
+`PtRelationMenge` sind seit V4+V5 implementiert. V8 ist primär ein
+**Verifikations-Slice**: die übergreifenden Szenarien (mehrere
+Assoziationen am selben Knoten, gleiche Ressource bei mehreren Knoten
+im Plan) werden hier systematisch getestet und durch Hand-Trace
+abgedeckt.
 
-**Aufwand:** 1 Tag.
+**Implementiert:** keine Source-Änderungen.
+
+**Tests:** 8 neu (6 Integration + 2 Hand-Trace).
+- `tests/integration/test_v8_relation.py`:
+  - happy-path Multi-Assoz (Maschine + Material beide verfügbar)
+  - Rollback-Verhalten bei Material-Mangel (Counter aber Status korrekt)
+  - Kurzschluss bei erster Assoz-Fail
+  - Multi-Knoten-Plan sequenziell mit derselben Maschine
+  - Multi-Knoten-Plan mit externer Maschinen-Belegung dazwischen
+  - dokumentierter C++-Bug (xfail): `m_lErlZubuchung`-Reservierungs-Leak
+    bei bounded Erzgt mit nachfolgendem Refuse
+- `tests/diff/hand_trace/test_v8_multi_assoz_machine_material.py` +
+  `.md`: papier-genaue Counter-Matrix für Maschine+Material-Knoten
+
+**Bekannte 1:1-Limitierung (C++-Bug):** wenn `PAssozMengeErzgt` auf einem
+bounded Lager TRUE meldet (mit Reservierung in `m_lErlZubuchung`) und
+eine NACHFOLGENDE Assoz dann FALSE liefert, räumt `on_bearbeit_abgelehnt`
+die Relationen auf — aber die Reservierung bleibt stale. Der C++-Code hat
+denselben Bug (siehe PRessMenge.cpp:27-75). Wir markieren das in V8 mit
+`pytest.mark.xfail` und dokumentieren es; ein Fix wäre eine bewusste
+Abweichung von der 1:1-Treue.
+
+### V5.5 — "Speicher" (Entity-Slice, OFFEN)
 
 **Gesamt-Aufwand Phase 2:** 5-8 Tage (vergleichbar Phase 1 mit 4 Slices in
 ca. 8 Tagen geschafft).
@@ -282,10 +309,20 @@ C++-Vorlage: `OSimPro/PSimulator.cpp::ProzWartAusloesen` (Suche im Code).
   PRessKollektion + PRessKollEinheiten als 1:1-Stub-Klassen. Pool-
   Semantik selbst war seit V4 implementiert (in PAssozBeleg);
   V7 verifiziert sie durch dedizierte Tests + Hand-Trace.
+- **V8 (Relation-Verifikations-Slice) abgeschlossen (129 Tests + 1 xfailed,
+  +8 V8-Tests).** Multi-Assoz an einem Knoten und Multi-Knoten-Plan
+  mit derselben Ressource. Keine Source-Änderungen — PtRelation-Familie
+  war seit V4/V5 vollständig. C++-Bug `m_lErlZubuchung`-Reservierungs-
+  Leak als xfail dokumentiert.
+- **Phase 2 vollständig (V4-V8 abgeschlossen).**
 - Codex-Findings stehen aus.
 - C-Compiler-Setup steht aus (Option D in SELF-REVIEW-CODE.md).
 
 **Nächste Schritte (Auswahl):**
 - V5.5 — PSpeicherProz / PEntitaet / PAszSpeicher (Entity-Identität)
 - V6.5 — PEinsatzzeitTag (Tagesarbeitszeiten mit Wochenplan)
-- V8 — PtRelation für Multi-Knoten-Ressourcenbindung in Plänen
+- **Phase 3** — Aktoren, PtRelation aktiv genutzt (Aktor-Pfad in
+  bearbeit_unterbrechen)
+- **Phase 4** — Entitäten + Erweiterte Knoten (Rücksprung, Alternativ,
+  Menge, Rüsten)
+- **Phase 5** — Entscheider + Generator + OSimAZeit + OSimINSIGHTS
