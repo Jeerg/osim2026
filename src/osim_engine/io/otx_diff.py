@@ -162,6 +162,99 @@ def diff_counters(file_a: OtxFile, file_b: OtxFile) -> OtxCounterDiff:
     return diff
 
 
+def extract_counters_from_simulator(
+    sim: Any,
+) -> dict[ObjectKey, dict[str, Any]]:
+    """Counter-Snapshot eines Python-PSimulators im gleichen Format wie
+    `extract_counters(OtxFile)` — für direkte Python ↔ C++ Vergleiche.
+
+    Sammelt rekursiv aus: m_lAusl, m_lDlpl (+m_lKnoten, +m_lKanten),
+    m_lRessBeleg, m_lEinsatz.
+    """
+    out: dict[ObjectKey, dict[str, Any]] = {}
+    seen: set[int] = set()
+
+    def collect(py_obj: Any) -> None:
+        if py_obj is None or id(py_obj) in seen:
+            return
+        seen.add(id(py_obj))
+        name = getattr(py_obj, "m_sName", None)
+        if not isinstance(name, str) or not name:
+            return
+        counters = {
+            k: v for k, v in vars(py_obj).items() if _is_counter_attr(k)
+        }
+        if counters:
+            out[(type(py_obj).__name__, name)] = counters
+
+    for a in sim.m_lAusl:
+        collect(a)
+    for p in sim.m_lDlpl:
+        collect(p)
+        for k in p.m_lKnoten:
+            collect(k)
+        for ka in p.m_lKanten:
+            collect(ka)
+    for r in sim.m_lRessBeleg:
+        collect(r)
+    for e in sim.m_lEinsatz:
+        collect(e)
+    return out
+
+
+@dataclass
+class PyCppDiff:
+    """Vergleich zwischen Python-Sim und C++-Sim-Counter-Snapshot."""
+    real_diffs: list[CounterChange] = field(default_factory=list)
+    """Counter mit verschiedenen Werten (beide Seiten kennen das Feld)."""
+
+    py_missing_attrs: list[CounterChange] = field(default_factory=list)
+    """Counter, die Python NICHT hat aber C++ schon — Lücken in Python."""
+
+    common_keys: int = 0
+    only_in_py: list[ObjectKey] = field(default_factory=list)
+    only_in_cpp: list[ObjectKey] = field(default_factory=list)
+
+
+def diff_python_vs_cpp(
+    py_counters: dict[ObjectKey, dict[str, Any]],
+    cpp_counters: dict[ObjectKey, dict[str, Any]],
+) -> PyCppDiff:
+    """Trennt echte Verhaltens-Diffs von Python-Implementations-Lücken.
+
+    Wenn Python das Attribut gar nicht hat (`None`) und C++ den
+    Default-Wert (`0` / `0.0`), klassifizieren wir das als Lücke
+    (`py_missing_attrs`), nicht als Verhaltens-Diff (`real_diffs`).
+    """
+    diff = PyCppDiff()
+    py_keys = set(py_counters.keys())
+    cpp_keys = set(cpp_counters.keys())
+    diff.common_keys = len(py_keys & cpp_keys)
+    diff.only_in_py = sorted(py_keys - cpp_keys)
+    diff.only_in_cpp = sorted(cpp_keys - py_keys)
+
+    for key in sorted(py_keys & cpp_keys):
+        klass, name = key
+        py_c = py_counters[key]
+        cpp_c = cpp_counters[key]
+        for attr in sorted(set(py_c) | set(cpp_c)):
+            v_py = py_c.get(attr)
+            v_cpp = cpp_c.get(attr)
+            if v_py == v_cpp:
+                continue
+            change = CounterChange(
+                klass=klass, name=name, attr=attr,
+                value_a=v_py, value_b=v_cpp,
+            )
+            # Python kennt das Attribut nicht und C++ hat Default → Lücke
+            if v_py is None and v_cpp in (0, 0.0):
+                diff.py_missing_attrs.append(change)
+            else:
+                diff.real_diffs.append(change)
+
+    return diff
+
+
 def diff_counters_text(diff: OtxCounterDiff, limit: int | None = 20) -> str:
     """Formatiert einen `OtxCounterDiff` als menschen-lesbaren Text.
 
