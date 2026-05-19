@@ -876,6 +876,88 @@ class _EPAszEntFeldHandler(ClassHandler):
 
 
 # ----------------------------------------------------------------------
+# Phase-5-D: Konkrete Aufgaben-Knoten
+# (PDpKnAlternativELogik.{odh:158-668, cpp:411-...})
+# ----------------------------------------------------------------------
+
+
+def _make_aufgabe_knoten_handler(py_class_name: str, scalars: tuple[str, ...] = ()):
+    """Erzeugt Handler für Aufgaben-Knoten-Subklassen.
+
+    Aufgaben-Knoten erben von PDpKnVerteilung (V9), brauchen also dieselben
+    Standard-Refs (KanteEin/Aus/KnotenOber + m_lVerteil). Plus eigene
+    Attribute aus `scalars`.
+    """
+    class _H(ClassHandler):
+        def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+            from osim_engine.decisions import aufgabe as A
+            cls = getattr(A, py_class_name)
+            k = cls(loader.simulator)
+            copy_scalars(
+                k, obj,
+                ("m_sName", "m_eRessUsage", "m_iVerteilZeit") + scalars,
+            )
+            return k
+
+        def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+            # Standard-Knoten-Refs (wie in PDpKnVerteilung)
+            ein = resolve_ref(loader, obj, "m_lKanteEin")
+            aus = resolve_ref(loader, obj, "m_lKanteAus")
+            ober = resolve_ref(loader, obj, "m_lKnotenOber")
+            verteil = resolve_ref(loader, obj, "m_lVerteil")
+            if ein is not None:
+                py.m_lKanteEin = ein
+            if aus is not None:
+                py.m_lKanteAus = aus
+            if ober is not None:
+                py.m_lKnotenOber = ober
+            if verteil is not None:
+                py.m_lVerteil = verteil
+            # EPEntAufgabeAltIntern-Subtypen: m_lDlpl (Sub-Plan-Liste)
+            if hasattr(py, "m_lDlpl") and isinstance(py.m_lDlpl, list):
+                for dlpl in resolve_list(loader, obj, "m_lDlpl"):
+                    if dlpl not in py.m_lDlpl:
+                        py.m_lDlpl.append(dlpl)
+            # EPEntAufgabeAltExternRessBeleg: m_lRessourcen
+            if hasattr(py, "m_lRessourcen") and isinstance(py.m_lRessourcen, list):
+                for ress in resolve_list(loader, obj, "m_lRessourcen"):
+                    if ress not in py.m_lRessourcen:
+                        py.m_lRessourcen.append(ress)
+            # EPEntKrzRessourcenEinsatz: m_lDlplKnoten
+            if hasattr(py, "m_lDlplKnoten") and isinstance(py.m_lDlplKnoten, list):
+                for kn in resolve_list(loader, obj, "m_lDlplKnoten"):
+                    if kn not in py.m_lDlplKnoten:
+                        py.m_lDlplKnoten.append(kn)
+
+    return _H
+
+
+# Intern-Variante: erbt EPEntAufgabeAltIntern (mit m_lDlpl)
+register_handler("EPEntAltProzesswege")(
+    _make_aufgabe_knoten_handler("EPEntAltProzesswege")
+)
+register_handler("EPEntAuftragsgroesse")(
+    _make_aufgabe_knoten_handler("EPEntAuftragsgroesse", ("m_iShadowMenge",))
+)
+
+# Extern-Variante: erbt EPEntAufgabeAltExtern
+register_handler("EPEntKrzRessourcenEinsatz")(
+    _make_aufgabe_knoten_handler("EPEntKrzRessourcenEinsatz")
+)
+
+# Extern-RessBeleg-Variante: erbt EPEntAufgabeAltExternRessBeleg
+register_handler("EPEntKrzRessourcenEinsatzRess")(
+    _make_aufgabe_knoten_handler("EPEntKrzRessourcenEinsatzRess")
+)
+register_handler("EPEntReihenfolge")(
+    _make_aufgabe_knoten_handler("EPEntReihenfolge")
+)
+register_handler("EPEntKrzKapazitaetsVeraenderung")(
+    _make_aufgabe_knoten_handler("EPEntKrzKapazitaetsVeraenderung")
+)
+
+
+# ----------------------------------------------------------------------
 # Phase-5-B: EPAslEntAufExtern (Auslöser-Entscheider)
 # ----------------------------------------------------------------------
 

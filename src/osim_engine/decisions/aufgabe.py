@@ -324,5 +324,426 @@ class EPEntAufgabeAltExternRessBeleg(EPEntAufgabeAltExtern):
         super().__init__(simulator)
         # Liste der Entscheidung zugeordneter Ressourcen
         # C++: m_lRessourcen : PRessBelegLList
-        from osim_engine.pps.parameter import PParameterLList  # noqa: F401
         self.m_lRessourcen: list[Any] = []
+
+
+# ----------------------------------------------------------------------
+# EPEntAufgabeAltIntern + 2 konkrete Erben (P5-D)
+# ----------------------------------------------------------------------
+
+
+class EPEntAufgabeAltIntern(EPEntscheidungsAufgabe):
+    """Abstrakter Aufgaben-Knoten für interne Alternativen (Sub-Pläne).
+
+    C++: `EPEntAufgabeAltIntern : $public EPEntscheidungsAufgabe`
+    (`PDpKnAlternativELogik.odh:158-223`, `.cpp:411-680`). `$abstract`.
+
+    Erweitert um `m_lDlpl` — Liste der alternativen Sub-Pläne, aus
+    denen `entscheidung_treffen` einen auswählt. Sub-Plan-Routing:
+    - `proz_weitergeben` erzeugt PtProzEntAufgabeIntern als Oberprozess
+      mit gewähltem `m_oDlpl`, dann delegiert an PDpKnVerteilung.
+    - `on_proz_beendet` triggert `dlpl.dlpl_ausloesen` mit dem Oberprozess
+      als prozOber.
+    - `on_proz_sub_beendet` reicht den Oberprozess an die ausgehende
+      Kante weiter und beendet ihn.
+    """
+
+    def __init__(self, simulator: "PSimulator | None") -> None:
+        super().__init__(simulator)
+        # Alternative Sub-Pläne (PDurchlaufplanLList)
+        self.m_lDlpl: list[Any] = []
+
+    def entscheidung_treffen(self, proz: Any) -> Any:
+        """C++: cpp:413-416 — Basis liefert None (Subklassen überschreiben)."""
+        return None
+
+    def proz_erzeugen(self) -> Any:
+        """C++: cpp:420-423 — erzeugt PtProzEntAufgabeIntern als Oberprozess."""
+        from osim_engine.pps.prozess.ent_aufgabe import PtProzEntAufgabeIntern
+        return PtProzEntAufgabeIntern(self.p_simulator)
+
+    def proz_weitergeben(self, proz_ober: Any, ent: Any) -> None:
+        """C++: cpp:429-467 — erzeugt Oberprozess + delegiert an PDpKnVerteilung.
+
+        Anders als EPEntscheidungsAufgabe.proz_weitergeben (welches
+        PtProzEntAufgabeBase erzeugt), wird hier ein
+        `PtProzEntAufgabeIntern`-Oberprozess angelegt, der den gewählten
+        Sub-Plan in `m_oDlpl` trägt. PtkIntervallBegin auf beiden
+        Protokoll-Countern (Ges + Ent).
+        """
+        sim = self.p_simulator
+        # Entscheidung treffen — abstrakte Methode der Subklassen
+        o_dlpl = self.entscheidung_treffen(proz_ober)
+
+        # Oberprozess anlegen
+        proz = self.proz_erzeugen()
+        proz.m_oKnoten = self
+        proz.m_oTrigger = proz_ober.m_oTrigger
+        proz.m_oProzOber = proz_ober
+        proz.m_oEntitaet = ent
+        # gewählten Durchlaufplan merken
+        if hasattr(proz, "m_oDlpl"):
+            proz.m_oDlpl = o_dlpl
+        proz.m_sName = "Oberprozess"
+
+        self.add_prozess(proz)
+        self.m_iPtkProzessCount += 1
+
+        # Trigger notifizieren
+        if proz.m_oTrigger is not None:
+            proz.m_oTrigger.on_prz_created(proz)
+
+        # PtkIntervallBegin — Protokollierung der Entscheidungs-DLZ startet
+        curr = sim.evt_curr_time()
+        if sim.m_isPtk:
+            self.m_dTmpEnaDlzGes += 1.0
+            self.m_dPtkEnaDlzGes -= 1.0 * curr
+            self.m_dTmpEnaDlzEnt += 1.0
+            self.m_dPtkEnaDlzEnt -= 1.0 * curr
+
+        # An Basisklasse PDpKnVerteilung delegieren (NICHT EPEntscheidungsAufgabe!)
+        # PDpKnVerteilung ist Großmutter — wir umgehen die EntscheidungsAufgabe-
+        # Variante, weil wir bereits oben Oberprozess + Counter selbst gehandhabt
+        # haben.
+        PDpKnVerteilung.proz_weitergeben(self, proz, ent)
+
+    def bearbeit_beginnen(self, proz_this: Any) -> bool:
+        """C++: cpp:470-477 — delegiert an EPEntscheidungsAufgabe."""
+        if not super().bearbeit_beginnen(proz_this):
+            return False
+        return True
+
+    def on_proz_beendet(self, proz_this: Any, ent: Any) -> None:
+        """C++: cpp:479-507 — beendet Entscheidungs-Protokoll + löst Sub-Plan aus.
+
+        Stoppt PtkIntervallEnd auf m_dPtkEnaDlzEnt (Ent-Teil endet hier).
+        Holt den ausgewählten Sub-Plan aus dem Oberprozess (m_oDlpl) und
+        ruft `dlpl.dlpl_ausloesen(trigger, oberprozess, ent)`.
+        """
+        sim = self.p_simulator
+        curr = sim.evt_curr_time()
+        # PtkIntervallEnd auf m_dPtkEnaDlzEnt
+        if sim.m_isPtk:
+            if not (sim.m_ptkBegin > 0 and self.m_dTmpEnaDlzEnt <= 0.0):
+                self.m_dPtkEnaDlzEnt += 1.0 * curr
+            self.m_dTmpEnaDlzEnt -= 1.0
+
+        # Notifikation
+        self.on_proz_bearbeit_ende(proz_this)
+
+        # Sub-Plan aus Oberprozess holen
+        ober = proz_this.m_oProzOber
+        dlpl = getattr(ober, "m_oDlpl", None) if ober is not None else None
+        if dlpl is None:
+            return
+        # Durchlaufplan auslösen — Sub-Plan startet mit Oberprozess als ProzOber
+        if hasattr(dlpl, "dlpl_ausloesen"):
+            dlpl.dlpl_ausloesen(proz_this.m_oTrigger, ober, ent)
+
+    def on_proz_sub_beendet(self, proz_this: Any, ent: Any) -> None:
+        """C++: cpp:509-521 — Sub-Plan ist fertig, an Kante weitergeben.
+
+        Beendet das gesamte Protokoll (m_dPtkEnaDlzGes) und reicht den
+        Oberprozess an die ausgehende Kante weiter, dann bearbeit_beenden.
+        """
+        sim = self.p_simulator
+        curr = sim.evt_curr_time()
+        # PtkIntervallEnd auf m_dPtkEnaDlzGes
+        if sim.m_isPtk:
+            if not (sim.m_ptkBegin > 0 and self.m_dTmpEnaDlzGes <= 0.0):
+                self.m_dPtkEnaDlzGes += 1.0 * curr
+            self.m_dTmpEnaDlzGes -= 1.0
+
+        # An ausgehende Kante weiter
+        if self.m_lKanteAus is not None:
+            self.m_lKanteAus.proz_weitergeben(proz_this, ent)
+
+        # Oberprozess beenden (PtProzEntAufgabeIntern)
+        if hasattr(proz_this, "bearbeit_beenden"):
+            proz_this.bearbeit_beenden()
+
+    def on_proz_bearbeit_ende(self, proz: Any) -> None:
+        """C++: cpp:524-528 — delegiert an PDpKnVerteilung (umgeht Basis)."""
+        PDpKnVerteilung.on_proz_bearbeit_ende(self, proz)
+
+    def get_knoten_anzahl(self, nur_basis_knoten: bool = True) -> int:
+        """C++: cpp:532-548 — summiert über alternative Sub-Pläne (+1 für sich selbst)."""
+        i = 0
+        for dlpl in self.m_lDlpl:
+            if hasattr(dlpl, "get_knoten_anzahl"):
+                i += dlpl.get_knoten_anzahl(nur_basis_knoten)
+        if nur_basis_knoten:
+            return i
+        return i + 1
+
+    def get_knz_min_dlfz(self, z_klass: Any = None) -> float:
+        """C++: cpp:552-570 — gewichteter Durchschnitt der Min-DLZ über alle
+        alternativen Sub-Pläne."""
+        anz = self.get_knz_anz_ausloesungen() if hasattr(self, "get_knz_anz_ausloesungen") else 0
+        if anz == 0:
+            return 0.0
+        d_min_dlfz = 0.0
+        for dlpl in self.m_lDlpl:
+            anz_dlpl = dlpl.get_knz_anz_ausloesungen() if hasattr(dlpl, "get_knz_anz_ausloesungen") else 0
+            if hasattr(dlpl, "get_knz_min_dlfz"):
+                d_min_dlfz += anz_dlpl * dlpl.get_knz_min_dlfz(z_klass)
+        return d_min_dlfz / anz
+
+
+class EPEntAltProzesswege(EPEntAufgabeAltIntern):
+    """Entscheidung über alternative Prozesswege.
+
+    C++: `EPEntAltProzesswege : $public EPEntAufgabeAltIntern`
+    (`PDpKnAlternativELogik.odh:327-349`, `.cpp:1428-1431`).
+
+    Standard-Heuristik: `entscheidung_treffen` liefert immer den ersten
+    Sub-Plan in `m_lDlpl` (cpp:1428-1431). Subklassen können das
+    überschreiben.
+    """
+
+    def entscheidung_treffen(self, proz: Any) -> Any:
+        """C++: cpp:1428-1431 — erste Alternative."""
+        if not self.m_lDlpl:
+            return None
+        return self.m_lDlpl[0]
+
+
+class EPEntAuftragsgroesse(EPEntAufgabeAltIntern):
+    """Entscheidung über alternative Auftragsgrößen.
+
+    C++: `EPEntAuftragsgroesse : $public EPEntAufgabeAltIntern`
+    (`PDpKnAlternativELogik.odh:373-397`, `.cpp:1525-1527`).
+
+    `set_menge` ist im C++-Original leerer Stub — wird hier ebenso
+    angelegt für Schnittstellen-Treue.
+    """
+
+    def __init__(self, simulator: "PSimulator | None") -> None:
+        super().__init__(simulator)
+        self.m_iShadowMenge: int = 0
+
+    def set_menge(self, dlpl: Any, menge: int) -> None:
+        """C++: cpp:1525-1527 — leerer Stub."""
+
+
+# ----------------------------------------------------------------------
+# Konkrete Extern-Aufgaben-Knoten (P5-D)
+# ----------------------------------------------------------------------
+
+
+class EPEntKrzRessourcenEinsatz(EPEntAufgabeAltExtern):
+    """Knoten-bezogene Entscheidung über kurzfristigen Ressourceneinsatz.
+
+    C++: `EPEntKrzRessourcenEinsatz : $public EPEntAufgabeAltExtern`
+    (`PDpKnAlternativELogik.odh:429-477`).
+
+    Enthält eine Liste zugeordneter Knoten (`m_lDlplKnoten`) und Methoden
+    zum Verwalten der Belegungs-Stati. In Slice P5-D als Container +
+    Stub-Methoden — die echten Status-Operationen werden in P5-E von der
+    Strategie aufgerufen.
+    """
+
+    def __init__(self, simulator: "PSimulator | None") -> None:
+        super().__init__(simulator)
+        # private temporäre Liste (CList in C++)
+        self._shadow_list: list[Any] = []
+        # Knoten-Liste — wird vom Loader befüllt
+        self.m_lDlplKnoten: list[Any] = []
+
+    # ------------------------------------------------------------------
+    # Container-Methoden (Iteration über Ressourcen eines Knotens)
+    # ------------------------------------------------------------------
+
+    def fill_shadow_list(self, knoten: Any) -> None:
+        """C++: cpp:1810-... — füllt `_shadow_list` aus den Assoz-Ressourcen
+        des Knotens. P5-D als Stub; echte Implementierung in P5-E."""
+        self._shadow_list.clear()
+
+    # ------------------------------------------------------------------
+    # Status-API (in P5-E aktiv)
+    # ------------------------------------------------------------------
+
+    def set_status(self, knoten: Any, beleg: Any, status: Any) -> None:
+        """C++: SetStatus — P5-D Stub."""
+
+    def get_status(self, knoten: Any, beleg: Any) -> Any:
+        """C++: GetStatus — P5-D Stub."""
+        return None
+
+    def get_base_status(self, knoten: Any, beleg: Any) -> Any:
+        """C++: GetBaseStatus — P5-D Stub."""
+        return None
+
+    def reset_status_2_base(self, beleg: Any) -> None:
+        """C++: ResetStatus2Base — P5-D Stub."""
+
+    def block_all(self, knoten: Any = None) -> None:
+        """C++: BlockAll — P5-D Stub."""
+
+    def un_block_all(self, knoten: Any = None) -> None:
+        """C++: UnBlockAll — P5-D Stub."""
+
+    def invert_blocking(self, knoten: Any = None) -> None:
+        """C++: InvertBlocking — P5-D Stub."""
+
+    def inc_ress(self, knoten: Any = None, menge: int = 1) -> bool:
+        """C++: IncRess — P5-D Stub."""
+        return False
+
+    def dec_ress(self, knoten: Any = None, menge: int = 1) -> bool:
+        """C++: DecRess — P5-D Stub."""
+        return False
+
+    def reset_by_timespan(self, knoten: Any, zeitspanne: int, beleg: Any) -> None:
+        """C++: ResetByTimespan — P5-D Stub."""
+
+    def set_by_timespan_2_state(
+        self, knoten: Any, zeitspanne: int, beleg: Any, status: Any
+    ) -> None:
+        """C++: SetByTimespan2State — P5-D Stub."""
+
+
+class EPEntKrzRessourcenEinsatzRess(EPEntAufgabeAltExternRessBeleg):
+    """Ressourcen-bezogene Variante von EPEntKrzRessourcenEinsatz.
+
+    C++: `EPEntKrzRessourcenEinsatzRess : $public EPEntAufgabeAltExternRessBeleg`
+    (`PDpKnAlternativELogik.odh:501-529`).
+
+    Identische Status-API wie EPEntKrzRessourcenEinsatz, plus
+    Subset-Vergleichsmethoden. P5-D als Stubs.
+    """
+
+    def set_status(self, knoten: Any, beleg: Any, status: Any) -> None:
+        """C++: SetStatus — P5-D Stub."""
+
+    def get_status(self, knoten: Any, beleg: Any) -> Any:
+        """C++: GetStatus — P5-D Stub."""
+        return None
+
+    def get_base_status(self, knoten: Any, beleg: Any) -> Any:
+        """C++: GetBaseStatus — P5-D Stub."""
+        return None
+
+    def reset_status_2_base(self, beleg: Any) -> None:
+        """C++: ResetStatus2Base — P5-D Stub."""
+
+    def block_all(self, knoten: Any = None) -> None:
+        """C++: BlockAll — P5-D Stub."""
+
+    def un_block_all(self, knoten: Any = None) -> None:
+        """C++: UnBlockAll — P5-D Stub."""
+
+    def invert_blocking(self, knoten: Any = None) -> None:
+        """C++: InvertBlocking — P5-D Stub."""
+
+    def reset_by_timespan(self, knoten: Any, zeitspanne: int, beleg: Any) -> None:
+        """C++: ResetByTimespan — P5-D Stub."""
+
+    def set_by_timespan_2_state(
+        self, knoten: Any, zeitspanne: int, beleg: Any, status: Any
+    ) -> None:
+        """C++: SetByTimespan2State — P5-D Stub."""
+
+    def set_status_as_subset_of(
+        self,
+        change_beleg: Any,
+        source_beleg: Any,
+        status: Any,
+        reset_by_timspan: int = -1,
+        as_base: bool = True,
+    ) -> None:
+        """C++: SetStatusAsSubsetOf — P5-D Stub."""
+
+    def are_connections_identical(self, beleg0: Any, beleg1: Any) -> bool:
+        """C++: AreConnectionsIdentical — P5-D Stub."""
+        return False
+
+    def are_base_connections_identical(self, beleg0: Any, beleg1: Any) -> bool:
+        """C++: AreBaseConnectionsIdentical — P5-D Stub."""
+        return False
+
+
+class EPEntReihenfolge(EPEntAufgabeAltExternRessBeleg):
+    """Entscheidung über Prozess-Reihenfolge (Priorität).
+
+    C++: `EPEntReihenfolge : $public EPEntAufgabeAltExternRessBeleg`
+    (`PDpKnAlternativELogik.odh:553-584`, `.cpp:1573-...`).
+
+    PQueue-Iteration über die Warteschlange einer Belegungs-Ressource
+    und Methoden zum Setzen/Erhöhen/Senken der Prozess-Priorität.
+    P5-D als Stubs; volle Logik in P5-E/F nicht nötig — die Methoden
+    sind im C++ relativ kurz und nutzen `PRessBeleg.GetPQueue*`.
+    """
+
+    # ------------------------------------------------------------------
+    # PQueue-Iteration (in P5-E/F aktiv)
+    # ------------------------------------------------------------------
+
+    def get_p_queue_head_position(self, beleg: Any) -> Any:
+        """C++: cpp:1573-1578."""
+        if beleg is None:
+            return None
+        if hasattr(beleg, "get_p_queue_head_position"):
+            return beleg.get_p_queue_head_position()
+        return None
+
+    def get_p_queue_at(self, beleg: Any, pos: Any) -> Any:
+        """C++: cpp:1579-... — P5-D Stub (PRessBeleg-API noch nicht da)."""
+        return None
+
+    def get_p_queue_next(self, beleg: Any, pos: Any) -> Any:
+        """C++: cpp:1585-... — P5-D Stub."""
+        return None
+
+    def is_p_queue_empty(self, beleg: Any, pos: Any) -> bool:
+        """C++: cpp:1592-... — P5-D Stub."""
+        return True
+
+    # ------------------------------------------------------------------
+    # Priority-API
+    # ------------------------------------------------------------------
+
+    def set_proz_prior(self, proz: Any, prior: int) -> None:
+        """C++: cpp:1605-... — setzt direkt `proz.m_iPrioritaet`."""
+        if proz is not None and hasattr(proz, "m_iPrioritaet"):
+            proz.m_iPrioritaet = prior
+
+    def set_knoten_proz_prior(self, knoten: Any, prior: int) -> None:
+        """C++: cpp:1616-... — P5-D Stub (braucht Knoten-Prozess-Iteration)."""
+
+    def inc_prior_knoten(self, knoten: Any) -> None:
+        """C++: cpp:1634-... — P5-D Stub."""
+
+    def inc_prior_proz(self, proz: Any) -> None:
+        """C++: cpp:1651-... — inkrementiert `proz.m_iPrioritaet`."""
+        if proz is not None and hasattr(proz, "m_iPrioritaet"):
+            proz.m_iPrioritaet += 1
+
+    def dec_prior_knoten(self, knoten: Any) -> None:
+        """C++: cpp:1662-... — P5-D Stub."""
+
+    def dec_prior_proz(self, proz: Any) -> None:
+        """C++: cpp:1679-... — dekrementiert `proz.m_iPrioritaet`."""
+        if proz is not None and hasattr(proz, "m_iPrioritaet"):
+            proz.m_iPrioritaet -= 1
+
+
+class EPEntKrzKapazitaetsVeraenderung(EPEntAufgabeAltExternRessBeleg):
+    """Entscheidung über kurzfristige Kapazitätsveränderung (Arbeitszeit).
+
+    C++: `EPEntKrzKapazitaetsVeraenderung : $public EPEntAufgabeAltExternRessBeleg`
+    (`PDpKnAlternativELogik.odh:610-630`).
+
+    Methoden zur Anpassung von Einsatzdauer + Einsatzende. P5-D als Stubs.
+    """
+
+    def inc_einsatz_dauer(self, beleg: Any, zeit: int) -> bool:
+        """C++: IncEinatzDauer — P5-D Stub."""
+        return False
+
+    def dec_einsatz_dauer(self, beleg: Any, zeit: int) -> bool:
+        """C++: DecEinatzDauer — P5-D Stub."""
+        return False
+
+    def set_einsatz_end_for_day(self, beleg: Any, zeit: Any) -> None:
+        """C++: SetEinatzEndForDay — P5-D Stub. Akzeptiert int oder CTime."""

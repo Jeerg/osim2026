@@ -30,3 +30,27 @@ class PtProzEntAufgabeBase(PtProzZeitvorgabe):
         # zugehöriges Entscheidungsfeld — wird von EPAszEntFeld.ress_verfuegbar
         # oder EPEntscheidungsAufgabe.bearbeit_beginnen gesetzt
         self.m_oEntFeld: Any = None
+
+
+class PtProzEntAufgabeIntern(PtProzZeitvorgabe):
+    """C++-Äquivalent: `PtProzEntAufgabeIntern` (`PtProzess.odh:339-353`).
+
+    Oberprozess für interne Entscheidungs-Aufgaben (`EPEntAufgabeAltIntern`
+    und Subklassen). Hält den ausgewählten Sub-Plan in `m_oDlpl` sowie
+    optional ein EntFeld.
+
+    Sim-Methoden sind ggü. PtProzZeitvorgabe leicht überschrieben:
+    - `bearbeit_beginnen`/`bearbeit_beenden` — eigene Ablauf-Logik
+    - `on_unter_proz_beginn`/`ende` — Sub-Prozess-Hooks
+
+    In Slice P5-D minimal implementiert; die echte Sub-Plan-Routing-Logik
+    kommt durch das Zusammenspiel mit `EPEntAufgabeAltIntern.on_proz_beendet`
+    (siehe decisions/aufgabe.py).
+    """
+
+    def __init__(self, simulator: "PSimulator | None") -> None:
+        super().__init__(simulator)
+        # zugehöriger Durchlaufplan (gewählte Alternative)
+        self.m_oDlpl: Any = None
+        # zugehöriges Entscheidungsfeld (optional)
+        self.m_oEntFeld: Any = None

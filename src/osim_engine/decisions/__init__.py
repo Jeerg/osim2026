@@ -24,8 +24,15 @@ Das erlaubt 1:1-Treue zum C++-Original auch in Phase 5 ohne aktive Logik.
 
 from osim_engine.decisions.aufgabe import (
     EntAufgabeBelegStatus,
+    EPEntAltProzesswege,
     EPEntAufgabeAltExtern,
     EPEntAufgabeAltExternRessBeleg,
+    EPEntAufgabeAltIntern,
+    EPEntAuftragsgroesse,
+    EPEntKrzKapazitaetsVeraenderung,
+    EPEntKrzRessourcenEinsatz,
+    EPEntKrzRessourcenEinsatzRess,
+    EPEntReihenfolge,
     EPEntscheidungsAufgabe,
 )
 from osim_engine.decisions.entscheidung import (
@@ -45,8 +52,15 @@ from osim_engine.decisions.strategie import EPEntStrategie, EPEntStrategieLList
 
 __all__ = [
     "EntAufgabeBelegStatus",
+    "EPEntAltProzesswege",
     "EPEntAufgabeAltExtern",
     "EPEntAufgabeAltExternRessBeleg",
+    "EPEntAufgabeAltIntern",
+    "EPEntAuftragsgroesse",
+    "EPEntKrzKapazitaetsVeraenderung",
+    "EPEntKrzRessourcenEinsatz",
+    "EPEntKrzRessourcenEinsatzRess",
+    "EPEntReihenfolge",
     "EPEntFeld",
     "EPEntFeldLList",
     "EPEntInformation",
