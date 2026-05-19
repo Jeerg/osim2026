@@ -22,6 +22,12 @@ explizit gesetzt wird, beeinflussen die Klassen das Sim-Verhalten nicht.
 Das erlaubt 1:1-Treue zum C++-Original auch in Phase 5 ohne aktive Logik.
 """
 
+from osim_engine.decisions.aufgabe import (
+    EntAufgabeBelegStatus,
+    EPEntAufgabeAltExtern,
+    EPEntAufgabeAltExternRessBeleg,
+    EPEntscheidungsAufgabe,
+)
 from osim_engine.decisions.entscheidung import (
     EPEntFeld,
     EPEntFeldLList,
@@ -38,12 +44,16 @@ from osim_engine.decisions.entscheidung import (
 from osim_engine.decisions.strategie import EPEntStrategie, EPEntStrategieLList
 
 __all__ = [
+    "EntAufgabeBelegStatus",
+    "EPEntAufgabeAltExtern",
+    "EPEntAufgabeAltExternRessBeleg",
     "EPEntFeld",
     "EPEntFeldLList",
     "EPEntInformation",
     "EPEntInformationLList",
     "EPEntInformationssystem",
     "EPEntInformationssystemLList",
+    "EPEntscheidungsAufgabe",
     "EPEntStrategie",
     "EPEntStrategieLList",
     "EPKrzDurchlaufzeit",
