@@ -207,6 +207,81 @@ class OVerteil:
         lambda_ = math.log(ew) - sigma * sigma / 2
         return math.exp(lambda_ + sigma * self.vert_norm(0.0, 1.0))
 
+    def vert_gamma(self, m: float, k: float) -> float:
+        """Gamma-Verteilung. OFC/OVerteil.cpp:517-579.
+
+        Best/Devroye-Rejection: für m≤1 RGS-Algorithmus (Devroye p.426),
+        sonst Best's XG-Algorithmus (Devroye p.410). 1:1 zur C++-Quelle.
+        """
+        if m <= 1:
+            c = 1 / m
+            t = 0.07 + 0.75 * math.sqrt(1 - m)
+            b = 1 + math.exp(-t) * m / t
+            accept = 0
+            x = 0.0
+            while not accept:
+                u = self.vert_gleich()
+                w = self.vert_gleich()
+                v = b * u
+                if v <= 1:
+                    x = t * pow(v, c)
+                    accept = (w <= ((2 - x) / (2 + x))) or (w <= math.exp(-x))
+                else:
+                    x = -math.log(c * t * (b - v))
+                    y = x / t
+                    accept = ((w * (m + y - m * y)) <= 1) or (w <= pow(y, (m - 1)))
+        else:
+            b = m - 1
+            c = 3 * m - 0.75
+            accept = 0
+            x = 0.0
+            while not accept:
+                u = self.vert_gleich()
+                v = self.vert_gleich()
+                w = u * (1 - u)
+                y = math.sqrt(c / w) * (u - 0.5)
+                x = b + y
+                if x >= 0:
+                    z = 64 * pow(w, 3) * v * v
+                    accept = (z <= (1 - 2 * y * y / x)) or (math.log(z) <= (2 * (b * math.log(x / b) - y)))
+        return x / k
+
+    def vert_beta(self, a: float, b: float) -> float:
+        """Beta-Verteilung über zwei Gamma-Variaten. OFC/OVerteil.cpp:420-436.
+
+        `a, b > 0`. Liefert Beta(a, b)-Variate in [0, 1].
+        Wirft `ValueError`, wenn `a<=0` oder `b<=0` (entspricht
+        `throw new OException` im C++-Original).
+        """
+        if a <= 0 or b <= 0:
+            raise ValueError(f"vert_beta: a={a}, b={b} müssen > 0 sein")
+        a1n = self.vert_gamma(a, 1)
+        a1d = self.vert_gamma(b, 1)
+        return a1n / (a1n + a1d)
+
+    def vert_beta_range(self, ug: float, og: float, a: float, b: float) -> float:
+        """Beta-Verteilung in den Grenzen [ug, og]. OFC/OVerteil.cpp:453-465.
+
+        Im C++-Original als 4-Argument-Überladung von `VertBeta`. Hier
+        getrennt benannt zur Klarheit.
+        """
+        wert = self.vert_beta(a, b)
+        return ug + (og - ug) * wert
+
+    def vert_beta_pert(self, m: float, a: float, b: float) -> float:
+        """Beta-PERT-Verteilung. OFC/OVerteil.cpp:482-499.
+
+        Args:
+            m: Häufigster Wert (mode).
+            a: Optimistischer (untere Grenze).
+            b: Pessimistischer (obere Grenze).
+        Es muss gelten `a < m < b` und `b - a > 0`.
+        """
+        alpha = 4 * ((m - a) / (b - a))
+        beta = 4 * ((b - m) / (b - a))
+        wert = self.vert_beta(alpha, beta)
+        return a + (b - a) * wert
+
 
 # ----------------------------------------------------------------------
 # Modul-Singleton — entspricht C++ `OSimulator::s_verteil`

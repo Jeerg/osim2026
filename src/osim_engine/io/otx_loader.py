@@ -451,13 +451,129 @@ register_handler("PDpKnMengeRuesten")(
         ("m_iDfzProEinheit", "m_iRuestzeit"),
     )
 )
-register_handler("PDpKnVerteilung")(
-    _make_knoten_handler(
-        "osim_engine.pps.knoten.zeitvorgabe",
-        "PDpKnVerteilung",
-        ("m_iVerteilZeit",),
+@register_handler("PDpKnVerteilung")
+class _PDpKnVerteilungHandler(ClassHandler):
+    """PDpKnVerteilung — Knoten mit verteilter Durchführungszeit.
+
+    Wie Standard-Knoten, ZUSÄTZLICH `m_lVerteil`-Ref auf eine
+    PVerteilung-Instanz. Ohne diese Ref crasht `get_durchfuehrungszeit`.
+    """
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.pps.knoten.zeitvorgabe import PDpKnVerteilung
+        k = PDpKnVerteilung(loader.simulator)
+        copy_scalars(k, obj, ("m_sName", "m_iVerteilZeit"))
+        return k
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        ein = resolve_ref(loader, obj, "m_lKanteEin")
+        aus = resolve_ref(loader, obj, "m_lKanteAus")
+        ober = resolve_ref(loader, obj, "m_lKnotenOber")
+        verteil = resolve_ref(loader, obj, "m_lVerteil")
+        if ein is not None:
+            py.m_lKanteEin = ein
+        if aus is not None:
+            py.m_lKanteAus = aus
+        if ober is not None:
+            py.m_lKnotenOber = ober
+        if verteil is not None:
+            py.m_lVerteil = verteil
+
+
+@register_handler("PDpKaVerteilung")
+class _PDpKaVerteilungHandler(ClassHandler):
+    """PDpKaVerteilung — Übergangs-Kante mit verteilter Übergangszeit."""
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.pps.kante.verteilung import PDpKaVerteilung
+        k = PDpKaVerteilung(loader.simulator)
+        copy_scalars(k, obj, ("m_sName", "m_iAktVerteilungszeit"))
+        return k
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for nach in resolve_list(loader, obj, "m_lNachfolger"):
+            if nach not in py.m_lNachfolger:
+                py.m_lNachfolger.append(nach)
+        for vor in resolve_list(loader, obj, "m_lVorgaenger"):
+            if vor not in py.m_lVorgaenger:
+                py.m_lVorgaenger.append(vor)
+        verteil = resolve_ref(loader, obj, "m_lVerteil")
+        if verteil is not None:
+            py.m_lVerteil = verteil
+
+
+# ----------------------------------------------------------------------
+# PVerteilung-Familie (PVert* + PVertExtern)
+# ----------------------------------------------------------------------
+
+
+def _make_pvert_handler(py_class: str, scalars: tuple[str, ...]):
+    class _H(ClassHandler):
+        def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+            from osim_engine.pps import verteilung as V
+            cls = getattr(V, py_class)
+            v = cls(loader.simulator)
+            copy_scalars(v, obj, ("m_sName",) + scalars)
+            return v
+
+        def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+            ext = resolve_ref(loader, obj, "m_lPVertExt")
+            if ext is not None:
+                py.m_lPVertExt = ext
+
+    return _H
+
+
+register_handler("PVertKonstant")(
+    _make_pvert_handler("PVertKonstant", ("m_fKonstante",))
+)
+register_handler("PVertGleich")(
+    _make_pvert_handler("PVertGleich", ("m_fMinimum", "m_fMaximum"))
+)
+register_handler("PVertNormal")(
+    _make_pvert_handler("PVertNormal", ("m_fErwartungsw", "m_fStandardabw"))
+)
+register_handler("PVertLogNorm")(
+    _make_pvert_handler("PVertLogNorm", ("m_fErwartungsw", "m_fStandardabw"))
+)
+register_handler("PVertExponential")(
+    _make_pvert_handler("PVertExponential", ("m_fErwartungsw", "m_iRechtsVerschiebung"))
+)
+register_handler("PVertBeta")(
+    _make_pvert_handler(
+        "PVertBeta",
+        ("m_fUntereGrenze", "m_fObereGrenze", "m_fAlpha", "m_fBeta"),
     )
 )
+register_handler("PVertBetaPERT")(
+    _make_pvert_handler(
+        "PVertBetaPERT",
+        ("m_fpessimistischerWert", "m_fhaeufigsterWert", "m_foptimistischerWert"),
+    )
+)
+
+
+@register_handler("PVertExtern")
+class _PVertExternHandler(ClassHandler):
+    """PVertExtern — eigener Zufallsgenerator pro Verteilung."""
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.pps.verteilung import PVertExtern
+        e = PVertExtern(loader.simulator)
+        # m_keim aus OTX → setzt auch m_Internerkeim und den Generator-Ref
+        keim = obj.attrs.get("m_keim")
+        intern = obj.attrs.get("m_Internerkeim")
+        if isinstance(keim, (int, float)):
+            e.m_keim = float(keim)
+        if isinstance(intern, (int, float)):
+            e.m_Internerkeim = float(intern)
+        else:
+            e.m_Internerkeim = e.m_keim
+        e._keim_ref[0] = e.m_Internerkeim
+        copy_scalars(e, obj, ("m_sName",))
+        return e
+
+
 @register_handler("PDpKnRueckKonstant")
 class _PDpKnRueckKonstantHandler(ClassHandler):
     """PDpKnRueckKonstant — Knoten + zwingend zugehöriger Sub-Plan."""
