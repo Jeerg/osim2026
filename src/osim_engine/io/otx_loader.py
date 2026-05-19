@@ -354,13 +354,35 @@ class _PDurchlaufplanHandler(ClassHandler):
             py.add_knoten(k)
         for k in resolve_list(loader, obj, "m_lKanten"):
             py.add_kante(k)
-        # Start- und End-Kante setzen
+        # Start- und End-Kante: zuerst explizit, dann ggf. inferieren.
+        # Sub-Pläne (von Rück/Alt-Knoten) haben in der OTX keine expliziten
+        # Start/End-Refs — sie werden über die Kanten-Topologie erschlossen.
         start = resolve_ref(loader, obj, "m_lStartKante")
         end = resolve_ref(loader, obj, "m_lEndKante")
+        if start is None:
+            start = _infer_start_kante(py)
+        if end is None:
+            end = _infer_end_kante(py)
         if start is not None:
             py.set_start_kante(start)
         if end is not None:
             py.set_end_kante(end)
+
+
+def _infer_start_kante(plan: Any) -> Any | None:
+    """Kante ohne Vorgaenger = Start-Kante (sub-plan-Topologie)."""
+    for kante in plan.m_lKanten:
+        if not kante.m_lVorgaenger:
+            return kante
+    return None
+
+
+def _infer_end_kante(plan: Any) -> Any | None:
+    """Kante ohne Nachfolger = End-Kante (sub-plan-Topologie)."""
+    for kante in plan.m_lKanten:
+        if not kante.m_lNachfolger:
+            return kante
+    return None
 
 
 @register_handler("PDlplKante", "PDpKaUebergang")
@@ -436,13 +458,28 @@ register_handler("PDpKnVerteilung")(
         ("m_iVerteilZeit",),
     )
 )
-register_handler("PDpKnRueckKonstant")(
-    _make_knoten_handler(
-        "osim_engine.pps.knoten.ruecksprung",
-        "PDpKnRueckKonstant",
-        ("m_iWiederholungenZiel",),
-    )
-)
+@register_handler("PDpKnRueckKonstant")
+class _PDpKnRueckKonstantHandler(ClassHandler):
+    """PDpKnRueckKonstant — Knoten + zwingend zugehöriger Sub-Plan."""
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.pps.knoten.ruecksprung import PDpKnRueckKonstant
+        k = PDpKnRueckKonstant(loader.simulator)
+        copy_scalars(k, obj, ("m_sName", "m_iWiederholungenZiel"))
+        return k
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        # Standard-Knoten-Wiring
+        ein = resolve_ref(loader, obj, "m_lKanteEin")
+        aus = resolve_ref(loader, obj, "m_lKanteAus")
+        if ein is not None:
+            py.m_lKanteEin = ein
+        if aus is not None:
+            py.m_lKanteAus = aus
+        # Sub-Plan einhängen (set_sub_plan setzt sub.m_lKnotenOber = py)
+        sub = resolve_ref(loader, obj, "m_lDlpl")
+        if sub is not None:
+            py.set_sub_plan(sub)
 
 
 # ----------------------------------------------------------------------
@@ -481,10 +518,12 @@ class _PAlternativeVerteilungHandler(ClassHandler):
         return a
 
     def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        # Sub-Plan-Wiring erfolgt im PDpKnAlternativVerteilung-Wiring
+        # (add_alternative setzt sub.m_lKnotenOber = knoten). Hier nur den
+        # Sub-Plan an die Alternative hängen.
         dlpl = resolve_ref(loader, obj, "m_lDlpl")
         if dlpl is not None:
             py.m_lDlpl = dlpl
-            dlpl.m_lKnotenOber = None  # Wird in add_alternative gesetzt
 
 
 # ----------------------------------------------------------------------
