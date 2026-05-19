@@ -91,22 +91,27 @@ def test_python_run_matches_cpp_run_on_embb(tmp_path: Path) -> None:
         f"Zu wenig gemeinsame Schlüssel: {diff.common_keys}"
     )
 
-    # Aktuell bekannte Verhaltens-Lücken (Stand 2026-05-19):
-    # 13× m_dPtkEinsatzzeit (PBetriebsmittel)
-    # 5× m_iPtkAnzahlPerioden (PPerson)
-    # → 18 echte Diffs, alle in Resource/Person-Einsatzzeit-Bookkeeping
+    # Stand 2026-05-19 nach Bugfix (Commits 14ac8f9 + folgende):
+    # - Maschinen-Einsatzzeit: gefixt (PtkIntervallBegin/End in
+    #   PRessBeleg.on_einsatz_beginn/ende)
+    # - PPerson m_iPtkAnzahlPerioden: gefixt (EvtPErmuedungswertPeriodeEnd)
+    # Verbleibend: 3 Diffs auf PEinsatzzeitTag.m_dPtkEinsatzzeit selbst —
+    # C++ schreibt negative Werte (offene Intervalle), Python schließt sie
+    # via PEM_END_FOR_DAY. Cosmetic-Diff, beeinflusst Sim-Verhalten nicht.
     diff_attrs = {c.attr for c in diff.real_diffs}
-    assert diff_attrs.issubset(
-        {"m_dPtkEinsatzzeit", "m_iPtkAnzahlPerioden"}
-    ), (
+    diff_klasses = {c.klass for c in diff.real_diffs}
+    assert diff_attrs.issubset({"m_dPtkEinsatzzeit"}), (
         f"NEUE Verhaltens-Diff-Attribute aufgetaucht: "
-        f"{diff_attrs - {'m_dPtkEinsatzzeit', 'm_iPtkAnzahlPerioden'}}\n"
+        f"{diff_attrs - {'m_dPtkEinsatzzeit'}}\n"
         f"Wenn das Absicht ist, Whitelist erweitern. Sonst: 1:1-Treue prüfen."
     )
+    assert diff_klasses.issubset({"PEinsatzzeitTag"}), (
+        f"Diff sollte nur auf PEinsatzzeitTag liegen, fand: {diff_klasses}"
+    )
 
-    # Größenordnung der Diffs
-    assert len(diff.real_diffs) <= 30, (
-        f"Echte Diffs explodiert: {len(diff.real_diffs)} (vorher ~18)"
+    # Größenordnung der Diffs — vorher 18, nach Bugfix 3
+    assert len(diff.real_diffs) <= 5, (
+        f"Echte Diffs explodiert: {len(diff.real_diffs)} (Soll: <=5)"
     )
 
 

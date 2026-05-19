@@ -24,6 +24,7 @@ from __future__ import annotations
 from enum import IntEnum
 from typing import TYPE_CHECKING, Any
 
+from osim_engine.core.event import OMetaEvent
 from osim_engine.resources.aktor import PAktor
 from osim_engine.resources.ressource import PRessource
 
@@ -353,12 +354,20 @@ class PRessBeleg(PRessource, PAktor):
 
         V6-Pfad (ohne Entscheider, ohne Aktor):
             1. m_TryedPause = False
-            2. Listener notifizieren (`on_einsatz_beginn`)
-            3. set_status(RS_FREI), m_oProzCurrent = None
-            4. proz_wart_ausloesen (passiver Pfad, da m_bAktAsActor=False)
+            2. Einsatzzeit-Protokoll-Intervall starten (PRessBeleg.cpp:779-780)
+            3. Listener notifizieren (`on_einsatz_beginn`)
+            4. set_status(RS_FREI), m_oProzCurrent = None
+            5. proz_wart_ausloesen (passiver Pfad, da m_bAktAsActor=False)
         """
         del evttyp, oezeit  # V6 unbenutzt — Pfade m_bIsEntFunktOn=False
         self.m_TryedPause = False
+
+        # PRessBeleg.cpp:779-780 — Protokoll-Intervall starten
+        if self.p_simulator.m_isPtk:
+            self.p_simulator.ptk_intervall_begin(
+                self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit",
+                1.0, self.p_simulator.evt_curr_time(),
+            )
 
         for listener in list(self._listeners):
             listener.on_einsatz_beginn()
@@ -385,12 +394,22 @@ class PRessBeleg(PRessource, PAktor):
         """C++: `PRessBeleg::OnEinsatzEnde` (PRessBeleg.cpp:798-933).
 
         V6-Pfad — nur `rsvStandard`:
-            1. m_TryedPause = True
-            2. Listener notifizieren (`on_einsatz_ende`)
-            3. SetStatus(RS_PAUSE)
-            4. Falls aktuell ein Prozess läuft: `bearbeit_unterbrechen`
+            1. Einsatzzeit-Protokoll-Intervall schließen (PRessBeleg.cpp:878-881)
+               Nur wenn `m_dTmpEinsatzzeit > 0` (offenes Intervall existiert).
+            2. m_TryedPause = True
+            3. Listener notifizieren (`on_einsatz_ende`)
+            4. SetStatus(RS_PAUSE)
+            5. Falls aktuell ein Prozess läuft: `bearbeit_unterbrechen`
         """
         del evttyp, oezeit  # V6 unbenutzt
+
+        # PRessBeleg.cpp:878-881 — Protokoll-Intervall schließen
+        if self.m_dTmpEinsatzzeit > 0 and self.p_simulator.m_isPtk:
+            self.p_simulator.ptk_intervall_end(
+                self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit",
+                1.0, self.p_simulator.evt_curr_time(),
+            )
+
         self.m_TryedPause = True
 
         for listener in list(self._listeners):
@@ -590,8 +609,85 @@ class PBetriebsmittel(PRessBeleg):
     """
 
 
+class _EvtPErmuedungswertPeriodeEnd(OMetaEvent):
+    """$event(5) — Periode-Ende für PPerson-Ermüdungs-Bookkeeping.
+
+    Wird in PPerson.on_sim_begin geschedult bei `t+m_iPeriodenLaenge`,
+    feuert dort und plant sich für die nächste Periode neu ein.
+    C++: `EvtPErmuedungswertPeriodeEnd` (PRessBeleg.odh:909).
+    """
+    m_subTime = 5
+    m_name = "EvtPErmuedungswertPeriodeEnd"
+
+    def execute(self, obj: "PPerson", para: Any) -> None:  # noqa: ARG002
+        obj.p_ermuedungswert_periode_end()
+
+
+_EVT_PERMUEDUNGSWERT = _EvtPErmuedungswertPeriodeEnd()
+
+
 class PPerson(PRessBeleg):
     """C++-Äquivalent: `PPerson` (`PRessBeleg.odh:819`).
 
-    V4: keine zusätzliche Logik (Ermüdung/Zeitstress kommt in V6+).
+    V6+ Ermüdungs-Bookkeeping: pro Periode (Default 86399 = 1 Tag, siehe
+    `m_iPeriodenLaenge`) feuert ein eigener Event und führt den Periode-
+    Counter `m_iPtkAnzahlPerioden`. Das vollständige Ermüdungs-/Zeitstress-
+    Modell aus C++ wird in Phase 5 portiert.
     """
+
+    def __init__(self, simulator: "PSimulator | None") -> None:
+        super().__init__(simulator)
+        # Konfiguration — C++ Default (PRessBeleg.odh:828)
+        self.m_iPeriodenLaenge: int = 86399
+        # Counter — werden in on_rec_init zurückgesetzt
+        self.m_dPtkKumZeitstress: float = 0.0
+        self.m_iPtkAnzAbgProzesse: int = 0
+        self.m_dPtkKumErmuedungswertGesamt: float = 0.0
+        self.m_dPtkKumErmuedungswertPeriode: float = 0.0
+        self.m_iPtkAnzahlPerioden: int = 0
+        self.m_iPtkBeginnZeitpunkt: int = 0
+
+    def on_sim_begin(self, sim, deep: bool = True) -> None:
+        """C++: `PPerson::OnSimBegin` (PRessBeleg.odh:873-877).
+        Erstes EvtPErmuedungswertPeriodeEnd platzieren.
+        """
+        super().on_sim_begin(sim, deep=deep)
+        sim.evt_insert(
+            _EVT_PERMUEDUNGSWERT,
+            self,
+            sim.evt_curr_time() + self.m_iPeriodenLaenge,
+            None,
+        )
+
+    def on_rec_init(self, deep: bool = True) -> None:
+        """C++: `PPerson::OnRecInit` (PRessBeleg.odh:879-893)."""
+        super().on_rec_init(deep=deep)
+        self.m_dPtkKumZeitstress = 0.0
+        self.m_iPtkAnzAbgProzesse = 0
+        self.m_dPtkKumErmuedungswertGesamt = 0.0
+        self.m_dPtkKumErmuedungswertPeriode = 0.0
+        self.m_iPtkAnzahlPerioden = 0
+        self.m_iPtkBeginnZeitpunkt = 0
+
+    def p_ermuedungswert_periode_end(self) -> None:
+        """C++: `PPerson::PErmuedungswertPeriodeEnd` (PRessBeleg.cpp:4214-4233).
+
+        Schließt eine Ermüdungs-Periode ab + plant die nächste ein.
+        """
+        sim = self.p_simulator
+        time = sim.evt_curr_time()
+
+        # Gesamt-Ermüdungswert kumulieren
+        self.m_dPtkKumErmuedungswertGesamt += self.m_dPtkKumErmuedungswertPeriode
+        self.m_dPtkKumErmuedungswertPeriode = 0.0
+
+        # Perioden mitzählen
+        self.m_iPtkAnzahlPerioden += 1
+
+        # Nächsten Event einplanen
+        sim.evt_insert(
+            _EVT_PERMUEDUNGSWERT,
+            self,
+            time + self.m_iPeriodenLaenge,
+            None,
+        )

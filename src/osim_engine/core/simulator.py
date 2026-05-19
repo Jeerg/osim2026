@@ -324,6 +324,43 @@ class OSimulator(OSimObj):
         return self.m_simStatus in (OSimStatus.RUNNING, OSimStatus.SUSPENDED)
 
     # ------------------------------------------------------------------
+    # PtkIntervall — Protokoll-Intervall-Helpers
+    # ------------------------------------------------------------------
+    # C++: OSimulator::xPtkIntervallBegin/End (OSimulator.cpp:830-861)
+    #
+    # Pattern: Über `(ptk, tmp)` wird die Brutto-Dauer eines Zeitintervalls
+    # in `ptk` akkumuliert. Bei Begin wird `tmp += gfakt` und `ptk -= gfakt*t`,
+    # bei End `ptk += gfakt*t` und `tmp -= gfakt`. Nach End: ptk += (t_end -
+    # t_begin)*gfakt, tmp = 0.
+    #
+    # Wir nehmen Attribut-Namen + Objekt, weil Python keine echten Refs hat.
+
+    def ptk_intervall_begin(
+        self, obj: object, ptk_attr: str, tmp_attr: str,
+        gfakt: float, ptime: int,
+    ) -> None:
+        """C++: `xPtkIntervallBegin(double &ptk, double &tmp, gfakt, ptime)`."""
+        setattr(obj, tmp_attr, getattr(obj, tmp_attr) + gfakt)
+        if self.m_isPtk:
+            setattr(obj, ptk_attr, getattr(obj, ptk_attr) - gfakt * ptime)
+
+    def ptk_intervall_end(
+        self, obj: object, ptk_attr: str, tmp_attr: str,
+        gfakt: float, ptime: int,
+    ) -> None:
+        """C++: `xPtkIntervallEnd(double &ptk, double &tmp, gfakt, ptime)`.
+
+        Sonderfall (C++:854-855): wenn `m_ptkBegin > 0` und `tmp <= 0` und
+        `gfakt > 0`, dann no-op (Protokoll begann später als die Simulation).
+        """
+        tmp_val = getattr(obj, tmp_attr)
+        if self.m_ptkBegin > 0 and tmp_val <= 0.0 and gfakt > 0:
+            return
+        if self.m_isPtk:
+            setattr(obj, ptk_attr, getattr(obj, ptk_attr) + gfakt * ptime)
+        setattr(obj, tmp_attr, tmp_val - gfakt)
+
+    # ------------------------------------------------------------------
     # Listener-Verwaltung
     # ------------------------------------------------------------------
 

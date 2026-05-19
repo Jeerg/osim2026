@@ -283,13 +283,24 @@ class PEinsatzzeitPause(PEinsatzzeit):
         Hier liegt die Asymmetrie zwischen "Pause" und "Einsatz":
             - PEM_BEGIN = Pause beginnt = Einsatz endet → ressBeleg.on_einsatz_ende
             - PEM_END   = Pause endet   = Einsatz beginnt → ressBeleg.on_einsatz_beginn
+
+        Zusätzlich: Protokoll-Intervall der Pause auf der Einsatzzeit selbst
+        (`m_dPtkEinsatzzeit` / `m_dTmpEinsatzzeit`) — siehe
+        PEinsatzzeit.cpp:214-215 / 232-233.
         """
-        akt_stunden = self.p_simulator.evt_curr_time() / 3600.0
+        sim = self.p_simulator
+        akt_stunden = sim.evt_curr_time() / 3600.0
 
         if pem == PEinsatzzeitEvtMode.PEM_BEGIN:
             if self.m_isPause:
                 return  # bereits in Pause (überlappende Zyklen)
             self.m_isPause = True
+            # PEinsatzzeit.cpp:214-215 — Pause-Intervall starten
+            if sim.m_isPtk:
+                sim.ptk_intervall_begin(
+                    self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit",
+                    1.0, sim.evt_curr_time(),
+                )
             for beleg in list(self.m_lRessBeleg):
                 beleg.on_einsatz_ende(EinsatzEvtTyp.EET_STD, self)
 
@@ -300,6 +311,12 @@ class PEinsatzzeitPause(PEinsatzzeit):
             if self.is_pause(akt_stunden):
                 return
             self.m_isPause = False
+            # PEinsatzzeit.cpp:232-233 — Pause-Intervall beenden
+            if sim.m_isPtk:
+                sim.ptk_intervall_end(
+                    self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit",
+                    1.0, sim.evt_curr_time(),
+                )
             for beleg in list(self.m_lRessBeleg):
                 beleg.on_einsatz_beginn(EinsatzEvtTyp.EET_STD, self)
 
@@ -475,14 +492,25 @@ class PEinsatzzeitTag(PEinsatzzeitPause):
         Einsatz endet (Pause beginnt) → `on_einsatz_ende`. (Bei
         PEinsatzzeitPause war PEM_BEGIN = Pause beginnt!)
 
+        Zusätzlich: Protokoll-Intervall der EINSATZZEIT (nicht Pause)
+        auf der Einsatzzeit selbst — siehe PEinsatzzeit.cpp:640-641 /
+        653-654 / 666-667 / 680-681.
+
         Tagess-Filter: nur Ressourcen am korrekten Tag werden notifiziert.
         """
-        curr_time = self.p_simulator.evt_curr_time()
+        sim = self.p_simulator
+        curr_time = sim.evt_curr_time()
 
         if pem == PEinsatzzeitEvtMode.PEM_BEGIN:
             if self.m_isEinsatz:
                 return  # Schon im Einsatz (überlappende Schichten)
             self.m_isEinsatz = True
+            # PEinsatzzeit.cpp:640-641 — Einsatz-Intervall starten
+            if sim.m_isPtk:
+                sim.ptk_intervall_begin(
+                    self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit",
+                    1.0, curr_time,
+                )
             for tagress in list(self.m_lTagRess):
                 if tagress.is_einsatz_tag(self, curr_time):
                     tagress.m_oRessBeleg.on_einsatz_beginn(
@@ -493,6 +521,12 @@ class PEinsatzzeitTag(PEinsatzzeitPause):
             if not self.m_isEinsatz:
                 return
             self.m_isEinsatz = False
+            # PEinsatzzeit.cpp:653-654 — Einsatz-Intervall beenden
+            if sim.m_isPtk:
+                sim.ptk_intervall_end(
+                    self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit",
+                    1.0, curr_time,
+                )
             for tagress in list(self.m_lTagRess):
                 if tagress.is_einsatz_tag(self, curr_time):
                     tagress.m_oRessBeleg.on_einsatz_ende(
@@ -503,6 +537,12 @@ class PEinsatzzeitTag(PEinsatzzeitPause):
             if not self.m_isEinsatz:
                 return
             self.m_isEinsatz = False
+            # PEinsatzzeit.cpp:666-667 — Einsatz-Intervall beenden
+            if sim.m_isPtk:
+                sim.ptk_intervall_end(
+                    self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit",
+                    1.0, curr_time,
+                )
             for tagress in list(self.m_lTagRess):
                 if tagress.is_einsatz_tag(self, curr_time):
                     tagress.m_oRessBeleg.on_einsatz_ende(
@@ -514,6 +554,12 @@ class PEinsatzzeitTag(PEinsatzzeitPause):
             # aktuellen Zustand). C++-Kommentar: "Zur Initialisierung
             # wird die Person in die Pause geschickt".
             self.m_isEinsatz = False
+            # PEinsatzzeit.cpp:680-681 — Intervall beenden (falls offen)
+            if sim.m_isPtk and self.m_dTmpEinsatzzeit > 0:
+                sim.ptk_intervall_end(
+                    self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit",
+                    1.0, curr_time,
+                )
             for tagress in list(self.m_lTagRess):
                 if tagress.is_einsatz_tag(self, curr_time):
                     tagress.m_oRessBeleg.on_einsatz_ende(

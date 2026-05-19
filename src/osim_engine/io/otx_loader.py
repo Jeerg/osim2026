@@ -572,10 +572,43 @@ class _PEinsatzzeitTagHandler(ClassHandler):
         )
         return e
 
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        # PTagRess-Liste: Wochenplan (Tag-Nr → Ressource). Ohne dieses
+        # Wiring würden on_einsatz_beginn/on_einsatz_ende nie an die
+        # Maschinen propagieren — Counter wie m_dPtkEinsatzzeit blieben 0.
+        for tagress in resolve_list(loader, obj, "m_lTagRess"):
+            py.m_lTagRess.append(tagress)
+            # Rück-Link analog attach_tag_ress
+            if tagress.m_oRessBeleg is not None and tagress.m_oRessBeleg not in py.m_lRessBeleg:
+                py.m_lRessBeleg.append(tagress.m_oRessBeleg)
+                tagress.m_oRessBeleg.m_lEinsatz = py
+        # Schicht-Definitionen (Begin/End-Stunden pro Tag)
+        for tagez in resolve_list(loader, obj, "m_lTagesEinsatzzeit"):
+            py.m_lTagesEinsatzzeit.append(tagez)
 
-# PTagRess + PTagesEinsatzzeit sind interne Hilfs-Objekte ohne sim-Argument.
-# Wir behandeln sie als "skip" — der EinsatzzeitTag baut sie selbst auf.
-register_skip("PTagRess", "PTagesEinsatzzeit")
+
+@register_handler("PTagRess")
+class _PTagRessHandler(ClassHandler):
+    """Dataclass — Tag-Nr + Verweis auf PRessBeleg."""
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.einsatzzeit import PTagRess
+        tag = obj.attrs.get("m_iTag", 0)
+        return PTagRess(m_iTag=int(tag) if isinstance(tag, int) else 0)
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        py.m_oRessBeleg = resolve_ref(loader, obj, "m_oRessBeleg")
+
+
+@register_handler("PTagesEinsatzzeit")
+class _PTagesEinsatzzeitHandler(ClassHandler):
+    """Dataclass — Schicht-Beginn/Ende in Stunden."""
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.einsatzzeit import PTagesEinsatzzeit
+        t = PTagesEinsatzzeit()
+        copy_scalars(t, obj, ("m_iEinsatzAnfang", "m_iEinsatzEnde"))
+        return t
 
 
 # ----------------------------------------------------------------------
