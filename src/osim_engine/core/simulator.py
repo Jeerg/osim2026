@@ -360,6 +360,31 @@ class OSimulator(OSimObj):
             setattr(obj, ptk_attr, getattr(obj, ptk_attr) + gfakt * ptime)
         setattr(obj, tmp_attr, tmp_val - gfakt)
 
+    def ptk_intervall_start(
+        self, obj: object, ptk_attr: str, tmp_attr: str, ptime: int,
+    ) -> None:
+        """C++: `xPtkIntervallStart(double &ptk, double &tmp, ptime)`.
+
+        Re-öffnet offene Intervalle nach einer Pause (z.B. Period-Begin
+        nach Protokoll-Suspend). Modifiziert NUR ptk, nicht tmp.
+        """
+        tmp_val = getattr(obj, tmp_attr)
+        if tmp_val != 0.0 and self.m_isPtk:
+            setattr(obj, ptk_attr, getattr(obj, ptk_attr) - tmp_val * ptime)
+
+    def ptk_intervall_stop(
+        self, obj: object, ptk_attr: str, tmp_attr: str, ptime: int,
+    ) -> None:
+        """C++: `xPtkIntervallStop(double &ptk, double &tmp, ptime)`.
+
+        "Friert" offene Intervalle bei einem Boundary (z.B. Period-End)
+        ein. Modifiziert NUR ptk, nicht tmp — sodass das Intervall bei
+        einem nachfolgenden Start nahtlos weiterläuft.
+        """
+        tmp_val = getattr(obj, tmp_attr)
+        if tmp_val != 0.0 and self.m_isPtk:
+            setattr(obj, ptk_attr, getattr(obj, ptk_attr) + tmp_val * ptime)
+
     # ------------------------------------------------------------------
     # Listener-Verwaltung
     # ------------------------------------------------------------------

@@ -91,27 +91,20 @@ def test_python_run_matches_cpp_run_on_embb(tmp_path: Path) -> None:
         f"Zu wenig gemeinsame Schlüssel: {diff.common_keys}"
     )
 
-    # Stand 2026-05-19 nach Bugfix (Commits 14ac8f9 + folgende):
-    # - Maschinen-Einsatzzeit: gefixt (PtkIntervallBegin/End in
-    #   PRessBeleg.on_einsatz_beginn/ende)
-    # - PPerson m_iPtkAnzahlPerioden: gefixt (EvtPErmuedungswertPeriodeEnd)
-    # Verbleibend: 3 Diffs auf PEinsatzzeitTag.m_dPtkEinsatzzeit selbst —
-    # C++ schreibt negative Werte (offene Intervalle), Python schließt sie
-    # via PEM_END_FOR_DAY. Cosmetic-Diff, beeinflusst Sim-Verhalten nicht.
-    diff_attrs = {c.attr for c in diff.real_diffs}
-    diff_klasses = {c.klass for c in diff.real_diffs}
-    assert diff_attrs.issubset({"m_dPtkEinsatzzeit"}), (
-        f"NEUE Verhaltens-Diff-Attribute aufgetaucht: "
-        f"{diff_attrs - {'m_dPtkEinsatzzeit'}}\n"
-        f"Wenn das Absicht ist, Whitelist erweitern. Sonst: 1:1-Treue prüfen."
-    )
-    assert diff_klasses.issubset({"PEinsatzzeitTag"}), (
-        f"Diff sollte nur auf PEinsatzzeitTag liegen, fand: {diff_klasses}"
-    )
-
-    # Größenordnung der Diffs — vorher 18, nach Bugfix 3
-    assert len(diff.real_diffs) <= 5, (
-        f"Echte Diffs explodiert: {len(diff.real_diffs)} (Soll: <=5)"
+    # Stand 2026-05-19 nach vollständigem Einsatzzeit-Fix:
+    # - Maschinen-Einsatzzeit: gefixt (PtkIntervallBegin/End)
+    # - PPerson-Counter: gefixt (EvtPErmuedungswertPeriodeEnd)
+    # - PEinsatzzeitTag-internes Tracking: gefixt (on_rec_start/on_rec_stop
+    #   mit PtkIntervallStart/Stop am Periode-Begin/Ende)
+    # → 0 echte Verhaltens-Diffs auf Embb-1-Periode-Lauf.
+    assert len(diff.real_diffs) == 0, (
+        f"Echte Verhaltens-Diffs aufgetaucht: {len(diff.real_diffs)}\n"
+        + "\n".join(
+            f"  {c.klass} {c.name!r} {c.attr}: py={c.value_a} cpp={c.value_b}"
+            for c in diff.real_diffs[:10]
+        )
+        + "\n\nDie Python-Implementation weicht jetzt vom C++-Original ab. "
+        "Vor dem Akzeptieren bitte prüfen, ob die Abweichung ein Bug ist."
     )
 
 

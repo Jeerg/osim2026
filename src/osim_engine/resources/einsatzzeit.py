@@ -169,6 +169,25 @@ class PEinsatzzeit(PSimObj):
         """C++: ruft InsertEvents für die anstehende Periode auf."""
         self.insert_events()
 
+    def on_rec_start(self, time_start: int, deep: bool = True) -> None:  # noqa: ARG002
+        """C++: `PEinsatzzeit::OnRecStart` (PEinsatzzeit.odh:89-93).
+
+        Re-öffnet das Einsatzzeit-Intervall bei Protokoll-Beginn / Period-Begin.
+        """
+        self.p_simulator.ptk_intervall_start(
+            self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit", time_start,
+        )
+
+    def on_rec_stop(self, time_stop: int, deep: bool = True) -> None:  # noqa: ARG002
+        """C++: `PEinsatzzeit::OnRecStop` (PEinsatzzeit.odh:95-99).
+
+        Friert offene Einsatzzeit-Intervalle bei Period-End / Protokoll-Ende
+        ein. tmp bleibt unverändert (Intervall ist konzeptuell weiterhin offen).
+        """
+        self.p_simulator.ptk_intervall_stop(
+            self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit", time_stop,
+        )
+
     # ------------------------------------------------------------------
     # Helper — anhängen
     # ------------------------------------------------------------------
@@ -554,8 +573,9 @@ class PEinsatzzeitTag(PEinsatzzeitPause):
             # aktuellen Zustand). C++-Kommentar: "Zur Initialisierung
             # wird die Person in die Pause geschickt".
             self.m_isEinsatz = False
-            # PEinsatzzeit.cpp:680-681 — Intervall beenden (falls offen)
-            if sim.m_isPtk and self.m_dTmpEinsatzzeit > 0:
+            # PEinsatzzeit.cpp:680-681 — Intervall UNBEDINGT beenden
+            # (C++ hat keinen tmp>0-Guard; tmp wird einfach um 1 reduziert).
+            if sim.m_isPtk:
                 sim.ptk_intervall_end(
                     self, "m_dPtkEinsatzzeit", "m_dTmpEinsatzzeit",
                     1.0, curr_time,
