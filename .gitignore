@@ -29,6 +29,9 @@ result.json
 # Local fixtures (große .otx-Files werden separat versioniert)
 tests/fixtures/large/
 
+# Scratch/Experiment-Verzeichnis — nicht versioniert
+experiments/
+
 # osim2004-trace Build-Output
 osim2004-trace/bin/
 osim2004-trace/*.exe
