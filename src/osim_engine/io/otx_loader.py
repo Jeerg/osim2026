@@ -85,9 +85,10 @@ register_skip(
     "AAufgabeLList", "AEinsatzWunschLList", "AEinsatzzeitWunsch",
     "AEinsatzzeitWunschLList", "AGruppeLList", "AKapBedCellInfoLList",
     "AKapBedViewerInfo", "ATagPersonLList",
-    # Entscheider-Listen — meist leer in Phase-1..4-Modellen
+    # Entscheider-Listen — Container, werden über Eltern-sub_refs aufgelöst
     "EPEntFeldLList", "EPEntInformationssystemLList",
     "EPEntStrategieLList", "EPZelSystemLList",
+    "EPEntInformationLList", "EPZielLList",
     # Container-Listen — werden über die sub_refs der Eltern aufgelöst
     "PAusloeserLList", "PDurchlaufplanLList",
     "PRessBelegLList", "PRessMengeLList", "PSpeicherProzLList",
@@ -287,6 +288,15 @@ class _ASimulatorHandler(ClassHandler):
             sim.register_speicher_proz(sp)
         for ez in resolve_list(loader, obj, "m_lEinsatz"):
             sim.register_einsatzzeit(ez)
+        # Phase-5 Entscheider-Listen (P5-A)
+        for zs in resolve_list(loader, obj, "m_lZelSystem"):
+            sim.m_lZelSystem.append(zs)
+        for ei in resolve_list(loader, obj, "m_lEntInfo"):
+            sim.m_lEntInfo.append(ei)
+        for es in resolve_list(loader, obj, "m_lEntStrategie"):
+            sim.m_lEntStrategie.append(es)
+        for ef in resolve_list(loader, obj, "m_lEntFeld"):
+            sim.m_lEntFeld.append(ef)
 
 
 # ----------------------------------------------------------------------
@@ -750,6 +760,142 @@ class _PAssozBelegHandler(ClassHandler):
 
 # Hilfs-Strukturen, die wir noch nicht brauchen
 register_skip("PAssozBelegLinkInfo")
+
+
+# ----------------------------------------------------------------------
+# Phase-5-A: Entscheider-Datenstrukturen
+# (EPEntscheidung.{odh,cpp} + EPStrategie.odh)
+# ----------------------------------------------------------------------
+
+
+@register_handler("EPEntInformation")
+class _EPEntInformationHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.entscheidung import EPEntInformation
+        i = EPEntInformation(loader.simulator)
+        copy_scalars(i, obj, (
+            "m_sName", "m_iID", "m_sPropertyClassName", "m_sParentClassName",
+            "m_iObereGrenze", "m_iUntereGrenze", "m_bIsMin",
+        ))
+        return i
+
+
+@register_handler("EPEntInformationssystem")
+class _EPEntInformationssystemHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.entscheidung import EPEntInformationssystem
+        s = EPEntInformationssystem(loader.simulator)
+        copy_scalars(s, obj, ("m_sName",))
+        return s
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for info in resolve_list(loader, obj, "m_lInformationen"):
+            if info not in py.m_lInformationen:
+                py.m_lInformationen.append(info)
+
+
+@register_handler("EPZiel")
+class _EPZielHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.entscheidung import EPZiel
+        z = EPZiel(loader.simulator)
+        copy_scalars(z, obj, (
+            "m_sName", "m_sZielStrKen", "m_iAusrichtung", "m_iGewichtung",
+        ))
+        return z
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for info in resolve_list(loader, obj, "m_lAssoziierteInformationen"):
+            if info not in py.m_lAssoziierteInformationen:
+                py.m_lAssoziierteInformationen.append(info)
+
+
+@register_handler("EPKrzDurchlaufzeit")
+class _EPKrzDurchlaufzeitHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.entscheidung import EPKrzDurchlaufzeit
+        z = EPKrzDurchlaufzeit(loader.simulator)
+        copy_scalars(z, obj, (
+            "m_sName", "m_sZielStrKen", "m_iAusrichtung", "m_iGewichtung",
+        ))
+        return z
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for info in resolve_list(loader, obj, "m_lAssoziierteInformationen"):
+            if info not in py.m_lAssoziierteInformationen:
+                py.m_lAssoziierteInformationen.append(info)
+
+
+@register_handler("EPZelSystem")
+class _EPZelSystemHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.entscheidung import EPZelSystem
+        z = EPZelSystem(loader.simulator)
+        copy_scalars(z, obj, ("m_sName",))
+        return z
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for ziel in resolve_list(loader, obj, "m_lEpZiel"):
+            if ziel not in py.m_lEpZiel:
+                py.m_lEpZiel.append(ziel)
+
+
+@register_handler("EPEntFeld")
+class _EPEntFeldHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.entscheidung import EPEntFeld
+        ef = EPEntFeld(loader.simulator)
+        copy_scalars(ef, obj, ("m_sName",))
+        return ef
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        py.m_oPPerson = resolve_ref(loader, obj, "m_oPPerson")
+        py.m_oZelSystem = resolve_ref(loader, obj, "m_oZelSystem")
+        py.m_oEntInf = resolve_ref(loader, obj, "m_oEntInf")
+        py.m_oEntStrategie = resolve_ref(loader, obj, "m_oEntStrategie")
+
+
+@register_handler("EPAszEntFeld")
+class _EPAszEntFeldHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.assoziation.ent_feld import EPAszEntFeld
+        a = EPAszEntFeld(loader.simulator)
+        copy_scalars(a, obj, ("m_sName",))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for ef in resolve_list(loader, obj, "m_lEntFeldTupel"):
+            if ef not in py.m_lEntFeldTupel:
+                py.m_lEntFeldTupel.append(ef)
+        # Parent-Knoten + Ober-/Unter-Assoz (PAssozRessource-Basis-Refs)
+        py.m_lKnoten = resolve_ref(loader, obj, "m_lKnoten")
+        py.m_lOberAssoz = resolve_ref(loader, obj, "m_lOberAssoz")
+        for ua in resolve_list(loader, obj, "m_lUnterAssoz"):
+            if ua not in py.m_lUnterAssoz:
+                py.m_lUnterAssoz.append(ua)
+
+
+# ----------------------------------------------------------------------
+# Phase-5-B: EPAslEntAufExtern (Auslöser-Entscheider)
+# ----------------------------------------------------------------------
+
+
+@register_handler("EPAslEntAufExtern")
+class _EPAslEntAufExternHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.pps.ausloeser.ent_extern import EPAslEntAufExtern
+        a = EPAslEntAufExtern(loader.simulator)
+        copy_scalars(a, obj, (
+            "m_sName", "m_iBeginTermin", "m_bTaeglichWiederholen",
+            "m_iSollDauer", "m_iMaxWarteZeit",
+        ))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        py.m_lDlpl = resolve_ref(loader, obj, "m_lDlpl")
+        for p in resolve_list(loader, obj, "m_lParameter"):
+            py.m_lParameter.append(p)
+        py.m_lEntitaet = resolve_ref(loader, obj, "m_lEntitaet")
 
 
 # ----------------------------------------------------------------------

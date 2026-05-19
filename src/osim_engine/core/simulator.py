@@ -335,6 +335,17 @@ class OSimulator(OSimObj):
     #
     # Wir nehmen Attribut-Namen + Objekt, weil Python keine echten Refs hat.
 
+    def get_days_from_begin(self, szeit: int) -> int:
+        """Anzahl ganzer Tage seit Sim-Beginn. C++: `OSimulator::GetDaysFromBegin`
+        (OSimBase/OSimulator.cpp:772-790).
+
+        C++ nutzt `CTimeSpan` zwischen `Simtime2Date(szeit)` und
+        `DateStr2CTime(m_sStartDate)`. Da unsere Sim-Zeit in Sekunden ab
+        Beginn zählt und `m_sStartDate` dem Sim-Beginn (Sekunde 0)
+        entspricht, ist das äquivalent zu `szeit // 86400`.
+        """
+        return szeit // 86400
+
     def ptk_intervall_begin(
         self, obj: object, ptk_attr: str, tmp_attr: str,
         gfakt: float, ptime: int,
