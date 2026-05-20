@@ -966,6 +966,96 @@ class _EPEntStrKrzRessArbSuchenHandler(ClassHandler):
 
 
 # ----------------------------------------------------------------------
+# Phase-5-H/I: PDpKnAlternativELogik + PDpKnAlternativSplit
+# (PDpKnAlternativELogik.{odh:669-1000, cpp})
+# ----------------------------------------------------------------------
+
+
+@register_handler("PAlternativeELogik")
+class _PAlternativeELogikHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.alternativ_elogik import PAlternativeELogik
+        a = PAlternativeELogik(loader.simulator)
+        copy_scalars(a, obj, (
+            "m_sName", "m_fAuswahlWarschlkt",
+            "m_iQualitaetsfaehigkeit", "m_iFlexibilitaet", "m_dUser",
+        ))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        dlpl = resolve_ref(loader, obj, "m_lDlpl")
+        if dlpl is not None:
+            py.m_lDlpl = dlpl
+
+
+@register_handler("PAlternativeSplit")
+class _PAlternativeSplitHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.alternativ_elogik import PAlternativeSplit
+        a = PAlternativeSplit(loader.simulator)
+        copy_scalars(a, obj, ("m_sName", "m_fAuswahlWarschlkt"))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        dlpl = resolve_ref(loader, obj, "m_lDlpl")
+        if dlpl is not None:
+            py.m_lDlpl = dlpl
+
+
+@register_handler("PDpKnAlternativELogik")
+class _PDpKnAlternativELogikHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.alternativ_elogik import PDpKnAlternativELogik
+        k = PDpKnAlternativELogik(loader.simulator)
+        copy_scalars(k, obj, (
+            "m_sName", "m_eZFunktionTyp",
+            "m_iZGTermintreue", "m_iZGQualitaet", "m_iZGDlz",
+            "m_iZGKosten", "m_iZGKapauslastung", "m_iZGBestaende",
+            "m_iZGFlexibilitaet", "m_iGDringlichkeit",
+        ))
+        return k
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for ref_attr, py_attr in (
+            ("m_lKanteEin", "m_lKanteEin"),
+            ("m_lKanteAus", "m_lKanteAus"),
+            ("m_lKnotenOber", "m_lKnotenOber"),
+        ):
+            v = resolve_ref(loader, obj, ref_attr)
+            if v is not None:
+                setattr(py, py_attr, v)
+        for alt in resolve_list(loader, obj, "m_lAlternativen"):
+            if alt not in py.m_lAlternativen:
+                py.m_lAlternativen.append(alt)
+
+
+@register_handler("PDpKnAlternativSplit")
+class _PDpKnAlternativSplitHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.alternativ_elogik import PDpKnAlternativSplit
+        k = PDpKnAlternativSplit(loader.simulator)
+        copy_scalars(k, obj, ("m_sName",))
+        return k
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for ref_attr, py_attr in (
+            ("m_lKanteEin", "m_lKanteEin"),
+            ("m_lKanteAus", "m_lKanteAus"),
+            ("m_lKnotenOber", "m_lKnotenOber"),
+        ):
+            v = resolve_ref(loader, obj, ref_attr)
+            if v is not None:
+                setattr(py, py_attr, v)
+        for alt in resolve_list(loader, obj, "m_lAlternativen"):
+            if alt not in py.m_lAlternativen:
+                py.m_lAlternativen.append(alt)
+
+
+# Skip-Liste-Erweiterung für ELogik/Split-LLists (Container)
+register_skip("PAlternativeELogikLList", "PAlternativeSplitLList")
+
+
+# ----------------------------------------------------------------------
 # Phase-5-F: eet-Strategien (EPStrategie.{odh:383-622, cpp:1551-3031})
 # ----------------------------------------------------------------------
 
