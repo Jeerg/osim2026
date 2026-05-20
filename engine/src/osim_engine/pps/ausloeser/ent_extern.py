@@ -58,12 +58,22 @@ class EPAslEntAufExtern(PAusloeser):
         """C++: `EPAslEntAufExtern::OnPeriodBegin` (PAusloeser.odh:322-327).
 
         Plant das Event genau dann, wenn `m_iBeginTermin` in dieser Periode
-        liegt. Anders als PAslEinzel macht das KEIN `OnSimBegin` —
-        Wiederholungen über mehrere Perioden funktionieren so transparent.
+        liegt UND der Entscheider-Master-Guard aktiv ist. Anders als
+        PAslEinzel macht das KEIN `OnSimBegin` — Wiederholungen über
+        mehrere Perioden funktionieren so transparent.
+
+        Entscheider-Master-Guard: EPAslEntAufExtern ist ein Phase-5-
+        Auslöser-Entscheider. Wenn `PSimulator.m_bIsEntAktiv=False`
+        (Default), bleibt er latent — kein Event wird gescheduled. So
+        bleibt das Sim-Verhalten 1:1 zu C++ ohne aktive Entscheider-
+        Funktionalität.
         """
         super().on_period_begin(deep=deep)
         sim = self.m_simulator
         if sim is None:
+            return
+        # Entscheider-Master-Guard (analog EPAszEntFeld._is_ent_funkt_on())
+        if not getattr(sim, "m_bIsEntAktiv", False):
             return
         begin = sim.m_periodBegin
         end = begin + sim.m_periodLen
@@ -79,6 +89,11 @@ class EPAslEntAufExtern(PAusloeser):
         Folgetag geplant (sofern `m_iBeginTermin <= 86400`).
         """
         sim = self.p_simulator
+        # Master-Guard: nur aktiv wenn Entscheider an (vorsichtshalber
+        # zusätzlich zum on_period_begin-Guard — falls Event über anderen
+        # Pfad scheduled wurde)
+        if not getattr(sim, "m_bIsEntAktiv", False):
+            return
         # Produktions-Ende-Guard wie im C++ (PAusloeser.cpp:1779)
         if getattr(sim, "m_bIsProduktionEnde", False):
             return
