@@ -13,6 +13,9 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedWorkspaceRouteImport } from './routes/_authenticated/workspace'
+import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
+import { Route as AuthenticatedModelsUploadRouteImport } from './routes/_authenticated/models/upload'
+import { Route as AuthenticatedModelsModelIdRouteImport } from './routes/_authenticated/models/$modelId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -33,16 +36,40 @@ const AuthenticatedWorkspaceRoute = AuthenticatedWorkspaceRouteImport.update({
   path: '/workspace',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedModelsIndexRoute =
+  AuthenticatedModelsIndexRouteImport.update({
+    id: '/models/',
+    path: '/models/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedModelsUploadRoute =
+  AuthenticatedModelsUploadRouteImport.update({
+    id: '/models/upload',
+    path: '/models/upload',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedModelsModelIdRoute =
+  AuthenticatedModelsModelIdRouteImport.update({
+    id: '/models/$modelId',
+    path: '/models/$modelId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
+  '/models/$modelId': typeof AuthenticatedModelsModelIdRoute
+  '/models/upload': typeof AuthenticatedModelsUploadRoute
+  '/models/': typeof AuthenticatedModelsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
+  '/models/$modelId': typeof AuthenticatedModelsModelIdRoute
+  '/models/upload': typeof AuthenticatedModelsUploadRoute
+  '/models': typeof AuthenticatedModelsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -50,18 +77,36 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
+  '/_authenticated/models/$modelId': typeof AuthenticatedModelsModelIdRoute
+  '/_authenticated/models/upload': typeof AuthenticatedModelsUploadRoute
+  '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/workspace'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/workspace'
+    | '/models/$modelId'
+    | '/models/upload'
+    | '/models/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/workspace'
+  to:
+    | '/'
+    | '/login'
+    | '/workspace'
+    | '/models/$modelId'
+    | '/models/upload'
+    | '/models'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/login'
     | '/_authenticated/workspace'
+    | '/_authenticated/models/$modelId'
+    | '/_authenticated/models/upload'
+    | '/_authenticated/models/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -100,15 +145,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWorkspaceRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/models/': {
+      id: '/_authenticated/models/'
+      path: '/models'
+      fullPath: '/models/'
+      preLoaderRoute: typeof AuthenticatedModelsIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/models/upload': {
+      id: '/_authenticated/models/upload'
+      path: '/models/upload'
+      fullPath: '/models/upload'
+      preLoaderRoute: typeof AuthenticatedModelsUploadRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/models/$modelId': {
+      id: '/_authenticated/models/$modelId'
+      path: '/models/$modelId'
+      fullPath: '/models/$modelId'
+      preLoaderRoute: typeof AuthenticatedModelsModelIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
 interface AuthenticatedRouteChildren {
   AuthenticatedWorkspaceRoute: typeof AuthenticatedWorkspaceRoute
+  AuthenticatedModelsModelIdRoute: typeof AuthenticatedModelsModelIdRoute
+  AuthenticatedModelsUploadRoute: typeof AuthenticatedModelsUploadRoute
+  AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedWorkspaceRoute: AuthenticatedWorkspaceRoute,
+  AuthenticatedModelsModelIdRoute: AuthenticatedModelsModelIdRoute,
+  AuthenticatedModelsUploadRoute: AuthenticatedModelsUploadRoute,
+  AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

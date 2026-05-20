@@ -10,7 +10,8 @@ export const Route = createFileRoute("/")({
       return;
     }
     if (context.auth?.isAuthenticated) {
-      throw redirect({ to: "/workspace" });
+      // Plan 01-05: Default-Landing nach Login ist die Modell-Liste.
+      throw redirect({ to: "/models" });
     }
     throw redirect({ to: "/login" });
   },
