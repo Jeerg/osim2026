@@ -53,6 +53,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "integration: marks tests that require the Firebase emulator or live services",
+    "requires_db: marks tests that need a reachable Postgres test database",
 ]
 
 [tool.ruff]
