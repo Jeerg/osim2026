@@ -57,7 +57,7 @@ Plans:
 - [x] 01-07: PDurchlaufplan-Design + GraphObject-Foundation-Skelett
 - [x] 01-08: 4 Verknüpfungs-/Arbeitszeit-Viewer (PDlplBetriebsmittel, PDlplPersonal, AEinsatzWunsch, AKapBed)
 - [x] 01-09: Save-Mechanik (IndexedDB, Auto-Save 30s, Lock-Heartbeat, Recovery)
-- [ ] 01-10: Integration-Tests, Playwright-E2E, manuelle Abnahme, Doku
+- [x] 01-10: Integration-Tests, Playwright-E2E, manuelle Abnahme, Doku
 
 ### Phase 2: JSON Editor (kombiniert: Sim-Lauf + Schema + Form-Editor)
 **Goal**: Backend kann Sim-Laeufe via REST orchestrieren (Subprozess-Isolation des LCG-Singletons), Engine liefert via Reflection ein JSON-Schema, Frontend rendert daraus einen Form-Editor und integriert Submit-/Status-/Download-Flow.
