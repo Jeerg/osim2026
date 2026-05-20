@@ -7,10 +7,32 @@
 // ClientCtrl-State sich aendert (z.B. nach setObj()), und mounted den
 // passenden ChildDialog basierend auf clientCtrl.current.klass.
 
-import { useEffect, useReducer, type ReactNode } from "react";
+import { useEffect, useReducer, useRef, type ReactNode } from "react";
 import { ChildDialog } from "./ChildDialog";
 import { useModelStore } from "@/state/model-store";
 import type { ViewerFrame } from "./ViewerFrame";
+import type { MethodArg, Oid, OtxJsonNode } from "./types";
+
+/**
+ * Methoden-Dispatcher fuer onMethodCall. Plan 09 / Engine-Integration
+ * kann das mit echten Backend-Roundtrips erweitern. Phase 1 routet die
+ * vorhandenen "store-affecting" Methoden direkt auf den model-store.
+ *
+ * Wird als Prop uebergeben, damit der Konsument (Plan 09) die Strategie
+ * austauschen kann (z.B. async Engine-Call).
+ */
+export interface ViewerMethodDispatcher {
+  /**
+   * Wird gerufen wenn ein Add-Skeleton angelegt werden soll. Liefert
+   * Default-Properties fuer die anzulegende Klasse.
+   */
+  getDefaultProperties?: (klass: string) => Record<string, unknown>;
+  /**
+   * Wird fuer nicht aufgeloeste Methoden gerufen (alle ausser "addChild" /
+   * "removeChild"). Default: console.info-Stub.
+   */
+  onCustomMethod?: (oid: Oid, method: string, args?: MethodArg[]) => void;
+}
 
 export interface ViewerHostProps {
   frame: ViewerFrame;
@@ -18,12 +40,15 @@ export interface ViewerHostProps {
   empty?: ReactNode;
   /** Optional: was anzeigen, wenn kein Viewer fuer die Klasse registriert ist. */
   unknownViewer?: (klass: string) => ReactNode;
+  /** Optional: Methoden-Dispatcher (siehe ViewerMethodDispatcher). */
+  methodDispatcher?: ViewerMethodDispatcher;
 }
 
 export function ViewerHost({
   frame,
   empty,
   unknownViewer,
+  methodDispatcher,
 }: ViewerHostProps): ReactNode {
   // Re-render-Trigger fuer frame.update().
   const [, force] = useReducer((n: number) => n + 1, 0);
@@ -31,6 +56,15 @@ export function ViewerHost({
 
   const obj = frame.clientCtrl.current;
   const updateProperty = useModelStore((s) => s.updateProperty);
+  const addChildSkeleton = useModelStore((s) => s.addChildSkeleton);
+  const removeNode = useModelStore((s) => s.removeNode);
+
+  // Dispatcher in einem Ref halten, damit der onMethodCall-Callback
+  // stabil bleibt (sonst re-rendert ChildDialog bei jedem Tree-Update).
+  const dispatcherRef = useRef(methodDispatcher);
+  useEffect(() => {
+    dispatcherRef.current = methodDispatcher;
+  }, [methodDispatcher]);
 
   if (!obj) {
     return (
@@ -53,22 +87,61 @@ export function ViewerHost({
     );
   }
 
-  // onMethodCall — Phase 1: nur als Stub im Store-State weitergegeben.
-  // Plan 09 / Engine-Integration ergaenzt echte Backend-Aufrufe.
-  const onMethodCall = (oid: number, method: string): void => {
-    console.info(
-      `[ViewerHost] method call (noop in Phase 1): oid=${oid} method=${method}`,
-    );
+  // onMethodCall — Phase 1: routet "addChild"/"removeChild" auf den
+  // model-store. Andere Methoden gehen an methodDispatcher.onCustomMethod
+  // (Plan 09 / Engine-Roundtrip).
+  const onMethodCall = (
+    oid: Oid,
+    method: string,
+    args?: MethodArg[],
+  ): void => {
+    if (method === "addChild") {
+      // args[0] = property-Name in OCtrlList (z.B. "m_lKnoten" oder
+      // direkt die childKlass — die Caller-Konvention wird in der
+      // konkreten Viewer-Implementierung festgelegt). In Plan 05 nutzen
+      // die Viewer direkte childKlass-Strings (kein property-Lookup).
+      const childKlass = typeof args?.[0] === "string" ? args[0] : null;
+      if (!childKlass) {
+        console.warn("[ViewerHost] addChild ohne childKlass-Argument.");
+        return;
+      }
+      const getDefaults =
+        dispatcherRef.current?.getDefaultProperties ??
+        (() => ({}));
+      addChildSkeleton(
+        oid,
+        childKlass,
+        getDefaults as (k: string) => Record<string, import("./types").PropertyValue>,
+      );
+      return;
+    }
+    if (method === "removeChild") {
+      const targetOid = typeof args?.[0] === "number" ? args[0] : null;
+      if (targetOid == null) {
+        console.warn("[ViewerHost] removeChild ohne oid-Argument.");
+        return;
+      }
+      // Confirmation-Dialog (Phase 1: simple confirm()).
+      if (typeof window !== "undefined" && window.confirm) {
+        const ok = window.confirm(
+          `Knoten ${targetOid} wirklich entfernen? (Rueckgaengig per Undo)`,
+        );
+        if (!ok) return;
+      }
+      removeNode(targetOid);
+      return;
+    }
+    dispatcherRef.current?.onCustomMethod?.(oid, method, args);
   };
 
   return (
     <ChildDialog
-      obj={obj}
+      obj={obj as OtxJsonNode}
       onPropertyChange={updateProperty}
       onMethodCall={onMethodCall}
     >
       <Dialog
-        obj={obj}
+        obj={obj as OtxJsonNode}
         onPropertyChange={updateProperty}
         onMethodCall={onMethodCall}
       />

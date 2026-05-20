@@ -15,6 +15,7 @@ import { SidebarTree } from "./sidebar-tree";
 import { DirtyIndicator } from "./dirty-indicator";
 import { ViewerFrame } from "@/viewers/core/ViewerFrame";
 import { ViewerHost } from "@/viewers/core/ViewerHost";
+import { getDefaultProperties } from "@/viewers/property";
 import type { LockHolderInfo } from "@/hooks/use-tree-loader";
 
 export interface WorkspaceLayoutProps {
@@ -199,7 +200,10 @@ export function WorkspaceLayout({
           className="flex-1 overflow-auto bg-gray-50"
           data-testid="workspace-main"
         >
-          <ViewerHost frame={frame} />
+          <ViewerHost
+            frame={frame}
+            methodDispatcher={{ getDefaultProperties }}
+          />
         </main>
       </div>
     </div>

@@ -11,11 +11,14 @@ import "./type-maps";
 // Konkrete ChildDialog-Komponenten.
 import "./PGObjBaseViewer";
 import "./PSimulatorViewer";
-// PDurchlaufplanViewerStd + AGruppeViewer: siehe Task 3.
+import "./PDurchlaufplanViewerStd";
+import "./AGruppeViewer";
 
 // Re-Exports fuer direkten Import in Tests / sonstigen Konsumenten.
 export { PGObjBaseViewer } from "./PGObjBaseViewer";
 export { PSimulatorViewer } from "./PSimulatorViewer";
+export { PDurchlaufplanViewerStd } from "./PDurchlaufplanViewerStd";
+export { AGruppeViewer } from "./AGruppeViewer";
 export {
   getDefaultProperties,
   registerDefaults,

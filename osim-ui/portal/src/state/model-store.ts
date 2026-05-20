@@ -16,6 +16,13 @@ import type { Oid, OtxJsonNode, PropertyValue } from "@/viewers/core/types";
 
 const UNDO_LIMIT = 50;
 
+/**
+ * TEMP-OID-Counter — wird in addChildSkeleton beim Anlegen neuer Objekte
+ * verwendet. Negativ, monoton fallend. Server konvertiert beim PUT /tree
+ * (Plan 09) zu echten OIDs via id_mapping.
+ */
+let _nextTempOid = -1;
+
 interface ModelSnapshot {
   tree: OtxJsonNode | null;
   selectedOid: Oid | null;
@@ -37,6 +44,18 @@ export interface ModelState {
   setTree: (tree: OtxJsonNode, modelId: number, version: number) => void;
   updateProperty: (oid: Oid, key: string, value: PropertyValue) => void;
   addChild: (parentOid: Oid, newNode: OtxJsonNode) => void;
+  /**
+   * Plan 01-05 Task 3: erzeugt ein Skeleton-Objekt der angegebenen Klasse
+   * (Defaults aus TYPE_MAP via getDefaultProperties — wird per Closure
+   * injected, weil model-store keine Circular-Import auf viewers/property
+   * machen darf) und fuegt es als Kind ein. Liefert die TEMP-OID zurueck,
+   * damit der Caller (z.B. selectOid) sie weiter nutzen kann.
+   */
+  addChildSkeleton: (
+    parentOid: Oid,
+    childKlass: string,
+    getDefaultProps: (klass: string) => Record<string, PropertyValue>,
+  ) => Oid | null;
   removeNode: (oid: Oid) => void;
   selectOid: (oid: Oid | null) => void;
   undo: () => void;
@@ -182,6 +201,30 @@ export const useModelStore = create<ModelState>((set, get) => ({
       redoStack: [],
       _oidIndex: buildOidIndex(newTree),
     });
+  },
+
+  addChildSkeleton: (parentOid, childKlass, getDefaultProps) => {
+    const state = get();
+    if (!state.tree) return null;
+    const props = getDefaultProps(childKlass);
+    const tempOid = _nextTempOid;
+    _nextTempOid -= 1;
+    const skeletonName =
+      typeof props.m_sName === "string" && props.m_sName.length > 0
+        ? props.m_sName
+        : `${childKlass}-${tempOid}`;
+    const skeleton: OtxJsonNode = {
+      oid: tempOid,
+      klass: childKlass,
+      name: skeletonName,
+      properties: props,
+      children: [],
+    };
+    state.addChild(parentOid, skeleton);
+    // selectOid auf den neu angelegten Knoten setzen (UX: User sieht
+    // ihn sofort).
+    set({ selectedOid: tempOid });
+    return tempOid;
   },
 
   removeNode: (oid) => {
