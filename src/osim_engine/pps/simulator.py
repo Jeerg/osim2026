@@ -30,10 +30,12 @@ if TYPE_CHECKING:
 
 
 class PGeneratorStub:
-    """Platzhalter für PGenerator (Phase 5). C++: `OSimPro/PGenerator.cpp`.
+    """Backwards-Kompat-Stub. Seit Slice P5-L durch echte `PGenerator`-Klasse
+    ersetzt (siehe `osim_engine.generator.PGenerator`).
 
-    In V1 ein leerer Stub, damit `m_oGenerator`-Slot exists für
-    1:1-C++-Aufrufstellen. Keine Multi-Lauf-Logik, keine .psg-Files.
+    Bleibt als Alias erhalten, damit V1-Spike-Code nicht bricht. Wird in
+    `PSimulator.__init__` durch das echte `PGenerator`-Objekt ersetzt
+    (siehe unten).
     """
 
     pass
@@ -65,8 +67,9 @@ class PSimulator(OSimulator):
         self.m_lEntStrategie: list = []
         self.m_lEntFeld: list = []
 
-        # PGenerator als Stub
-        self.m_oGenerator: PGeneratorStub = PGeneratorStub()
+        # PGenerator (Slice P5-L: echte Klasse statt Stub)
+        from osim_engine.generator import PGenerator
+        self.m_oGenerator: Any = PGenerator(self)
 
         # Konfigurations-Flags
         self.m_bIsEntAktiv: bool = False
