@@ -9,13 +9,18 @@
 //   useEffect mit dependency = [selectedOid, tree] — sucht den Node ueber
 //   den oid-Index aus dem store und ruft frame.setObj(node).
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useModelStore, selectByOid } from "@/state/model-store";
 import { SidebarTree } from "./sidebar-tree";
 import { DirtyIndicator } from "./dirty-indicator";
 import { ViewerFrame } from "@/viewers/core/ViewerFrame";
 import { ViewerHost } from "@/viewers/core/ViewerHost";
 import { getDefaultProperties } from "@/viewers/property";
+import {
+  getSyntheticNode,
+  isSyntheticOid,
+  subscribeSyntheticProps,
+} from "@/viewers/matrix/synthetic-nodes";
 import type { LockHolderInfo } from "@/hooks/use-tree-loader";
 
 export interface WorkspaceLayoutProps {
@@ -55,16 +60,32 @@ export function WorkspaceLayout({
     }
   }, [tree, selectedOid]);
 
+  // Plan 01-06: Synthetic-Property-Tick — re-rendert wenn der modul-lokale
+  // synthetische Property-Store sich aendert (Matrix-Cell-Edits). Triggert
+  // den nachfolgenden useEffect, der ein frische synthetischen Node
+  // konstruiert und an frame.setObj weiterreicht.
+  const [synthTick, bumpSynthTick] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => subscribeSyntheticProps(bumpSynthTick), []);
+
   // selectedOid -> frame.setObj.
+  // Plan 01-06: Wenn selectedOid eine synthetische Matrix-OID ist, holt
+  // sich der Lookup den synthetischen Wrapper-Node aus
+  // viewers/matrix/synthetic-nodes (ViewerHost mountet dann den
+  // RESS_*_GROUP-Viewer).
   useEffect(() => {
     if (!tree) return;
     if (selectedOid == null) {
       frame.setObj(null);
       return;
     }
+    if (isSyntheticOid(selectedOid)) {
+      const synth = getSyntheticNode(selectedOid);
+      frame.setObj(synth);
+      return;
+    }
     const node = selectByOid(useModelStore.getState(), selectedOid);
     frame.setObj(node);
-  }, [tree, selectedOid, frame]);
+  }, [tree, selectedOid, frame, synthTick]);
 
   // Resizable Sidebar — drag auf Separator-Bar.
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);

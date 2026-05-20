@@ -300,6 +300,83 @@ registerKlass(
   },
 );
 
+// Plan 01-06: Matrix-Viewer-Klassen.
+//
+// PRessBeleg / PRessMenge / PRessVerknuepfung sind im Backend-TYPE_MAP
+// aktuell NICHT registriert (Backend serialisiert Belegungs-Ressourcen
+// als PBetriebsmittel/PPerson, Mengen-Ressourcen werden gar nicht
+// exportiert, Verknuepfungen ebenso wenig). Die Registrierung hier ist
+// Foundation fuer Phase 2, wenn das Backend-TYPE_MAP nachgezogen ist —
+// Property-Listen sind aus den Engine-Klassen
+// (engine/src/osim_engine/resources/beleg.py, menge.py) gespiegelt.
+
+registerKlass(
+  "PRessBeleg",
+  {
+    m_sName: { type: "string", label: "Name" },
+    m_sGroupName: { type: "string", label: "Gruppen-Name" },
+    m_iAnwWahrsch: {
+      type: "int",
+      label: "Anwesenheitswahrscheinlichkeit (%)",
+    },
+    m_fKostFix: { type: "float", label: "Fixkosten" },
+    m_fKostVar: { type: "float", label: "Variable Kosten" },
+  },
+  {
+    m_sName: "Neue Belegungs-Ressource",
+    m_iAnwWahrsch: 100,
+    m_fKostFix: 0,
+    m_fKostVar: 0,
+  },
+);
+
+registerKlass(
+  "PRessMenge",
+  {
+    m_sName: { type: "string", label: "Name" },
+    m_iBestandAnfang: { type: "int", label: "Bestand (Anfang)" },
+    m_iBestandMax: { type: "int", label: "Bestand (Max), -1 = unbegrenzt" },
+    m_fAnfangswert: { type: "float", label: "Anfangswert" },
+    m_fKostenZusatz: { type: "float", label: "Zusatz-Kosten" },
+  },
+  {
+    m_sName: "Neue Mengen-Ressource",
+    m_iBestandAnfang: 0,
+    m_iBestandMax: -1,
+    m_fAnfangswert: 0,
+    m_fKostenZusatz: 0,
+  },
+);
+
+registerKlass(
+  "PRessVerknuepfung",
+  {
+    m_sName: { type: "string", label: "Name" },
+  },
+  { m_sName: "Neue Verknuepfung" },
+);
+
+// PAssozBeleg / PAssozMenge — Zellen-Inhalt einer Belegungs-/Mengen-
+// Matrix. Die Matrix-Viewer ueberschreiben den Cell-Renderer (numerisch),
+// die Property-Liste hier ist nur fuer den Fallback-Property-Editor.
+registerKlass(
+  "PAssozBeleg",
+  {
+    m_sName: { type: "string", label: "Name" },
+    m_iAnzahl: { type: "int", label: "Kapazitaet" },
+  },
+  { m_iAnzahl: 1 },
+);
+
+registerKlass(
+  "PAssozMenge",
+  {
+    m_sName: { type: "string", label: "Name" },
+    m_iMenge: { type: "int", label: "Menge" },
+  },
+  { m_iMenge: 0 },
+);
+
 // AGruppe — Personal-Gruppen (Backend-TYPE_MAP enthaelt AGruppe aktuell
 // NICHT, weil der otx_loader Gruppen nicht direkt als Top-Level-Objekte
 // liefert; das Pattern wird ueber EPAslEntAufExtern + PEinsatzzeit

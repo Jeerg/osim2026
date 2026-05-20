@@ -14,6 +14,12 @@ import "./PSimulatorViewer";
 import "./PDurchlaufplanViewerStd";
 import "./AGruppeViewer";
 
+// Matrix-Viewer (Plan 01-06). Eigener Folder, aber via Side-Effect-Re-
+// Export hier eingebunden, damit der bestehende main.tsx-Import
+// (`import "@/viewers/property"`) auch die Matrix-Viewer auf einmal
+// aktiviert. Spaetere Plan-07/Plan-08-Viewer schliessen analog an.
+import "@/viewers/matrix";
+
 // Re-Exports fuer direkten Import in Tests / sonstigen Konsumenten.
 export { PGObjBaseViewer } from "./PGObjBaseViewer";
 export { PSimulatorViewer } from "./PSimulatorViewer";

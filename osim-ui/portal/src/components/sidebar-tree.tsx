@@ -13,10 +13,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Tree, type NodeApi, type NodeRendererProps } from "react-arborist";
 import { useModelStore } from "@/state/model-store";
 import type { OtxJsonNode } from "@/viewers/core/types";
+import { SYNTHETIC_MATRIX_NODES } from "@/viewers/matrix/synthetic-nodes";
 
 const GROUP_KLASS = "_group";
 const ROW_HEIGHT = 26;
 const INDENT_PX = 16;
+const MATRIX_FOLDER_ID = "synthetic:matrix-sichten";
 
 interface ArboristNode {
   /** react-arborist erwartet string-ids. */
@@ -129,7 +131,29 @@ export function SidebarTree({ height, width }: SidebarTreeProps) {
 
   const data = useMemo<ArboristNode[]>(() => {
     if (!tree) return [];
-    return [toArboristNode(tree, "")];
+    const root = toArboristNode(tree, "");
+    // Plan 01-06: synthetische Matrix-Sichten-Folder am Ende der Root-
+    // Kinder einhaengen. Die einzelnen Matrix-Leafs sind selektierbar
+    // (isGroup=false), der "Matrix-Sichten"-Folder selbst ist nur ein
+    // Group-Header.
+    const matrixFolder: ArboristNode = {
+      id: MATRIX_FOLDER_ID,
+      oid: -10000,
+      klass: GROUP_KLASS,
+      name: "Matrix-Sichten",
+      isGroup: true,
+      unsupported: false,
+      children: SYNTHETIC_MATRIX_NODES.map((s) => ({
+        id: `synthetic:${s.oid}`,
+        oid: s.oid,
+        klass: s.klass,
+        name: s.name,
+        isGroup: false,
+        unsupported: false,
+      })),
+    };
+    const newChildren = [...(root.children ?? []), matrixFolder];
+    return [{ ...root, children: newChildren }];
   }, [tree]);
 
   // Search-Filter (oben angedockt; react-arborist hat eingebautes searchMatch)
