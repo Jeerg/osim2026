@@ -224,3 +224,118 @@ def patch_verify_token(fake_firebase_decoded: dict[str, Any]):
             return_value=claims or fake_firebase_decoded,
         )
     return _factory
+
+
+# ---------------------------------------------------------------------------
+# OTX-Fixtures
+# ---------------------------------------------------------------------------
+
+
+_ENGINE_FIXTURE_DIR = os.path.join(
+    os.path.dirname(__file__), "..", "..", "engine", "tests", "fixtures", "otx"
+)
+_OSIM2004_FIXTURE_DIR = "C:/Users/JörgWFischer/PycharmProjects/OSim2004/Vorstellung04"
+
+
+def _find_otx_fixture(name: str) -> str | None:
+    """Sucht eine OTX-Datei zunaechst im engine-Repo, dann in OSim2004."""
+    candidates = [
+        os.path.normpath(os.path.join(_ENGINE_FIXTURE_DIR, name)),
+        os.path.normpath(os.path.join(_OSIM2004_FIXTURE_DIR, name)),
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+@pytest.fixture(scope="session")
+def dummy_otx_bytes() -> bytes:
+    """Liefert die Bytes der minimal-Test-Datei (embb_pre_run.otx aus dem
+    Engine-Repo). Skip-if-nicht-da."""
+    p = _find_otx_fixture("embb_pre_run.otx")
+    if p is None:
+        # Fallback: Dummy.otx aus OSim2004 (groesser, aber okay)
+        p = _find_otx_fixture("Dummy.otx")
+    if p is None:
+        pytest.skip("Keine OTX-Fixture (embb_pre_run.otx/Dummy.otx) verfuegbar")
+    with open(p, "rb") as f:
+        return f.read()
+
+
+# ---------------------------------------------------------------------------
+# Authenticated-TestClient
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def authenticated_client(db_engine):  # noqa: ARG001 -- db_engine bootstraps Tenant-Schemas via auth/me
+    """Liefert ein Tupel ``(TestClient, tenant_id, user_uid)`` mit komplett
+    durchgefuehrtem Tenant-Bootstrap. Tests koennen direkt /api/v1/* aufrufen.
+
+    Strategie:
+      1. verify_token wird gepatched (kein Firebase-Emulator noetig).
+      2. POST /api/v1/auth/me -> Bootstrap + Schema-Anlage (= models, model_versions, edit_locks).
+      3. tenant_id aus der Response holen.
+      4. Ein zweiter Patch setzt jetzt tenant_id auch im Token-Claim, damit
+         alle Folge-Requests via Middleware durchkommen.
+    """
+    from fastapi.testclient import TestClient
+    from sqlalchemy import text
+
+    from app.main import app
+
+    uid = "modeltest1"
+    email = "mt@example.com"
+
+    p1 = patch(
+        "app.auth.middleware.verify_token",
+        return_value={"uid": uid, "user_id": uid, "email": email},
+    )
+    p2 = patch("app.api.v1.auth.set_user_tenant_claims", return_value=None)
+    p1.start(); p2.start()
+    client = TestClient(app)
+    try:
+        r = client.post(
+            "/api/v1/auth/me",
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        assert r.status_code == 200, r.text
+        tenant_id = r.json()["tenant_id"]
+    finally:
+        p1.stop(); p2.stop()
+
+    # Verify Tenant-Tables existieren (Sanity-Check fuer Plan 01-03 Task 1).
+    import asyncio
+
+    from sqlalchemy.ext.asyncio import create_async_engine as _cae
+
+    async def _verify_tables():
+        eng = _cae(TEST_DATABASE_URL, pool_pre_ping=False)
+        try:
+            async with eng.connect() as conn:
+                row = (await conn.execute(text(
+                    "SELECT count(*) FROM information_schema.tables "
+                    "WHERE table_schema = :s "
+                    "AND table_name IN ('models', 'model_versions', 'edit_locks')"
+                ), {"s": tenant_id})).scalar_one()
+                return row
+        finally:
+            await eng.dispose()
+
+    assert asyncio.run(_verify_tables()) == 3, "Tenant-Tables nicht angelegt"
+
+    p3 = patch(
+        "app.auth.middleware.verify_token",
+        return_value={
+            "uid": uid,
+            "user_id": uid,
+            "email": email,
+            "tenant_id": tenant_id,
+            "role": "owner",
+        },
+    )
+    p3.start()
+    yield client, tenant_id, uid
+    p3.stop()
+    client.close()
