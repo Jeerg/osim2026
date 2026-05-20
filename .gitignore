@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -20,20 +21,22 @@ htmlcov/
 Thumbs.db
 .DS_Store
 
+# Tooling
+.claude/
+
 # Run outputs
 events.jsonl
 result.json
 *.events.jsonl
 *.result.json
 
-# Local fixtures (große .otx-Files werden separat versioniert)
-tests/fixtures/large/
-
-# Scratch/Experiment-Verzeichnis — nicht versioniert
+# Engine — lokale Fixtures + Experiment-Verzeichnis
+engine/tests/fixtures/large/
+engine/experiments/
 experiments/
 
-# osim2004-trace Build-Output
-osim2004-trace/bin/
-osim2004-trace/*.exe
-osim2004-trace/*.obj
-osim2004-trace/*.o
+# Engine — osim2004-trace Build-Output
+engine/osim2004-trace/bin/
+engine/osim2004-trace/*.exe
+engine/osim2004-trace/*.obj
+engine/osim2004-trace/*.o
