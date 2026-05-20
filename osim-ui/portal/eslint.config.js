@@ -55,6 +55,16 @@ export default defineConfig([
       "react-refresh/only-export-components": "off",
     },
   },
+  // OCtrl-Familie: einige OCtrls exportieren Konvertierungs-Helfer
+  // (colorrefToHex / hexToColorref) oder Types (LogFontValue) neben der
+  // Komponente. Fast-Refresh-Regel deaktivieren — HMR funktioniert hier
+  // implizit via React-Reconciler.
+  {
+    files: ["src/viewers/octrl/**/*.{ts,tsx}"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
   // Test-Dateien duerfen mehr (mock-Components, beforeEach mit Side-Effects).
   {
     files: ["**/__tests__/**/*.{ts,tsx}", "src/test-setup.ts"],

@@ -12,15 +12,18 @@ export type Oid = number;
 export type Klass = string;
 
 /**
- * Property-Werte sind primitiv. Falls in Phase 3+ COLORREF/LOGFONT als
- * strukturierte Werte ankommen, wird der Type-Union erweitert.
+ * Property-Werte koennen primitiv ODER strukturiert sein (z.B. LOGFONT
+ * ist ein Objekt mit family/size/bold/italic). Wir lassen `unknown` zu,
+ * damit jede OCtrl-Variante (Bool, Variable, LOGFONT, ...) ihren eigenen
+ * konkreten Typ via useOCtrlBinding<T>() bekommt — die Bindings-Hook
+ * cast'et auf den vom Caller angegebenen Typ.
+ *
+ * Constraint "PropertyValue" ist absichtlich locker (unknown), damit
+ * OCtrlLOGFONT/OCtrlList strukturierte Werte ohne Type-Gymnastics nutzen
+ * koennen. Plan 09 kann das verschaerfen wenn das Type-Map vollstaendig
+ * ist.
  */
-export type PropertyValue =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: unknown };
+export type PropertyValue = unknown;
 
 /**
  * Snapshot eines OSim-Objektes wie ihn das Backend als JSON-Tree liefert
