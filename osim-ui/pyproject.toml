@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "osim-ui"
+version = "0.1.0"
+description = "Web-UI und Orchestrator-Backend für die headless osim-engine. Mehrbenutzerfähig, container-orchestriert, integrierbar in 3fls (tbx_stzrim)."
+authors = [{name = "Jörg Werner Fischer"}]
+requires-python = ">=3.13"
+readme = "README.md"
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+    "orjson>=3.10",
+    "httpx>=0.28",
+    "structlog>=25.0",
+    "firebase-admin>=7.2",
+    "google-cloud-storage>=3.0",
+    "google-cloud-pubsub>=2.0",
+    "websockets>=14.0",
+    # osim-engine wird als editable-install per Workspace eingezogen
+    # "osim-engine @ file:///${PROJECT_ROOT}/../osim-engine",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=5.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "httpx>=0.28",  # für TestClient
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+ignore_missing_imports = true

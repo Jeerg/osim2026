@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: osim_ui
+      POSTGRES_USER: osim_dev
+      POSTGRES_PASSWORD: osim_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U osim_dev -d osim_ui"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  firebase-emulator:
+    image: node:20-slim
+    working_dir: /app
+    ports:
+      - "9099:9099"  # auth
+      - "4000:4000"  # emulator UI
+    volumes:
+      - ./infra/firebase:/app
+    command: >
+      sh -c "
+        npm install -g firebase-tools &&
+        firebase emulators:start --project osim-dev --only auth
+      "
+
+  minio:
+    # lokaler Object-Storage-Emulator (GCS-kompatibel über S3-API)
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: osim_dev
+      MINIO_ROOT_PASSWORD: osim_dev_password
+    command: server /data --console-address ":9001"
+    volumes:
+      - miniodata:/data
+
+  # Anwendungs-Services werden in Phase 1 erst hinzugefügt:
+  # api:
+  #   build: .
+  #   ports: ["8000:8080"]
+  #   environment:
+  #     DATABASE_URL: postgresql+asyncpg://osim_dev:osim_dev_password@postgres:5432/osim_ui
+  #     FIREBASE_PROJECT_ID: osim-dev
+  #     FIREBASE_AUTH_EMULATOR_HOST: firebase-emulator:9099
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #
+  # portal:
+  #   build: portal
+  #   ports: ["3000:3000"]
+  #   environment:
+  #     VITE_API_BASE_URL: http://localhost:8000
+
+volumes:
+  pgdata:
+  miniodata:
