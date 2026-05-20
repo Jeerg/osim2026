@@ -37,6 +37,13 @@ export interface ModelState {
   undoStack: ModelSnapshot[];
   redoStack: ModelSnapshot[];
 
+  /**
+   * Plan 01-09: Save-in-flight-Flag. Verhindert Race zwischen Auto-Save
+   * und manuellem Speichern-Button (use-auto-save skipt, wenn saving=true;
+   * Save-Button disabled sich selbst).
+   */
+  saving: boolean;
+
   // oid-Index — wird bei jedem setTree neu aufgebaut.
   // Nicht in der State-Snapshot enthalten, weil aus tree ableitbar.
   _oidIndex: Map<Oid, OtxJsonNode>;
@@ -61,6 +68,33 @@ export interface ModelState {
   undo: () => void;
   redo: () => void;
   markClean: () => void;
+  /**
+   * Plan 01-09: Setzt das in-flight-Flag fuer Save-Operationen.
+   * Wird von use-auto-save / SaveButton verwaltet.
+   */
+  setSaving: (saving: boolean) => void;
+  /**
+   * Plan 01-09: Patcht TEMP-OIDs auf vom Server vergebene echte OIDs.
+   *
+   * Das Backend (Plan 01-03) ignoriert aktuell TEMP-OIDs beim PUT /tree
+   * (apply_tree_to_simulator: instances.get(-1) liefert None, der
+   * Skeleton wird verworfen). Diese Methode ist trotzdem implementiert,
+   * damit das Frontend bereits Phase-2-ready ist: sobald das Backend
+   * ein id_mapping in der PUT-Response liefert (z.B.
+   * `{ "-1": 4711, "-2": 4712 }`), patcht patchOids alle Vorkommen.
+   *
+   * Patcht:
+   *   - Den oid-Schluessel jedes Knotens.
+   *   - Properties, deren Werte numerische OID-Referenzen sind (m_lVon,
+   *     m_lNach, m_lRessBeleg, m_lObjBeleg etc. — alles, was im
+   *     mapping[String(oid)] vorkommt).
+   *   - Array-valued Properties (m_lAusl, m_lDlpl, m_lKnoten, ...) mit
+   *     OID-Listen.
+   *
+   * Nach dem Patch werden dirty + undoStack + redoStack geleert, da die
+   * alten Snapshots auf nicht-mehr-existente OIDs verweisen wuerden.
+   */
+  patchOids: (mapping: Record<string, number>) => void;
 }
 
 /** Tree-Walk: baut oid -> Node Map. */
@@ -131,6 +165,47 @@ function pushUndo(stack: ModelSnapshot[], snap: ModelSnapshot): ModelSnapshot[] 
   return next;
 }
 
+/**
+ * Plan 01-09: Patcht rekursiv alle TEMP-OIDs im Tree auf vom Server
+ * vergebene echte OIDs. Wird von patchOids() im Store verwendet.
+ *
+ * @internal exportiert fuer Unit-Tests.
+ */
+export function _patchOidsInTree(
+  node: OtxJsonNode,
+  mapping: Map<number, number>,
+): OtxJsonNode {
+  const newOid = mapping.get(node.oid) ?? node.oid;
+  const newProps: Record<string, PropertyValue> = {};
+  for (const [k, v] of Object.entries(node.properties)) {
+    newProps[k] = patchPropertyValue(v, mapping);
+  }
+  return {
+    ...node,
+    oid: newOid,
+    properties: newProps,
+    children: node.children.map((c) => _patchOidsInTree(c, mapping)),
+  };
+}
+
+/**
+ * Patcht OID-Referenzen in einem einzelnen Property-Wert.
+ * Skalare number-Werte werden geprueft; Arrays werden Element-weise
+ * verarbeitet. Strings/booleans bleiben unveraendert.
+ */
+function patchPropertyValue(
+  v: PropertyValue,
+  mapping: Map<number, number>,
+): PropertyValue {
+  if (typeof v === "number") {
+    return mapping.get(v) ?? v;
+  }
+  if (Array.isArray(v)) {
+    return v.map((item) => patchPropertyValue(item, mapping));
+  }
+  return v;
+}
+
 export const useModelStore = create<ModelState>((set, get) => ({
   modelId: null,
   version: null,
@@ -139,6 +214,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
   dirty: new Set<Oid>(),
   undoStack: [],
   redoStack: [],
+  saving: false,
   _oidIndex: new Map<Oid, OtxJsonNode>(),
 
   setTree: (tree, modelId, version) => {
@@ -304,6 +380,42 @@ export const useModelStore = create<ModelState>((set, get) => ({
 
   markClean: () => {
     set({ dirty: new Set<Oid>() });
+  },
+
+  setSaving: (saving) => {
+    set({ saving });
+  },
+
+  patchOids: (mappingRaw) => {
+    const state = get();
+    if (!state.tree) return;
+    // Mapping als number→number Map (Eingabe hat string-Schluessel weil
+    // JSON keine number-Keys hat).
+    const mapping = new Map<number, number>();
+    for (const [k, v] of Object.entries(mappingRaw)) {
+      const num = Number(k);
+      if (Number.isFinite(num) && typeof v === "number") {
+        mapping.set(num, v);
+      }
+    }
+    if (mapping.size === 0) return;
+    const newTree = _patchOidsInTree(state.tree, mapping);
+    // Undo-/Redo-Stack ist nach Save invalide (alte Snapshots zeigen auf
+    // jetzt-nicht-mehr-existente TEMP-OIDs). dirty wird ohnehin via
+    // markClean geleert; explizit hier auch leeren, falls patchOids ohne
+    // markClean aufgerufen wird.
+    const remappedSelected =
+      state.selectedOid != null
+        ? (mapping.get(state.selectedOid) ?? state.selectedOid)
+        : null;
+    set({
+      tree: newTree,
+      selectedOid: remappedSelected,
+      undoStack: [],
+      redoStack: [],
+      dirty: new Set<Oid>(),
+      _oidIndex: buildOidIndex(newTree),
+    });
   },
 }));
 

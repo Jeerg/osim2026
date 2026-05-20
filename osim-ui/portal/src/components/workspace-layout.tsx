@@ -11,8 +11,15 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useModelStore, selectByOid } from "@/state/model-store";
+import { useLockStore } from "@/state/lock-store";
 import { SidebarTree } from "./sidebar-tree";
 import { DirtyIndicator } from "./dirty-indicator";
+import { SaveButton } from "./save-button";
+import { LockBanner } from "./lock-banner";
+import { useAutoSave } from "@/hooks/use-auto-save";
+import { useLockHeartbeat } from "@/hooks/use-lock-heartbeat";
+import { useSaveShortcut } from "@/hooks/use-save-shortcut";
+import { useSnapshotSubscriber } from "@/hooks/use-snapshot-subscriber";
 import { ViewerFrame } from "@/viewers/core/ViewerFrame";
 import { ViewerHost } from "@/viewers/core/ViewerHost";
 import { getDefaultProperties } from "@/viewers/property";
@@ -21,10 +28,16 @@ import {
   isSyntheticOid,
   subscribeSyntheticProps,
 } from "@/viewers/matrix/synthetic-nodes";
+import {
+  hydrateOverridesForModel,
+  setActiveModelId,
+} from "@/viewers/design/position-store";
 import type { LockHolderInfo } from "@/hooks/use-tree-loader";
 
 export interface WorkspaceLayoutProps {
   modelName: string;
+  /** Modell-ID (Plan 01-09: fuer Save/Heartbeat/Snapshot-Persistenz). */
+  modelId: number;
   /** Aktueller Lock-Modus (aus use-tree-loader). */
   mode: "loading" | "editing" | "read-only" | "error";
   /** Bei mode="read-only": Wer haelt den Lock. */
@@ -39,6 +52,7 @@ const SIDEBAR_MAX_WIDTH = 600;
 
 export function WorkspaceLayout({
   modelName,
+  modelId,
   mode,
   lockHolder,
   version,
@@ -49,6 +63,46 @@ export function WorkspaceLayout({
   const redo = useModelStore((s) => s.redo);
   const undoCount = useModelStore((s) => s.undoStack.length);
   const redoCount = useModelStore((s) => s.redoStack.length);
+  const hasLock = mode === "editing";
+
+  // Plan 01-09: LockStore-Sync — wir spiegeln den use-tree-loader-Modus
+  // in den useLockStore, damit der LockBanner und der Heartbeat-Hook
+  // dieselbe Wahrheit haben.
+  useEffect(() => {
+    const ls = useLockStore.getState();
+    if (mode === "editing") {
+      ls.acquireLock();
+    } else if (mode === "read-only" && lockHolder?.holder_email) {
+      ls.reportOtherHolder(lockHolder.holder_email);
+    } else if (mode === "read-only") {
+      ls.reportOtherHolder("unbekannt");
+    }
+    return () => {
+      // reset beim Unmount, damit ein anderer Workspace nicht falschen
+      // Zustand erbt.
+      useLockStore.getState().reset();
+    };
+  }, [mode, lockHolder]);
+
+  // Plan 01-09: Save-/Heartbeat-/Snapshot-/Position-Hooks mounten.
+  // Hooks sind no-op solange hasLock=false (siehe jeweilige
+  // Implementierungen).
+  useAutoSave({ modelId, hasLock });
+  useLockHeartbeat({ modelId, hasLock });
+  useSaveShortcut({ modelId, hasLock });
+  useSnapshotSubscriber(modelId);
+
+  // Plan 01-09: Position-Overrides-Hydration. Wir setzen erst den
+  // aktiven Modell-Kontext (damit setNodePositionOverride spaeter weiss,
+  // wo es persistieren soll) und laden dann die persistierten Overrides
+  // aus IDB nach In-Memory.
+  useEffect(() => {
+    setActiveModelId(modelId);
+    void hydrateOverridesForModel(modelId);
+    return () => {
+      setActiveModelId(null);
+    };
+  }, [modelId]);
 
   // ViewerFrame ist eine TS-Klasse; pro Layout-Instance EINE Frame.
   const frame = useMemo(() => new ViewerFrame(modelName), [modelName]);
@@ -193,17 +247,10 @@ export function WorkspaceLayout({
           >
             Wiederherstellen ({redoCount})
           </button>
-          <button
-            type="button"
-            disabled
-            title="Speichern wird in Plan 09 verdrahtet."
-            className="rounded bg-blue-700 px-3 py-1 font-medium text-white opacity-50"
-            data-testid="workspace-save"
-          >
-            Speichern
-          </button>
+          <SaveButton modelId={modelId} hasLock={hasLock} />
         </div>
       </div>
+      <LockBanner />
       <div className="flex flex-1 overflow-hidden">
         <aside
           style={{ width: sidebarWidth }}
