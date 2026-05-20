@@ -930,6 +930,52 @@ class _EPEntStrKrzRessArbSuchenHandler(ClassHandler):
 
 
 # ----------------------------------------------------------------------
+# Phase-5-F: eet-Strategien (EPStrategie.{odh:383-622, cpp:1551-3031})
+# ----------------------------------------------------------------------
+
+
+def _make_eet_handler(py_class_name: str, extra_scalars: tuple[str, ...] = ()):
+    common_scalars = (
+        "m_sName", "m_bEntscheidungErzwingen", "m_bEntscheidungAktivieren",
+    )
+
+    class _H(ClassHandler):
+        def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+            from osim_engine.decisions import strategie_eet as E
+            cls = getattr(E, py_class_name)
+            s = cls(loader.simulator)
+            copy_scalars(s, obj, common_scalars + extra_scalars)
+            return s
+
+    return _H
+
+
+register_handler("EPEntStrAltExternRessBelegBase")(
+    _make_eet_handler("EPEntStrAltExternRessBelegBase")
+)
+register_handler("EPEntStrKrzKapVeraenderungBase")(
+    _make_eet_handler("EPEntStrKrzKapVeraenderungBase", (
+        "m_bIsDynPausendauer", "m_iStaffelDelta",
+        "m_iPrzZugArbInhalt", "m_iZugArbInhalt",
+        "m_iPrzZugEglArbInhalt", "m_iZugEglArbInhalt",
+        "m_iDpKnAnzFuerPrgEglArbInhalt",
+    ))
+)
+register_handler("EPEntStrKrzKapVerPrgAutrag")(
+    _make_eet_handler("EPEntStrKrzKapVerPrgAutrag", (
+        "m_bIsDynPausendauer", "m_fPrzZugPrgBedarf", "m_fPrzZugWslArbInhalt",
+    ))
+)
+register_handler("EPEntStrArbVertMitWechsel")(
+    _make_eet_handler("EPEntStrArbVertMitWechsel", (
+        "m_bIsDynPausendauer", "m_bIsTausche", "m_bIsTauscheSpaet",
+        "m_bIsUmlageWstByRessAnzahl", "m_iMaxTauschversuche",
+        "m_fPrzZugGesamt", "m_bIsDumperNurTauschen", "m_iEinsatzzuschlag",
+    ))
+)
+
+
+# ----------------------------------------------------------------------
 # Phase-5-D: Konkrete Aufgaben-Knoten
 # (PDpKnAlternativELogik.{odh:158-668, cpp:411-...})
 # ----------------------------------------------------------------------

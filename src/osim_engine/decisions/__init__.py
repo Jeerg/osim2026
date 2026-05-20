@@ -60,6 +60,13 @@ from osim_engine.decisions.strategie_rsv import (
     KrzBaseKnotenWaehlen,
     KrzBaseReak,
 )
+from osim_engine.decisions.strategie_eet import (
+    EPEntStrAltExternRessBelegBase,
+    EPEntStrArbVertMitWechsel,
+    EPEntStrKrzKapVeraenderungBase,
+    EPEntStrKrzKapVerPrgAutrag,
+    GroupList,
+)
 
 __all__ = [
     "EntAufgabeBelegStatus",
@@ -90,6 +97,11 @@ __all__ = [
     "EPEntStrKrzRessZuordnungsInfoList",
     "KrzBaseKnotenWaehlen",
     "KrzBaseReak",
+    "EPEntStrAltExternRessBelegBase",
+    "EPEntStrArbVertMitWechsel",
+    "EPEntStrKrzKapVeraenderungBase",
+    "EPEntStrKrzKapVerPrgAutrag",
+    "GroupList",
     "EPKrzDurchlaufzeit",
     "EPZelSystem",
     "EPZelSystemLList",
