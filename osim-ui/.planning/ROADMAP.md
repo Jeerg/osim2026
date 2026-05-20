@@ -49,7 +49,7 @@ Drei Bausteine ziehen sich durch ALLE Phasen — nicht phasen-spezifisch:
 
 Plans:
 - [x] 01-01: Engine-OTX-Writer (`dump_simulator_to_otx`) im osim-engine-Repo — kritischer Vorlauf
-- [ ] 01-02: Backend-Foundation (FastAPI, Firebase Auth, Schema-per-Tenant, lazy Bootstrap)
+- [x] 01-02: Backend-Foundation (FastAPI, Firebase Auth, Schema-per-Tenant, lazy Bootstrap)
 - [ ] 01-03: Modell-CRUD (Storage, OTX-Roundtrip, JSON-Tree-Service, Edit-Lock)
 - [ ] 01-04: Viewer-Foundation TypeScript (ViewerFrame/ClientCtrl + 9er OCtrl-Familie)
 - [ ] 01-05: Sidebar-Tree + 4 Property-Viewer (PSimulator, PDurchlaufplan-Std, PGObjBase, AGruppe)
