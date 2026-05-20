@@ -1,7 +1,25 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/forms";
 
 html,
 body,
 #root {
   height: 100%;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+}
+
+/* osim-ui design tokens (light only fuer Phase 1).
+ * Plan 05+ kann shadcn nachziehen und das hier ersetzen. */
+:root {
+  --bg: #ffffff;
+  --fg: #111827;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #1d4ed8;
+  --accent-fg: #ffffff;
+  --error: #b91c1c;
 }

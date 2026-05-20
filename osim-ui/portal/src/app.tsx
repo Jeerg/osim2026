@@ -1,15 +1,51 @@
-// Phase-1-Skelett. Wird in Phase 1 mit TanStack Router + AuthProvider verdrahtet.
+// Plan 01-04 Task 1: App-Shell mit QueryClient + AuthProvider + Router.
+// Folgt dem 3fls-Muster (tbx_stzrim/portal/src/app.tsx), aber ohne i18n
+// (Phase 1 ist deutsch-only) und ohne shadcn-Toaster (Plan 05+ kann
+// nachziehen, wenn die Viewer-Konsumenten Toast-Feedback brauchen).
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createRouter, RouterProvider } from "@tanstack/react-router";
+import { AuthProvider } from "@/auth/auth-provider";
+import { useAuth } from "@/auth/use-auth";
+import { routeTree } from "./routeTree.gen";
+
+// React-Query: 5-Minuten staleTime, 1 Retry. Reicht fuer Phase 1; in
+// spaeteren Phasen ggf. ueberdenken (Sim-Status braucht haeufigere Updates).
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
+    },
+  },
+});
+
+// Router-Instance. auth-Context wird zur Laufzeit von InnerApp injiziert.
+const router = createRouter({
+  routeTree,
+  context: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    auth: undefined as any,
+  },
+});
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: typeof router;
+  }
+}
+
+function InnerApp() {
+  const auth = useAuth();
+  return <RouterProvider router={router} context={{ auth }} />;
+}
 
 export function App() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-8">
-      <h1 className="text-3xl font-semibold">osim-ui</h1>
-      <p className="text-sm text-gray-600">
-        Web-UI für die osim-engine. Phase 1 ist in Vorbereitung.
-      </p>
-      <p className="text-xs text-gray-500">
-        Siehe <code>.planning/milestones/v0.1.0/phase-1-vertical-slice/PLAN.md</code>
-      </p>
-    </main>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <InnerApp />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

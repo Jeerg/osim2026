@@ -1,0 +1,43 @@
+import js from "@eslint/js";
+import globals from "globals";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
+import tseslint from "typescript-eslint";
+import { defineConfig, globalIgnores } from "eslint/config";
+
+export default defineConfig([
+  globalIgnores(["dist", "src/routeTree.gen.ts"]),
+  {
+    files: ["**/*.{ts,tsx}"],
+    extends: [
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+    ],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: globals.browser,
+    },
+    rules: {
+      // TanStack-Router-File-Routes muessen sowohl `Route` als auch die
+      // Component exportieren — das ist der vom Plugin vorgegebene
+      // Convention. Wir erlauben `Route` als zusaetzlichen Export.
+      // Analog fuer Context-Provider-Pattern (z.B. AuthContext + AuthProvider).
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true, allowExportNames: ["Route", "AuthContext"] },
+      ],
+    },
+  },
+  // Route-Dateien des TanStack Routers kombinieren konventionell den
+  // Route-Const-Export mit einer in-File-Komponente. Wir disablen
+  // hier die Fast-Refresh-Regel; HMR funktioniert in Praxis trotzdem,
+  // weil der Router-Plugin im Hintergrund die Route-Defs handlt.
+  {
+    files: ["src/routes/**/*.{ts,tsx}"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
+]);
