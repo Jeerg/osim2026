@@ -63,7 +63,33 @@ def _problem_response(
 
 
 async def _http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-    """Wandelt FastAPI/Starlette HTTPException in ProblemDetail-Response."""
+    """Wandelt FastAPI/Starlette HTTPException in ProblemDetail-Response.
+
+    Sonderfall: wenn ``exc.detail`` ein dict ist, wird es als RFC-7807-Extension
+    in den Body uebernommen (top-level Felder wie ``type``, ``title``, plus
+    eigene Felder wie ``holder_uid``). So koennen Services strukturierte
+    Problem-Details liefern (z.B. Lock-Konflikt mit Holder-Info).
+    """
+    if isinstance(exc.detail, dict):
+        # dict-detail: assemble ProblemDetail from top-level fields, but
+        # behalte zusaetzliche custom-keys (passendes RFC-7807-Extension-Pattern).
+        d = dict(exc.detail)
+        payload: dict[str, Any] = {
+            "type": d.pop("type", "about:blank"),
+            "title": d.pop("title", _http_title(exc.status_code)),
+            "status": exc.status_code,
+            "instance": str(request.url.path),
+        }
+        # detail aus dict ziehen (optional)
+        if "detail" in d:
+            payload["detail"] = d.pop("detail")
+        # restliche Felder als RFC-7807-Extension einhaengen
+        payload.update(d)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=payload,
+            media_type=PROBLEM_CONTENT_TYPE,
+        )
     detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     return _problem_response(
         status_code=exc.status_code,

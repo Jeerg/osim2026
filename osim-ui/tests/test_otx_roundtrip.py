@@ -43,6 +43,13 @@ def test_roundtrip_upload_get_put_creates_new_version(
     assert tree_body["tree"]["schema_version"] == "1.0"
     assert tree_body["tree"]["root"]["oid"] == 0
 
+    # Lock akquirieren (Task-3 Pflicht fuer PUT /tree).
+    al = client.post(
+        f"/api/v1/models/{model_id}/lock",
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert al.status_code == 200, al.text
+
     # 3. PUT /tree -- unveraendertes Tree.
     pt = client.put(
         f"/api/v1/models/{model_id}/tree",
@@ -99,6 +106,13 @@ def test_roundtrip_property_edit_persists(authenticated_client, dummy_otx_bytes)
         headers={"Authorization": "Bearer fake-token"},
     )
     tree = gt.json()["tree"]
+
+    # Lock akquirieren (Task-3 Pflicht fuer PUT /tree).
+    al = client.post(
+        f"/api/v1/models/{model_id}/lock",
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert al.status_code == 200
 
     # Aendere root.m_name (ASimulator nutzt m_name, NICHT m_sName).
     new_name = "Modified Sim Name"

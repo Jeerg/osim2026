@@ -20,10 +20,11 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_tenant_id, get_user_uid
+from app.auth.dependencies import get_tenant_id, get_user_email, get_user_uid
 from app.core.database import get_db
 from app.schemas.json_tree import JsonTreeDocument
 from app.schemas.model import (
+    LockInfo,
     ModelDetail,
     ModelListItem,
     TreePutRequest,
@@ -34,6 +35,12 @@ from app.schemas.model import (
 from app.services.json_tree_service import (
     apply_tree_to_simulator,
     serialize_simulator_to_tree,
+)
+from app.services.lock_service import (
+    acquire_lock,
+    get_lock_status,
+    heartbeat_lock,
+    release_lock,
 )
 from app.services.model_service import (
     create_new_version,
@@ -111,10 +118,22 @@ async def list_models_endpoint(
 )
 async def get_model_endpoint(
     model_id: int,
+    user_uid: str = Depends(get_user_uid),
     db: AsyncSession = Depends(get_db),
 ) -> ModelDetail:
     model = await get_model(model_id, db)
-    return ModelDetail.model_validate(model)
+    lock = await get_lock_status(model_id, db)
+    detail = ModelDetail.model_validate(model)
+    if lock is not None:
+        detail.lock_status = LockInfo(
+            holder_uid=lock.holder_uid,
+            holder_email=lock.holder_email,
+            acquired_at=lock.acquired_at,
+            last_heartbeat_at=lock.last_heartbeat_at,
+            expires_at=lock.expires_at,
+            is_self=(lock.holder_uid == user_uid),
+        )
+    return detail
 
 
 # ---------------------------------------------------------------------------
@@ -232,3 +251,68 @@ async def download_original(
             "X-Storage-Key": initial.storage_key,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Edit-Lock Endpoints (D-13)
+# ---------------------------------------------------------------------------
+
+
+def _to_lock_info(lock, user_uid: str) -> LockInfo:
+    return LockInfo(
+        holder_uid=lock.holder_uid,
+        holder_email=lock.holder_email,
+        acquired_at=lock.acquired_at,
+        last_heartbeat_at=lock.last_heartbeat_at,
+        expires_at=lock.expires_at,
+        is_self=(lock.holder_uid == user_uid),
+    )
+
+
+@router.post(
+    "/{model_id}/lock",
+    response_model=LockInfo,
+    summary="Edit-Lock akquirieren (15 min TTL, heartbeat-faehig).",
+)
+async def acquire_lock_endpoint(
+    model_id: int,
+    user_uid: str = Depends(get_user_uid),
+    user_email: str = Depends(get_user_email),
+    db: AsyncSession = Depends(get_db),
+) -> LockInfo:
+    # Existenz des Modells validieren -> 404 wenn unbekannt.
+    await get_model(model_id, db)
+    lock = await acquire_lock(
+        model_id=model_id, user_uid=user_uid, user_email=user_email, db=db
+    )
+    return _to_lock_info(lock, user_uid)
+
+
+@router.delete(
+    "/{model_id}/lock",
+    status_code=204,
+    summary="Edit-Lock freigeben (idempotent).",
+)
+async def release_lock_endpoint(
+    model_id: int,
+    user_uid: str = Depends(get_user_uid),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    await get_model(model_id, db)
+    await release_lock(model_id=model_id, user_uid=user_uid, db=db)
+    return Response(status_code=204)
+
+
+@router.post(
+    "/{model_id}/lock/heartbeat",
+    response_model=LockInfo,
+    summary="Lock-TTL refreshen (verschiebt expires_at).",
+)
+async def heartbeat_lock_endpoint(
+    model_id: int,
+    user_uid: str = Depends(get_user_uid),
+    db: AsyncSession = Depends(get_db),
+) -> LockInfo:
+    await get_model(model_id, db)
+    lock = await heartbeat_lock(model_id=model_id, user_uid=user_uid, db=db)
+    return _to_lock_info(lock, user_uid)
