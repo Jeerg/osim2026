@@ -353,13 +353,22 @@ class OtxWriter:
         return dict(self.oid_by_id)
 
     def adopt_oids_from_instances(
-        self, instances: dict[int, Any]
+        self,
+        instances: dict[int, Any],
+        original_otx: OtxFile | None = None,
     ) -> dict[int, int]:
         """Übernimmt die OIDs aus einem `LoadResult.instances`-Dict.
 
         Damit kann der Writer die OID-Identität des Original-OTX-Files
         bewahren — Pass-Through-Skelette für unsupported Objekte referenzieren
         dann konsistent.
+
+        Wenn `original_otx` mitkommt, wird der OTX-Klassen-Name aus dem Original
+        übernommen (statt `type(obj).__name__`). Das ist nötig, weil OTX-Labels
+        und Python-Klassen-Namen abweichen können — z.B. der `PSimulator`
+        wird im OTX als `ASimulator` serialisiert (siehe ASimulator-Handler im
+        Loader, der die vor-instanzierte PSimulator-Instanz unter OID 0
+        wiederverwendet).
         """
         self.oid_by_id.clear()
         self.obj_by_oid.clear()
@@ -370,7 +379,14 @@ class OtxWriter:
                 continue
             self.oid_by_id[id(obj)] = oid
             self.obj_by_oid[oid] = obj
-            self.klass_by_oid[oid] = type(obj).__name__
+            # Bevorzuge die OTX-Klassen-Annotation; falle nur darauf zurück,
+            # wenn das Original nichts liefert.
+            otx_klass: str | None = None
+            if original_otx is not None:
+                src_obj = original_otx.by_oid.get(oid)
+                if src_obj is not None:
+                    otx_klass = src_obj.klass
+            self.klass_by_oid[oid] = otx_klass or type(obj).__name__
 
         return dict(self.oid_by_id)
 
@@ -396,7 +412,7 @@ class OtxWriter:
         """
         # OID-Vergabe (oder Übernahme aus Loader).
         if instances is not None:
-            self.adopt_oids_from_instances(instances)
+            self.adopt_oids_from_instances(instances, original_otx=original_otx)
         else:
             self.assign_oids(sim)
 
@@ -598,3 +614,512 @@ register_writer("PDpKnMengeRuesten")(
 register_writer("PDpKnVerteilung")(
     _make_simple_knoten_writer(("m_iVerteilZeit",))
 )
+
+
+# ----------------------------------------------------------------------
+# Knoten-Familie mit Verteilung-Ref (PDpKnVerteilung-Variante)
+# ----------------------------------------------------------------------
+
+
+def _make_knoten_with_verteilung_writer(scalars: tuple[str, ...]):
+    common = ("m_sName",) + scalars
+
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            props = _serialize_scalars(py, common)
+            for attr in ("m_lKanteEin", "m_lKanteAus", "m_lKnotenOber",
+                         "m_lVerteil"):
+                ref_oid = writer.get_oid(getattr(py, attr, None))
+                if ref_oid is not None:
+                    props[attr] = ref_oid
+            return props, []
+
+    return _H
+
+
+register_writer("PDpKnRueckKonstant")(
+    _make_knoten_with_verteilung_writer(("m_iWiederholungenZiel",))
+)
+register_writer("PDpKnAlternativVerteilung")(
+    _make_knoten_with_verteilung_writer(())
+)
+
+
+@register_writer("PDpKaVerteilung")
+class _PDpKaVerteilungWriter(WriterHandler):
+    SCALARS = ("m_sName", "m_iAktVerteilungszeit")
+
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, self.SCALARS)
+        verteil = writer.get_oid(getattr(py, "m_lVerteil", None))
+        if verteil is not None:
+            props["m_lVerteil"] = verteil
+        return props, []
+
+
+# ----------------------------------------------------------------------
+# PAlternativeVerteilung
+# ----------------------------------------------------------------------
+
+
+@register_writer("PAlternativeVerteilung")
+class _PAlternativeVerteilungWriter(WriterHandler):
+    SCALARS = ("m_sName", "m_fAuswahlWarschlkt")
+
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, self.SCALARS)
+        dlpl = writer.get_oid(getattr(py, "m_lDlpl", None))
+        if dlpl is not None:
+            props["m_lDlpl"] = dlpl
+        return props, []
+
+
+# ----------------------------------------------------------------------
+# PVerteilung-Familie
+# ----------------------------------------------------------------------
+
+
+def _make_pvert_writer(scalars: tuple[str, ...]):
+    common = ("m_sName",) + scalars
+
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            props = _serialize_scalars(py, common)
+            ext = writer.get_oid(getattr(py, "m_lPVertExt", None))
+            if ext is not None:
+                props["m_lPVertExt"] = ext
+            return props, []
+
+    return _H
+
+
+register_writer("PVertKonstant")(_make_pvert_writer(("m_fKonstante",)))
+register_writer("PVertGleich")(_make_pvert_writer(("m_fMinimum", "m_fMaximum")))
+register_writer("PVertNormal")(
+    _make_pvert_writer(("m_fErwartungsw", "m_fStandardabw"))
+)
+register_writer("PVertLogNorm")(
+    _make_pvert_writer(("m_fErwartungsw", "m_fStandardabw"))
+)
+register_writer("PVertExponential")(
+    _make_pvert_writer(("m_fErwartungsw", "m_iRechtsVerschiebung"))
+)
+register_writer("PVertBeta")(
+    _make_pvert_writer(
+        ("m_fUntereGrenze", "m_fObereGrenze", "m_fAlpha", "m_fBeta"),
+    )
+)
+register_writer("PVertBetaPERT")(
+    _make_pvert_writer(
+        ("m_fpessimistischerWert", "m_fhaeufigsterWert", "m_foptimistischerWert"),
+    )
+)
+
+
+@register_writer("PVertExtern")
+class _PVertExternWriter(WriterHandler):
+    SCALARS = ("m_sName", "m_keim", "m_Internerkeim")
+
+    def serialize(self, writer, py, oid):
+        return _serialize_scalars(py, self.SCALARS), []
+
+
+# ----------------------------------------------------------------------
+# Parameter-Familie
+# ----------------------------------------------------------------------
+
+
+def _make_parameter_writer(scalar: str):
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            return _serialize_scalars(py, ("m_sName", scalar)), []
+
+    return _H
+
+
+register_writer("PParameterMenge")(_make_parameter_writer("m_iWert"))
+register_writer("PParameterID")(_make_parameter_writer("m_iWert"))
+register_writer("PParameterPrioritaet")(_make_parameter_writer("m_iWert"))
+register_writer("PParameterFloat")(_make_parameter_writer("m_dWert"))
+
+
+# ----------------------------------------------------------------------
+# Ressourcen
+# ----------------------------------------------------------------------
+
+
+def _make_ressource_writer():
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            return _serialize_scalars(py, ("m_sName",)), []
+
+    return _H
+
+
+register_writer("PBetriebsmittel")(_make_ressource_writer())
+register_writer("PPerson")(_make_ressource_writer())
+
+
+# ----------------------------------------------------------------------
+# Einsatzzeiten
+# ----------------------------------------------------------------------
+
+
+@register_writer("PEinsatzzeitTag")
+class _PEinsatzzeitTagWriter(WriterHandler):
+    SCALARS = (
+        "m_sName", "m_iBeginn", "m_iEnde",
+        "m_iPauseBeginn", "m_iPauseEnde", "m_iPauseDauer",
+    )
+
+    def serialize(self, writer, py, oid):
+        return _serialize_scalars(py, self.SCALARS), []
+
+
+@register_writer("PTagRess")
+class _PTagRessWriter(WriterHandler):
+    SCALARS = ("m_iTag",)
+
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, self.SCALARS)
+        ress = writer.get_oid(getattr(py, "m_oRessBeleg", None))
+        if ress is not None:
+            props["m_oRessBeleg"] = ress
+        return props, []
+
+
+@register_writer("PTagesEinsatzzeit")
+class _PTagesEinsatzzeitWriter(WriterHandler):
+    SCALARS = ("m_iEinsatzAnfang", "m_iEinsatzEnde")
+
+    def serialize(self, writer, py, oid):
+        return _serialize_scalars(py, self.SCALARS), []
+
+
+# ----------------------------------------------------------------------
+# Assoziationen
+# ----------------------------------------------------------------------
+
+
+def _make_assoz_writer():
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            return _serialize_scalars(py, ("m_sName",)), []
+
+    return _H
+
+
+register_writer("PAssozBeleg")(_make_assoz_writer())
+register_writer("PAssozRessEnt")(_make_assoz_writer())
+register_writer("PAssozELogikEnt")(_make_assoz_writer())
+
+
+# ----------------------------------------------------------------------
+# Entscheider-Datenstrukturen
+# ----------------------------------------------------------------------
+
+
+@register_writer("EPEntInformation")
+class _EPEntInformationWriter(WriterHandler):
+    SCALARS = (
+        "m_sName", "m_iID", "m_sPropertyClassName", "m_sParentClassName",
+        "m_iObereGrenze", "m_iUntereGrenze", "m_bIsMin",
+    )
+
+    def serialize(self, writer, py, oid):
+        return _serialize_scalars(py, self.SCALARS), []
+
+
+@register_writer("EPEntInformationssystem")
+class _EPEntInformationssystemWriter(WriterHandler):
+    def serialize(self, writer, py, oid):
+        return _serialize_scalars(py, ("m_sName",)), []
+
+
+def _make_ziel_writer():
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            return _serialize_scalars(py, (
+                "m_sName", "m_sZielStrKen", "m_iAusrichtung", "m_iGewichtung",
+            )), []
+
+    return _H
+
+
+register_writer("EPZiel")(_make_ziel_writer())
+register_writer("EPKrzDurchlaufzeit")(_make_ziel_writer())
+
+
+@register_writer("EPZelSystem")
+class _EPZelSystemWriter(WriterHandler):
+    def serialize(self, writer, py, oid):
+        return _serialize_scalars(py, ("m_sName",)), []
+
+
+@register_writer("EPEntFeld")
+class _EPEntFeldWriter(WriterHandler):
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, ("m_sName",))
+        for attr in ("m_oPPerson", "m_oZelSystem", "m_oEntInf", "m_oEntStrategie"):
+            ref = writer.get_oid(getattr(py, attr, None))
+            if ref is not None:
+                props[attr] = ref
+        return props, []
+
+
+@register_writer("EPAszEntFeld")
+class _EPAszEntFeldWriter(WriterHandler):
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, ("m_sName",))
+        for attr in ("m_lKnoten", "m_lOberAssoz"):
+            ref = writer.get_oid(getattr(py, attr, None))
+            if ref is not None:
+                props[attr] = ref
+        return props, []
+
+
+# ----------------------------------------------------------------------
+# rsv-Strategien (Phase 5-E)
+# ----------------------------------------------------------------------
+
+
+def _make_rsv_writer(scalars: tuple[str, ...]):
+    common = (
+        "m_sName", "m_bEntscheidungErzwingen", "m_bEntscheidungAktivieren",
+        "m_eReaktion", "m_iAnzahl", "m_bRuecksetzenNachZeitspanne",
+        "m_iRuecksetzZeitspanne", "m_iZstSpanne",
+    )
+
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            return _serialize_scalars(py, common + scalars), []
+
+    return _H
+
+
+register_writer("EPEntStrKrzRessBase")(_make_rsv_writer(()))
+register_writer("EPEntStrKrzRessBedarf")(_make_rsv_writer((
+    "m_iProzAnzahl", "m_dArbInhalt", "m_dDstAuslastung",
+)))
+register_writer("EPEntStrKrzRessArbSuchen")(_make_rsv_writer((
+    "m_bGegenrechnen", "m_bWechselAuchNachZuordnung",
+    "m_bGruppenBeruecksichtigen", "m_bGegenseitigZuordnen",
+    "m_bLinksStatusSofortSetzen", "m_bZuordnungsmengeAusGruppeExtrahieren",
+    "m_eWahlverhalten",
+    "m_iErlaubteWechselProGruppe", "m_iErlaubteZuordnungProGruppe",
+    "m_iErlaubteZuordnungProRessource",
+    "m_fProzAnteilEinsatzeitAnRuecksetzzeit", "m_bEinsatzzeitBeachten",
+    "m_iBrachDistance", "m_iBrachLevel", "m_iPrzAnzahl",
+    "m_dArbInhalt", "m_dAuslastung",
+)))
+
+
+# ----------------------------------------------------------------------
+# eet-Strategien (Phase 5-F)
+# ----------------------------------------------------------------------
+
+
+def _make_eet_writer(scalars: tuple[str, ...] = ()):
+    common = (
+        "m_sName", "m_bEntscheidungErzwingen", "m_bEntscheidungAktivieren",
+    )
+
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            return _serialize_scalars(py, common + scalars), []
+
+    return _H
+
+
+register_writer("EPEntStrAltExternRessBelegBase")(_make_eet_writer())
+register_writer("EPEntStrKrzKapVeraenderungBase")(_make_eet_writer((
+    "m_bIsDynPausendauer", "m_iStaffelDelta",
+    "m_iPrzZugArbInhalt", "m_iZugArbInhalt",
+    "m_iPrzZugEglArbInhalt", "m_iZugEglArbInhalt",
+    "m_iDpKnAnzFuerPrgEglArbInhalt",
+)))
+register_writer("EPEntStrKrzKapVerPrgAutrag")(_make_eet_writer((
+    "m_bIsDynPausendauer", "m_fPrzZugPrgBedarf", "m_fPrzZugWslArbInhalt",
+)))
+register_writer("EPEntStrArbVertMitWechsel")(_make_eet_writer((
+    "m_bIsDynPausendauer", "m_bIsTausche", "m_bIsTauscheSpaet",
+    "m_bIsUmlageWstByRessAnzahl", "m_iMaxTauschversuche",
+    "m_fPrzZugGesamt", "m_bIsDumperNurTauschen", "m_iEinsatzzuschlag",
+)))
+
+
+# ----------------------------------------------------------------------
+# Aufgabe-Knoten (Phase 5-D)
+# ----------------------------------------------------------------------
+
+
+def _make_aufgabe_knoten_writer(scalars: tuple[str, ...] = ()):
+    common = ("m_sName", "m_eRessUsage", "m_iVerteilZeit") + scalars
+
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            props = _serialize_scalars(py, common)
+            for attr in ("m_lKanteEin", "m_lKanteAus", "m_lKnotenOber",
+                         "m_lVerteil"):
+                ref = writer.get_oid(getattr(py, attr, None))
+                if ref is not None:
+                    props[attr] = ref
+            return props, []
+
+    return _H
+
+
+register_writer("EPEntAltProzesswege")(_make_aufgabe_knoten_writer())
+register_writer("EPEntAuftragsgroesse")(
+    _make_aufgabe_knoten_writer(("m_iShadowMenge",))
+)
+register_writer("EPEntKrzRessourcenEinsatz")(_make_aufgabe_knoten_writer())
+register_writer("EPEntKrzRessourcenEinsatzRess")(_make_aufgabe_knoten_writer())
+register_writer("EPEntReihenfolge")(_make_aufgabe_knoten_writer())
+register_writer("EPEntKrzKapazitaetsVeraenderung")(_make_aufgabe_knoten_writer())
+
+
+# ----------------------------------------------------------------------
+# PAlternativ-ELogik / -Split + zugehörige Knoten
+# ----------------------------------------------------------------------
+
+
+@register_writer("PAlternativeELogik")
+class _PAlternativeELogikWriter(WriterHandler):
+    SCALARS = (
+        "m_sName", "m_fAuswahlWarschlkt",
+        "m_iQualitaetsfaehigkeit", "m_iFlexibilitaet", "m_dUser",
+    )
+
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, self.SCALARS)
+        dlpl = writer.get_oid(getattr(py, "m_lDlpl", None))
+        if dlpl is not None:
+            props["m_lDlpl"] = dlpl
+        return props, []
+
+
+@register_writer("PAlternativeSplit")
+class _PAlternativeSplitWriter(WriterHandler):
+    SCALARS = ("m_sName", "m_fAuswahlWarschlkt")
+
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, self.SCALARS)
+        dlpl = writer.get_oid(getattr(py, "m_lDlpl", None))
+        if dlpl is not None:
+            props["m_lDlpl"] = dlpl
+        return props, []
+
+
+@register_writer("PDpKnAlternativELogik")
+class _PDpKnAlternativELogikWriter(WriterHandler):
+    SCALARS = (
+        "m_sName", "m_eZFunktionTyp",
+        "m_iZGTermintreue", "m_iZGQualitaet", "m_iZGDlz",
+        "m_iZGKosten", "m_iZGKapauslastung", "m_iZGBestaende",
+        "m_iZGFlexibilitaet", "m_iGDringlichkeit",
+    )
+
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, self.SCALARS)
+        for attr in ("m_lKanteEin", "m_lKanteAus", "m_lKnotenOber"):
+            ref = writer.get_oid(getattr(py, attr, None))
+            if ref is not None:
+                props[attr] = ref
+        return props, []
+
+
+@register_writer("PDpKnAlternativSplit")
+class _PDpKnAlternativSplitWriter(WriterHandler):
+    SCALARS = ("m_sName",)
+
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, self.SCALARS)
+        for attr in ("m_lKanteEin", "m_lKanteAus", "m_lKnotenOber"):
+            ref = writer.get_oid(getattr(py, attr, None))
+            if ref is not None:
+                props[attr] = ref
+        return props, []
+
+
+# ----------------------------------------------------------------------
+# ACO-Familie (Phase 5-J/K)
+# ----------------------------------------------------------------------
+
+
+@register_writer("ACOAnt")
+class _ACOAntWriter(WriterHandler):
+    SCALARS = (
+        "m_sName", "m_iBeginTermin", "m_iPlanZeit", "m_iRealeAuftragsdauer",
+    )
+
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, self.SCALARS)
+        dlpl = writer.get_oid(getattr(py, "m_lDlpl", None))
+        if dlpl is not None:
+            props["m_lDlpl"] = dlpl
+        return props, []
+
+
+def _make_aco_split_logik_writer():
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            props = _serialize_scalars(py, ("m_sName", "m_eRessUsage"))
+            for attr in ("m_lKanteEin", "m_lKanteAus", "m_lKnotenOber",
+                         "m_lVerteil"):
+                ref = writer.get_oid(getattr(py, attr, None))
+                if ref is not None:
+                    props[attr] = ref
+            return props, []
+
+    return _H
+
+
+register_writer("ACOSplit")(_make_aco_split_logik_writer())
+register_writer("ACOLogik")(_make_aco_split_logik_writer())
+
+
+def _make_aco_knoten_writer(scalars: tuple[str, ...]):
+    common = ("m_sName",) + scalars
+
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            props = _serialize_scalars(py, common)
+            for attr in ("m_lKanteEin", "m_lKanteAus", "m_lKnotenOber"):
+                ref = writer.get_oid(getattr(py, attr, None))
+                if ref is not None:
+                    props[attr] = ref
+            return props, []
+
+    return _H
+
+
+register_writer("ACODpKnSplit")(
+    _make_aco_knoten_writer(("m_iDfzProEinheit", "m_iRuestzeit"))
+)
+register_writer("ACOReihenfolge")(
+    _make_aco_knoten_writer(("m_iDfzProEinheit", "m_iRuestzeit"))
+)
+
+
+# ----------------------------------------------------------------------
+# EPAslEntAufExtern (Auslöser-Entscheider, Phase 5-B)
+# ----------------------------------------------------------------------
+
+
+@register_writer("EPAslEntAufExtern")
+class _EPAslEntAufExternWriter(WriterHandler):
+    SCALARS = (
+        "m_sName", "m_iBeginTermin", "m_bTaeglichWiederholen",
+        "m_iSollDauer", "m_iMaxWarteZeit",
+    )
+
+    def serialize(self, writer, py, oid):
+        props = _serialize_scalars(py, self.SCALARS)
+        dlpl = writer.get_oid(getattr(py, "m_lDlpl", None))
+        if dlpl is not None:
+            props["m_lDlpl"] = dlpl
+        ent = writer.get_oid(getattr(py, "m_lEntitaet", None))
+        if ent is not None:
+            props["m_lEntitaet"] = ent
+        return props, []
