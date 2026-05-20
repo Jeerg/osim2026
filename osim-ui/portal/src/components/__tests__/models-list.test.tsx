@@ -17,7 +17,7 @@ import {
 import { ModelsList } from "../models-list";
 
 function makeRouter(component: () => React.ReactNode) {
-  const rootRoute = createRootRouteWithContext<unknown>()({
+  const rootRoute = createRootRouteWithContext<Record<string, unknown>>()({
     component: () => <Outlet />,
   });
   const indexRoute = createRoute({
