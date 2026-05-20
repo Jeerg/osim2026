@@ -876,6 +876,60 @@ class _EPAszEntFeldHandler(ClassHandler):
 
 
 # ----------------------------------------------------------------------
+# Phase-5-E: rsv-Strategien (EPStrategie.{odh:88-369, cpp:60-1543})
+# ----------------------------------------------------------------------
+
+
+@register_handler("EPEntStrKrzRessBase")
+class _EPEntStrKrzRessBaseHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.strategie_rsv import EPEntStrKrzRessBase
+        s = EPEntStrKrzRessBase(loader.simulator)
+        copy_scalars(s, obj, (
+            "m_sName", "m_bEntscheidungErzwingen", "m_bEntscheidungAktivieren",
+            "m_eReaktion", "m_iAnzahl", "m_bRuecksetzenNachZeitspanne",
+            "m_iRuecksetzZeitspanne", "m_iZstSpanne",
+        ))
+        return s
+
+
+@register_handler("EPEntStrKrzRessBedarf")
+class _EPEntStrKrzRessBedarfHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.strategie_rsv import EPEntStrKrzRessBedarf
+        s = EPEntStrKrzRessBedarf(loader.simulator)
+        copy_scalars(s, obj, (
+            "m_sName", "m_bEntscheidungErzwingen", "m_bEntscheidungAktivieren",
+            "m_eReaktion", "m_iAnzahl", "m_bRuecksetzenNachZeitspanne",
+            "m_iRuecksetzZeitspanne", "m_iZstSpanne",
+            "m_iProzAnzahl", "m_dArbInhalt", "m_dDstAuslastung",
+        ))
+        return s
+
+
+@register_handler("EPEntStrKrzRessArbSuchen")
+class _EPEntStrKrzRessArbSuchenHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.strategie_rsv import EPEntStrKrzRessArbSuchen
+        s = EPEntStrKrzRessArbSuchen(loader.simulator)
+        copy_scalars(s, obj, (
+            "m_sName", "m_bEntscheidungErzwingen", "m_bEntscheidungAktivieren",
+            "m_eReaktion", "m_iAnzahl", "m_bRuecksetzenNachZeitspanne",
+            "m_iRuecksetzZeitspanne", "m_iZstSpanne",
+            "m_bGegenrechnen", "m_bWechselAuchNachZuordnung",
+            "m_bGruppenBeruecksichtigen", "m_bGegenseitigZuordnen",
+            "m_bLinksStatusSofortSetzen", "m_bZuordnungsmengeAusGruppeExtrahieren",
+            "m_eWahlverhalten",
+            "m_iErlaubteWechselProGruppe", "m_iErlaubteZuordnungProGruppe",
+            "m_iErlaubteZuordnungProRessource",
+            "m_fProzAnteilEinsatzeitAnRuecksetzzeit", "m_bEinsatzzeitBeachten",
+            "m_iBrachDistance", "m_iBrachLevel", "m_iPrzAnzahl",
+            "m_dArbInhalt", "m_dAuslastung",
+        ))
+        return s
+
+
+# ----------------------------------------------------------------------
 # Phase-5-D: Konkrete Aufgaben-Knoten
 # (PDpKnAlternativELogik.{odh:158-668, cpp:411-...})
 # ----------------------------------------------------------------------

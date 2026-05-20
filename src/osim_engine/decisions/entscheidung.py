@@ -111,6 +111,25 @@ class EPEntInformationssystem(PSimObj):
         """C++: `IsInfoInSystem(int ID)` (EPEntscheidung.cpp:181-192)."""
         return any(info.m_iID == info_id for info in self.m_lInformationen)
 
+    def is_info_in_system_by_property(self, property_name: str) -> bool:
+        """C++: `IsInfoInSystem(OMetaProperty *pMeta)` (EPEntscheidung.cpp:153-168).
+
+        Python-Variante des Reflection-Lookups: vergleicht direkt gegen
+        `m_sPropertyClassName` (= C++-Property-Name). Wird von den
+        Strategien in `bedingungen_pruefen` verwendet.
+        """
+        return any(
+            info.m_sPropertyClassName == property_name
+            for info in self.m_lInformationen
+        )
+
+    def get_info_by_property(self, property_name: str) -> EPEntInformation | None:
+        """C++: `GetInfo(OMetaProperty *pMeta)` (EPEntscheidung.cpp:198-214)."""
+        for info in self.m_lInformationen:
+            if info.m_sPropertyClassName == property_name:
+                return info
+        return None
+
     def get_info_by_name(self, name: str) -> EPEntInformation | None:
         """C++: `GetInfo(CString name)` (EPEntscheidung.cpp:215-226)."""
         for info in self.m_lInformationen:

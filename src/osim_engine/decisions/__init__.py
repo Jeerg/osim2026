@@ -49,6 +49,17 @@ from osim_engine.decisions.entscheidung import (
     EPZielLList,
 )
 from osim_engine.decisions.strategie import EPEntStrategie, EPEntStrategieLList
+from osim_engine.decisions.strategie_rsv import (
+    AssozBelegLinkStatus,
+    EPEntStrKrzRessArbSuchen,
+    EPEntStrKrzRessBase,
+    EPEntStrKrzRessBedarf,
+    EPEntStrKrzRessGroupInfoList,
+    EPEntStrKrzRessStatusInfoList,
+    EPEntStrKrzRessZuordnungsInfoList,
+    KrzBaseKnotenWaehlen,
+    KrzBaseReak,
+)
 
 __all__ = [
     "EntAufgabeBelegStatus",
@@ -70,6 +81,15 @@ __all__ = [
     "EPEntscheidungsAufgabe",
     "EPEntStrategie",
     "EPEntStrategieLList",
+    "AssozBelegLinkStatus",
+    "EPEntStrKrzRessArbSuchen",
+    "EPEntStrKrzRessBase",
+    "EPEntStrKrzRessBedarf",
+    "EPEntStrKrzRessGroupInfoList",
+    "EPEntStrKrzRessStatusInfoList",
+    "EPEntStrKrzRessZuordnungsInfoList",
+    "KrzBaseKnotenWaehlen",
+    "KrzBaseReak",
     "EPKrzDurchlaufzeit",
     "EPZelSystem",
     "EPZelSystemLList",

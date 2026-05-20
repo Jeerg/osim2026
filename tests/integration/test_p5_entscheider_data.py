@@ -259,11 +259,11 @@ def test_bosch2_ep_ent_feld_haben_referenzen_aufgeloest(bosch2_loaded) -> None:
     assert len(mit_infosystem) == 4, (
         f"Erwartet: alle 4 EntFelder mit m_oEntInf, war {len(mit_infosystem)}"
     )
-    # `m_oEntStrategie` ist in Bosch2 ebenfalls referenziert — wir können
-    # die Strategie noch nicht laden (P5-E/F), aber die Resolve-Versuch
-    # liefert konsistent `None` (statt random garbage).
+    # `m_oEntStrategie` ist in Bosch2 ebenfalls referenziert. Ab Slice
+    # P5-E sind EPEntStrKrzRess*-Strategien registriert (3 von 4
+    # geladen — die 4. ist EPEntStrArbVertMitWechsel, kommt in P5-F).
     mit_strategie = [f for f in felder if f.m_oEntStrategie is not None]
-    assert mit_strategie == [], (
-        "EntStrategie-Klassen sind in P5-A/B noch nicht registriert — "
-        "Referenzen müssen None bleiben"
+    assert len(mit_strategie) >= 3, (
+        f"Erwartet: mind. 3 EntFelder mit m_oEntStrategie (P5-E-Strategien), "
+        f"war {len(mit_strategie)}"
     )
