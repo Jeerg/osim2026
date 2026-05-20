@@ -267,6 +267,7 @@ class _ASimulatorHandler(ClassHandler):
         "m_iProduktionBezugsPeriode", "m_iProduktionEnde",
         "m_bIsProduktionEnde", "m_keim", "m_aktKeim",
         "m_sStartDate", "m_sEndDate", "m_name",
+        "m_bIsEntAktiv",
     )
 
     def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:

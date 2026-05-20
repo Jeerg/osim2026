@@ -81,6 +81,18 @@ def test_simulator_period_settings_loaded(loaded: LoadResult) -> None:
     assert sim.m_keim == 1776496601
 
 
+def test_simulator_m_b_is_ent_aktiv_loaded(loaded: LoadResult) -> None:
+    """Embb-OTX hat `m_bIsEntAktiv;TRUE` — muss als True am PSimulator ankommen.
+
+    Vor dem Fix (Diagnose vom 2026-05-20) fehlte das Attribut in
+    `_ASimulatorHandler.SCALARS`; der Loader las den Wert nicht und der
+    Python-Default `False` blieb. Folge: alle Entscheider-Hooks blieben
+    latent — auch dort wo das Modell sie aktiv haben wollte (z.B. Bosch2).
+    """
+    sim = loaded.simulator
+    assert sim.m_bIsEntAktiv is True
+
+
 # ----------------------------------------------------------------------
 # Wiring — Plan + Knoten + Kanten
 # ----------------------------------------------------------------------
