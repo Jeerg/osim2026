@@ -31,12 +31,24 @@ export const SYNTHETIC_RESS_BELEG_OID = -10001;
 export const SYNTHETIC_RESS_MENGE_OID = -10002;
 export const SYNTHETIC_RESS_VERKN_OID = -10003;
 
-// Reserviert fuer spaetere Plans (AKapBed-Sicht, Gantt etc.):
-//   -10004 ... -10999
+// Plan 01-08: Verknuepfungs- + Arbeitszeit-Sichten (Welle 4, Plan 08).
+export const SYNTHETIC_DLPL_BETRIEBSMITTEL_OID = -10004;
+export const SYNTHETIC_DLPL_PERSONAL_OID = -10005;
+export const SYNTHETIC_AEINSATZWUNSCH_OID = -10006;
+export const SYNTHETIC_AKAPBED_OID = -10007;
+
+// Reserviert fuer spaetere Plans (Gantt etc.):
+//   -10008 ... -10999
 
 export const SYNTHETIC_RESS_BELEG_KLASS = "RESS_BELEG_GROUP";
 export const SYNTHETIC_RESS_MENGE_KLASS = "RESS_MENGE_GROUP";
 export const SYNTHETIC_RESS_VERKN_KLASS = "RESS_VERKNUEPFUNG_GROUP";
+
+// Plan 01-08.
+export const SYNTHETIC_DLPL_BETRIEBSMITTEL_KLASS = "DLPL_BETRIEBSMITTEL_GROUP";
+export const SYNTHETIC_DLPL_PERSONAL_KLASS = "DLPL_PERSONAL_GROUP";
+export const SYNTHETIC_AEINSATZWUNSCH_KLASS = "AEINSATZWUNSCH_GROUP";
+export const SYNTHETIC_AKAPBED_KLASS = "AKAPBED_GROUP";
 
 // ---------------------------------------------------------------------------
 // Definition + Lookup-Map.
@@ -64,6 +76,59 @@ export const SYNTHETIC_MATRIX_NODES: SyntheticMatrixNode[] = [
     klass: SYNTHETIC_RESS_VERKN_KLASS,
     name: "Ressourcen-Verknuepfungen",
   },
+];
+
+/**
+ * Plan 01-08: Verknuepfungs-Sichten (Knoten ↔ Ressource), Cross-Tree-Editoren.
+ *
+ * Read-only in Phase 1 (siehe SUMMARY.md Plan 01-08): die echten
+ * Verknuepfungs-Objekte (PAssozBelegLink, etc.) sind im _SKIP-Set des
+ * otx_loaders — Edit-Funktion braucht eine Engine-Schema-Erweiterung
+ * (Phase 2 backlog).
+ */
+export const SYNTHETIC_LINKING_NODES: SyntheticMatrixNode[] = [
+  {
+    oid: SYNTHETIC_DLPL_BETRIEBSMITTEL_OID,
+    klass: SYNTHETIC_DLPL_BETRIEBSMITTEL_KLASS,
+    name: "Knoten ↔ Betriebsmittel",
+  },
+  {
+    oid: SYNTHETIC_DLPL_PERSONAL_OID,
+    klass: SYNTHETIC_DLPL_PERSONAL_KLASS,
+    name: "Knoten ↔ Personal",
+  },
+];
+
+/**
+ * Plan 01-08: Arbeitszeit-Sichten (Einsatz-Wunsch + Kapazitaetsbedarf).
+ *
+ * Phase 1 nutzt synthetische Folder-Knoten, weil das Backend
+ * AEinsatzWunsch/AKapBed aktuell nicht direkt liefert. Sobald echte
+ * Knoten dieser Klassen im Tree erscheinen, mountet der Viewer-Registry-
+ * Lookup denselben Viewer (Doppel-Registrierung auf echtem Klass-String).
+ */
+export const SYNTHETIC_ARBEITSZEIT_NODES: SyntheticMatrixNode[] = [
+  {
+    oid: SYNTHETIC_AEINSATZWUNSCH_OID,
+    klass: SYNTHETIC_AEINSATZWUNSCH_KLASS,
+    name: "Einsatz-Wunsch",
+  },
+  {
+    oid: SYNTHETIC_AKAPBED_OID,
+    klass: SYNTHETIC_AKAPBED_KLASS,
+    name: "Kapazitaetsbedarf",
+  },
+];
+
+/**
+ * Gesammelte synthetische Folder fuer den Sidebar-Tree (alle Welle-4-
+ * Sichten). Verwendet von sidebar-tree.tsx fuer den "Cross-Sichten"-Folder
+ * ueber Plan 06+08.
+ */
+export const SYNTHETIC_ALL_GROUP_NODES: SyntheticMatrixNode[] = [
+  ...SYNTHETIC_MATRIX_NODES,
+  ...SYNTHETIC_LINKING_NODES,
+  ...SYNTHETIC_ARBEITSZEIT_NODES,
 ];
 
 // ---------------------------------------------------------------------------
@@ -131,7 +196,9 @@ export function _clearSyntheticPropsForTests(): void {
  * oben); children sind leer (synthetisch).
  */
 export function getSyntheticNode(oid: number): OtxJsonNode | null {
-  const def = SYNTHETIC_MATRIX_NODES.find((s) => s.oid === oid);
+  // Suche in ALLEN synthetischen Folder-Listen (Plan 06 Matrix + Plan 08
+  // Verknuepfungs- und Arbeitszeit-Sichten).
+  const def = SYNTHETIC_ALL_GROUP_NODES.find((s) => s.oid === oid);
   if (!def) return null;
   return {
     oid: def.oid,

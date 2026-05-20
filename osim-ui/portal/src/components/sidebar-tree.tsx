@@ -13,12 +13,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Tree, type NodeApi, type NodeRendererProps } from "react-arborist";
 import { useModelStore } from "@/state/model-store";
 import type { OtxJsonNode } from "@/viewers/core/types";
-import { SYNTHETIC_MATRIX_NODES } from "@/viewers/matrix/synthetic-nodes";
+import {
+  SYNTHETIC_MATRIX_NODES,
+  SYNTHETIC_LINKING_NODES,
+  SYNTHETIC_ARBEITSZEIT_NODES,
+} from "@/viewers/matrix/synthetic-nodes";
 
 const GROUP_KLASS = "_group";
 const ROW_HEIGHT = 26;
 const INDENT_PX = 16;
 const MATRIX_FOLDER_ID = "synthetic:matrix-sichten";
+const LINKING_FOLDER_ID = "synthetic:verknuepfungs-sichten";
+const ARBEITSZEIT_FOLDER_ID = "synthetic:arbeitszeit-sichten";
 
 interface ArboristNode {
   /** react-arborist erwartet string-ids. */
@@ -152,7 +158,47 @@ export function SidebarTree({ height, width }: SidebarTreeProps) {
         unsupported: false,
       })),
     };
-    const newChildren = [...(root.children ?? []), matrixFolder];
+    // Plan 01-08: Verknuepfungs- und Arbeitszeit-Sichten parallel zur
+    // Matrix-Sichten-Gruppe. Drei separate Folder, weil sie semantisch
+    // unterschiedlich sind (Cross-Tree-Verknuepfungen vs Schicht-Modell).
+    const linkingFolder: ArboristNode = {
+      id: LINKING_FOLDER_ID,
+      oid: -10000,
+      klass: GROUP_KLASS,
+      name: "Verknuepfungs-Sichten",
+      isGroup: true,
+      unsupported: false,
+      children: SYNTHETIC_LINKING_NODES.map((s) => ({
+        id: `synthetic:${s.oid}`,
+        oid: s.oid,
+        klass: s.klass,
+        name: s.name,
+        isGroup: false,
+        unsupported: false,
+      })),
+    };
+    const arbeitszeitFolder: ArboristNode = {
+      id: ARBEITSZEIT_FOLDER_ID,
+      oid: -10000,
+      klass: GROUP_KLASS,
+      name: "Arbeitszeit-Sichten",
+      isGroup: true,
+      unsupported: false,
+      children: SYNTHETIC_ARBEITSZEIT_NODES.map((s) => ({
+        id: `synthetic:${s.oid}`,
+        oid: s.oid,
+        klass: s.klass,
+        name: s.name,
+        isGroup: false,
+        unsupported: false,
+      })),
+    };
+    const newChildren = [
+      ...(root.children ?? []),
+      matrixFolder,
+      linkingFolder,
+      arbeitszeitFolder,
+    ];
     return [{ ...root, children: newChildren }];
   }, [tree]);
 

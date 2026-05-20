@@ -400,5 +400,91 @@ registerKlass(
 // transparent ueber die echten Knoten-OIDs ins normale model-store-Update).
 registerKlass("PDurchlaufplanDesign", {}, {});
 
+// Plan 01-08: Verknuepfungs-Container + Arbeitszeit-Klassen.
+//
+// Synthetische Folder-Klassen fuer Cross-Tree-Editoren (analog Plan 01-06
+// RESS_*_GROUP). Phase 1 hat keine eigenen Edit-Properties auf diesen
+// synthetischen Wrappern — die Viewer rendern Matrix-Sichten ueber die
+// echten Knoten/Ressourcen.
+registerKlass("DLPL_BETRIEBSMITTEL_GROUP", {}, {});
+registerKlass("DLPL_PERSONAL_GROUP", {}, {});
+registerKlass("AEINSATZWUNSCH_GROUP", {}, {});
+registerKlass("AKAPBED_GROUP", {}, {});
+
+// Echte Arbeitszeit-Klassen. Backend liefert sie in Phase 1 nicht direkt,
+// aber wir registrieren Property-Listen fuer den Fall, dass AEinsatzWunsch/
+// AKapBed-Knoten in einer kuenftigen Backend-Erweiterung im Tree erscheinen
+// (analog Plan-05-Decision D-09 fuer AGruppe — Foundation fuer Phase 2).
+//
+// AEinsatzWunsch: Wunsch-Schicht-Praeferenzen pro Person/Gruppe ueber die
+// Woche. Properties aus AEinsatzWunschViewer.h Implementierungs-Hints +
+// OSim-Engine.
+registerKlass(
+  "AEinsatzWunsch",
+  {
+    m_sName: { type: "string", label: "Name" },
+    m_iWochentag: { type: "int", label: "Wochentag (0=Mo..6=So)" },
+    m_iStundenProWoche: { type: "int", label: "Stunden pro Woche" },
+  },
+  {
+    m_sName: "Neuer Einsatz-Wunsch",
+    m_iWochentag: 0,
+    m_iStundenProWoche: 40,
+  },
+);
+
+// AEinsatzzeitWunsch: Einzelner Wunsch-Slot innerhalb eines Tages.
+// Foundation fuer Phase 2 (echte Schicht-Wunsch-Datenmodell-Anbindung).
+registerKlass(
+  "AEinsatzzeitWunsch",
+  {
+    m_sName: { type: "string", label: "Name" },
+    m_iWochentag: { type: "int", label: "Wochentag (0..6)" },
+    m_iVon: { type: "int", label: "Von (Sekunden ab Mitternacht)" },
+    m_iBis: { type: "int", label: "Bis (Sekunden ab Mitternacht)" },
+  },
+  {
+    m_sName: "",
+    m_iWochentag: 0,
+    m_iVon: 28800,
+    m_iBis: 61200,
+  },
+);
+
+// AKapBed: Kapazitaetsbedarf-Aggregat ueber die Simulationsperioden.
+// In OSim2004 ist AKapBed ein berechnetes Ergebnis (siehe AKapBedViewer.h's
+// Algorithmen-Block) — Phase 1 macht eine read-only Tabellen-Sicht.
+registerKlass(
+  "AKapBed",
+  {
+    m_sName: { type: "string", label: "Name" },
+    m_iPeriode: { type: "int", label: "Periode (Index)" },
+    m_fBedarf: { type: "float", label: "Bedarf (Stunden/Person)" },
+    m_fVerfuegbar: { type: "float", label: "Verfuegbar (Stunden/Person)" },
+  },
+  {
+    m_sName: "",
+    m_iPeriode: 0,
+    m_fBedarf: 0,
+    m_fVerfuegbar: 0,
+  },
+);
+
+// ATagPerson: Einzel-Tag-Eintrag fuer eine Person (Brueckenklasse fuer
+// AKapBedViewer's Tag-/Periode-Aufschluesselung). Phase 1: nur Foundation.
+registerKlass(
+  "ATagPerson",
+  {
+    m_sName: { type: "string", label: "Name" },
+    m_iTag: { type: "int", label: "Tag (Index)" },
+    m_fStunden: { type: "float", label: "Stunden" },
+  },
+  {
+    m_sName: "",
+    m_iTag: 0,
+    m_fStunden: 0,
+  },
+);
+
 // Re-export fuer Komponenten-Konsumenten.
 export { registerTypeMetadata, getMetadataFor } from "@/viewers/core/OCtrl.types";

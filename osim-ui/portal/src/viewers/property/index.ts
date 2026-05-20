@@ -24,6 +24,10 @@ import "@/viewers/matrix";
 // Side-Effect-Import zum Aktivieren der Registry-Eintraege.
 import "@/viewers/design";
 
+// Verknuepfungs-Viewer (Plan 01-08): PDlplBetriebsmittel + PDlplPersonal.
+// Cross-Tree-Editoren Knoten × Ressource.
+import "@/viewers/linking";
+
 // Re-Exports fuer direkten Import in Tests / sonstigen Konsumenten.
 export { PGObjBaseViewer } from "./PGObjBaseViewer";
 export { PSimulatorViewer } from "./PSimulatorViewer";
