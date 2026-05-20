@@ -27,16 +27,20 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 # Stelle sicher, dass Tests die Test-DB nehmen, BEVOR app.core.config Settings baut.
-TEST_DATABASE_URL = os.environ.setdefault(
-    "DATABASE_URL",
-    os.environ.get(
-        "TEST_DATABASE_URL",
-        "postgresql+asyncpg://osim_dev:osim_dev_password@localhost:5432/osim_ui_test",
-    ),
+# WICHTIG: Wir FORCE-override DATABASE_URL, weil sonst eine Shell-Variable aus
+# einem anderen Projekt (z.B. tbx_stzrim mit psycopg-Dialekt) hier
+# durchschlaegt und SQLAlchemy einen falschen Driver-Lookup macht.
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://osim_dev:osim_dev_password@localhost:5432/osim_ui_test",
 )
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("FIREBASE_PROJECT_ID", "osim-dev")
 os.environ.setdefault("FIREBASE_AUTH_EMULATOR_HOST", "localhost:9099")
 os.environ.setdefault("ENVIRONMENT", "test")
+# Storage: lokal in einem temp-Dir, damit Tests sich nicht ueber die echte
+# ./local-storage-Hierarchie ins Knie schiessen.
+os.environ.setdefault("STORAGE_BACKEND", "local")
 
 
 # --- DB-Availability-Probe --------------------------------------------------
@@ -140,10 +144,22 @@ async def db_engine() -> AsyncGenerator[AsyncEngine]:
     # WICHTIG: Modelle muessen importiert sein, damit Base.metadata sie kennt.
     import app.models  # noqa: F401
     from app.core.database import Base
+    from app.services.storage import reset_storage_singleton
 
     engine = create_async_engine(TEST_DATABASE_URL, pool_pre_ping=True)
 
-    # Saubere Ausgangslage: alle Tenant-Schemata + public.tenants/users droppen.
+    # Public-scoped Tabellen vs. Tenant-scoped Tabellen unterscheiden:
+    # - Public (Tenant, User) haben __table_args__ = {"schema": "public"}.
+    # - Tenant-scoped (Model, ModelVersion, EditLock) haben schema=None;
+    #   sie werden zur Laufzeit per tenant_service._create_tenant_schema_tables
+    #   im jeweiligen tenant_{slug}-Schema angelegt -- NICHT in public!
+    public_tables = [
+        t for t in Base.metadata.sorted_tables
+        if t.schema in (None, "public") and t.schema == "public"
+    ]
+    # Saubere Ausgangslage: alle Tenant-Schemata droppen + public-Tabellen
+    # neu anlegen. Storage-Singleton resetten, damit Tests fresh starten.
+    reset_storage_singleton()
     async with engine.begin() as conn:
         # Drop bekannte Tenant-Schemata (alles ausser system + public).
         await conn.execute(
@@ -162,8 +178,18 @@ async def db_engine() -> AsyncGenerator[AsyncEngine]:
                 """
             )
         )
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+        # Nur die public-Tabellen droppen/anlegen. Tenant-Tabellen werden
+        # spaeter pro Tenant ueber _create_tenant_schema_tables erzeugt.
+        await conn.run_sync(
+            lambda sync_conn: Base.metadata.drop_all(
+                sync_conn, tables=public_tables
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: Base.metadata.create_all(
+                sync_conn, tables=public_tables
+            )
+        )
 
     try:
         yield engine

@@ -26,6 +26,10 @@ dependencies = [
     "google-cloud-storage>=3.0",
     "google-cloud-pubsub>=2.0",
     "websockets>=14.0",
+    # Multipart-Body-Parser für FastAPI-File-Uploads (UploadFile).
+    "python-multipart>=0.0.9",
+    # Async S3-kompatibler Storage-Client (für Minio in Dev, GCS-S3-API in Prod).
+    "aioboto3>=13.0",
     # osim-engine als editable-install aus dem Monorepo-Subfolder.
     # Wird über [tool.uv.sources] aufgelöst.
     "osim-engine",
@@ -66,7 +70,8 @@ ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "db/migrations/versions/*" = ["E501"]
-"tests/*" = ["E501", "E702"]  # E702: multiple statements -- in Tests OK fuer mock-Setup
+# B008 (Depends-as-default), E501 (long doc-strings), E702 (mock-Setup) sind in Tests OK.
+"tests/*" = ["B008", "E501", "E702"]
 # B008: FastAPI nutzt Depends() als Default-Argument bewusst.
 "app/api/**/*.py" = ["B008"]
 "app/api/v1/health.py" = ["B008"]

@@ -14,14 +14,15 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-# App-Settings + Metadata einziehen (sys.path wird durch alembic.ini prepend_sys_path = ../ gesetzt).
-from app.core.config import settings
-from app.core.database import Base
-
 # Trigger Model-Discovery -- damit autogenerate alle Tabellen sieht.
 # (Modelle werden in Plan 01-02 Task 2 angelegt; Import ist hier ein no-op
 # wenn die Models noch nicht existieren.)
 import app.models  # noqa: F401
+
+# App-Settings + Metadata einziehen.
+# sys.path wird durch alembic.ini prepend_sys_path = ../ gesetzt.
+from app.core.config import settings
+from app.core.database import Base
 
 config = context.config
 
@@ -49,6 +50,23 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _include_object_only_public(  # noqa: ANN001
+    object_, name, type_, reflected, compare_to,
+) -> bool:
+    """Filter: Alembic kuemmert sich nur um Tabellen im public-Schema.
+
+    Tenant-scoped Tabellen (Model, ModelVersion, EditLock) haben in der
+    SQLAlchemy-Metadata kein schema-Attribut und werden zur Laufzeit pro
+    Tenant ueber ``tenant_service._create_tenant_schema_tables`` angelegt.
+    Sie duerfen NICHT von alembic autogenerate ins public-Schema migriert
+    werden -- daher dieser Filter.
+    """
+    if type_ == "table":
+        schema = getattr(object_, "schema", None)
+        return schema == "public"
+    return True
+
+
 def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
@@ -56,6 +74,7 @@ def do_run_migrations(connection: Connection) -> None:
         compare_type=True,
         compare_server_default=True,
         include_schemas=True,
+        include_object=_include_object_only_public,
     )
     with context.begin_transaction():
         context.run_migrations()

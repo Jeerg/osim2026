@@ -17,14 +17,21 @@ import hashlib
 import re
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import MetaData, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import text
 
 from app.core.database import SCHEMA_PATTERN
+from app.models.edit_lock import EditLock
+from app.models.model import Model
+from app.models.model_version import ModelVersion
 from app.models.tenant import Tenant
 from app.models.user import User
+
+# Schema-lokale Tabellen, die pro Tenant einmal angelegt werden muessen.
+# Reihenfolge ist relevant (FK-Kette: model_versions -> models -> edit_locks).
+_TENANT_SCOPED_TABLES = (Model, ModelVersion, EditLock)
 
 logger = structlog.get_logger(__name__)
 
@@ -92,6 +99,10 @@ async def ensure_tenant_bootstrap(
         # Requests parallel das Schema anlegen wollen koennten.
         await db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{tenant_id}"'))
 
+        # Tenant-scoped Tabellen (models, model_versions, edit_locks) im neuen
+        # Schema anlegen. Idempotent dank checkfirst=True.
+        await _create_tenant_schema_tables(db, tenant_id)
+
         tenant = Tenant(
             id=tenant_id,
             owner_uid=uid,
@@ -133,3 +144,57 @@ async def ensure_tenant_bootstrap(
             )
         ).scalar_one()
         return tenant_row, user_row
+
+
+async def _create_tenant_schema_tables(db: AsyncSession, tenant_id: str) -> None:
+    """Legt die Tenant-scoped Tabellen (models, model_versions, edit_locks)
+    im angegebenen Tenant-Schema an.
+
+    Strategie: Wir bauen eine *frische* MetaData, klonen die Table-Definitionen
+    aus ``Base.metadata`` per ``Table.to_metadata(schema=tenant_id)`` und
+    rufen ``metadata.create_all(connection, checkfirst=True)``. Damit landet
+    die DDL deterministisch im richtigen Schema, ohne ``Base.metadata`` zu
+    mutieren (Multi-Tenant-Safe).
+
+    Idempotenz: ``checkfirst=True`` skipt bereits existierende Tabellen --
+    der zweite ``ensure_tenant_bootstrap``-Call eines Users (oder ein
+    Race-Resolved-Pfad) ist ungefaehrlich.
+
+    Args:
+        db: AsyncSession (typischerweise ``get_db_unscoped``).
+        tenant_id: Ziel-Schema (whitelisted via SCHEMA_PATTERN -- Caller
+                  ist verantwortlich).
+    """
+    if not SCHEMA_PATTERN.match(tenant_id):  # defensive
+        raise ValueError(f"Unsafe tenant_id: {tenant_id!r}")
+
+    target = MetaData(schema=tenant_id)
+    for model_cls in _TENANT_SCOPED_TABLES:
+        # to_metadata kopiert die Table-Definition + Constraints in den
+        # Ziel-Namespace mit explizitem schema-Override.
+        model_cls.__table__.to_metadata(target, schema=tenant_id)
+
+    # create_all braucht eine sync-Connection -- bei async-Session per
+    # connection().run_sync(...) ausfuehren.
+    conn = await db.connection()
+    await conn.run_sync(
+        lambda sync_conn: target.create_all(sync_conn, checkfirst=True)
+    )
+
+
+async def drop_tenant_schema_tables(db: AsyncSession, tenant_id: str) -> None:
+    """Spiegel zu ``_create_tenant_schema_tables`` -- droppt die Tenant-
+    scoped Tabellen. Aktuell ungenutzt im Produktivpfad; nuetzlich fuer
+    Tests und zukuenftige Tenant-Loeschung.
+    """
+    if not SCHEMA_PATTERN.match(tenant_id):
+        raise ValueError(f"Unsafe tenant_id: {tenant_id!r}")
+
+    target = MetaData(schema=tenant_id)
+    for model_cls in _TENANT_SCOPED_TABLES:
+        model_cls.__table__.to_metadata(target, schema=tenant_id)
+
+    conn = await db.connection()
+    await conn.run_sync(
+        lambda sync_conn: target.drop_all(sync_conn, checkfirst=True)
+    )
