@@ -53,9 +53,9 @@ Plans:
 - [x] 01-03: Modell-CRUD (Storage, OTX-Roundtrip, JSON-Tree-Service, Edit-Lock)
 - [x] 01-04: Viewer-Foundation TypeScript (ViewerFrame/ClientCtrl + 9er OCtrl-Familie)
 - [x] 01-05: Sidebar-Tree + 4 Property-Viewer (PSimulator, PDurchlaufplan-Std, PGObjBase, AGruppe)
-- [ ] 01-06: 3 Matrix-Viewer (RessBeleg, RessMenge, RessVerknuepfung)
-- [ ] 01-07: PDurchlaufplan-Design + GraphObject-Foundation-Skelett
-- [ ] 01-08: 4 Verknüpfungs-/Arbeitszeit-Viewer (PDlplBetriebsmittel, PDlplPersonal, AEinsatzWunsch, AKapBed)
+- [x] 01-06: 3 Matrix-Viewer (RessBeleg, RessMenge, RessVerknuepfung)
+- [x] 01-07: PDurchlaufplan-Design + GraphObject-Foundation-Skelett
+- [x] 01-08: 4 Verknüpfungs-/Arbeitszeit-Viewer (PDlplBetriebsmittel, PDlplPersonal, AEinsatzWunsch, AKapBed)
 - [ ] 01-09: Save-Mechanik (IndexedDB, Auto-Save 30s, Lock-Heartbeat, Recovery)
 - [ ] 01-10: Integration-Tests, Playwright-E2E, manuelle Abnahme, Doku
 
