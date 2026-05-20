@@ -16,18 +16,21 @@ services:
       retries: 10
 
   firebase-emulator:
-    image: node:20-slim
-    working_dir: /app
-    ports:
-      - "9099:9099"  # auth
-      - "4000:4000"  # emulator UI
-    volumes:
-      - ./infra/firebase:/app
+    # Offizielles Image -- kein NPM-Install bei jedem Start (vs. node:20-slim).
+    image: andreysenov/firebase-tools:latest
     command: >
-      sh -c "
-        npm install -g firebase-tools &&
-        firebase emulators:start --project osim-dev --only auth
-      "
+      firebase emulators:start
+      --project osim-dev
+      --only auth
+      --host 0.0.0.0
+    ports:
+      - "9099:9099"  # Auth-Emulator
+      - "4000:4000"  # Emulator UI
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9099/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   minio:
     # lokaler Object-Storage-Emulator (GCS-kompatibel über S3-API)
@@ -42,7 +45,7 @@ services:
     volumes:
       - miniodata:/data
 
-  # Anwendungs-Services werden in Phase 1 erst hinzugefügt:
+  # Anwendungs-Services werden später ergänzt:
   # api:
   #   build: .
   #   ports: ["8000:8080"]
@@ -52,6 +55,8 @@ services:
   #     FIREBASE_AUTH_EMULATOR_HOST: firebase-emulator:9099
   #   depends_on:
   #     postgres:
+  #       condition: service_healthy
+  #     firebase-emulator:
   #       condition: service_healthy
   #
   # portal:

@@ -26,8 +26,9 @@ dependencies = [
     "google-cloud-storage>=3.0",
     "google-cloud-pubsub>=2.0",
     "websockets>=14.0",
-    # osim-engine wird als editable-install per Workspace eingezogen
-    # "osim-engine @ file:///${PROJECT_ROOT}/../osim-engine",
+    # osim-engine als editable-install aus dem Monorepo-Subfolder.
+    # Wird über [tool.uv.sources] aufgelöst.
+    "osim-engine",
 ]
 
 [dependency-groups]
@@ -37,8 +38,12 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.8",
     "mypy>=1.13",
-    "httpx>=0.28",  # für TestClient
+    "httpx>=0.28",  # für TestClient / AsyncClient
+    "aiosqlite>=0.20",  # für Alembic-Smoke-Tests auf SQLite
 ]
+
+[tool.uv.sources]
+osim-engine = { path = "../engine", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
@@ -46,6 +51,9 @@ packages = ["app"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: marks tests that require the Firebase emulator or live services",
+]
 
 [tool.ruff]
 line-length = 100
@@ -54,6 +62,10 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC"]
 ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"db/migrations/versions/*" = ["E501"]
+"tests/*" = ["E501"]
 
 [tool.mypy]
 python_version = "3.13"
