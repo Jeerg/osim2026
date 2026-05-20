@@ -56,7 +56,7 @@ Plans:
 - [x] 01-06: 3 Matrix-Viewer (RessBeleg, RessMenge, RessVerknuepfung)
 - [x] 01-07: PDurchlaufplan-Design + GraphObject-Foundation-Skelett
 - [x] 01-08: 4 Verknüpfungs-/Arbeitszeit-Viewer (PDlplBetriebsmittel, PDlplPersonal, AEinsatzWunsch, AKapBed)
-- [ ] 01-09: Save-Mechanik (IndexedDB, Auto-Save 30s, Lock-Heartbeat, Recovery)
+- [x] 01-09: Save-Mechanik (IndexedDB, Auto-Save 30s, Lock-Heartbeat, Recovery)
 - [ ] 01-10: Integration-Tests, Playwright-E2E, manuelle Abnahme, Doku
 
 ### Phase 2: JSON Editor (kombiniert: Sim-Lauf + Schema + Form-Editor)
