@@ -1184,6 +1184,101 @@ register_handler("EPEntKrzKapazitaetsVeraenderung")(
 
 
 # ----------------------------------------------------------------------
+# Phase-5-J: ACOAnt (Auslöser, PAusloeser.odh:253-300)
+# ----------------------------------------------------------------------
+
+
+@register_handler("ACOAnt")
+class _ACOAntHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.pps.ausloeser.aco_ant import ACOAnt
+        a = ACOAnt(loader.simulator)
+        copy_scalars(a, obj, (
+            "m_sName", "m_iBeginTermin", "m_iPlanZeit", "m_iRealeAuftragsdauer",
+        ))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        py.m_lDlpl = resolve_ref(loader, obj, "m_lDlpl")
+        for p in resolve_list(loader, obj, "m_lParameter"):
+            py.m_lParameter.append(p)
+        for d in resolve_list(loader, obj, "m_lACODlpl"):
+            if d not in py.m_lACODlpl:
+                py.m_lACODlpl.append(d)
+
+
+# ----------------------------------------------------------------------
+# Phase-5-K: ACOClasses (ACOClasses.{odh,cpp})
+# ----------------------------------------------------------------------
+
+
+@register_handler("ACOSplit")
+class _ACOSplitHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.aco import ACOSplit
+        k = ACOSplit(loader.simulator)
+        copy_scalars(k, obj, ("m_sName", "m_eRessUsage"))
+        return k
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for ref_attr in ("m_lKanteEin", "m_lKanteAus", "m_lKnotenOber", "m_lVerteil"):
+            v = resolve_ref(loader, obj, ref_attr)
+            if v is not None:
+                setattr(py, ref_attr, v)
+        for d in resolve_list(loader, obj, "m_lDlpl"):
+            if d not in py.m_lDlpl:
+                py.m_lDlpl.append(d)
+
+
+@register_handler("ACOLogik")
+class _ACOLogikHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.aco import ACOLogik
+        k = ACOLogik(loader.simulator)
+        copy_scalars(k, obj, ("m_sName", "m_eRessUsage"))
+        return k
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for ref_attr in ("m_lKanteEin", "m_lKanteAus", "m_lKnotenOber", "m_lVerteil"):
+            v = resolve_ref(loader, obj, ref_attr)
+            if v is not None:
+                setattr(py, ref_attr, v)
+        for d in resolve_list(loader, obj, "m_lDlpl"):
+            if d not in py.m_lDlpl:
+                py.m_lDlpl.append(d)
+
+
+@register_handler("ACODpKnSplit")
+class _ACODpKnSplitHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.aco import ACODpKnSplit
+        k = ACODpKnSplit(loader.simulator)
+        copy_scalars(k, obj, ("m_sName", "m_iDfzProEinheit", "m_iRuestzeit"))
+        return k
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for ref_attr in ("m_lKanteEin", "m_lKanteAus", "m_lKnotenOber"):
+            v = resolve_ref(loader, obj, ref_attr)
+            if v is not None:
+                setattr(py, ref_attr, v)
+
+
+@register_handler("ACOReihenfolge")
+class _ACOReihenfolgeHandler(ClassHandler):
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.decisions.aco import ACOReihenfolge
+        k = ACOReihenfolge(loader.simulator)
+        copy_scalars(k, obj, ("m_sName", "m_iDfzProEinheit", "m_iRuestzeit"))
+        return k
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for ref_attr in ("m_lKanteEin", "m_lKanteAus", "m_lKnotenOber"):
+            v = resolve_ref(loader, obj, ref_attr)
+            if v is not None:
+                setattr(py, ref_attr, v)
+
+
+# ----------------------------------------------------------------------
 # Phase-5-B: EPAslEntAufExtern (Auslöser-Entscheider)
 # ----------------------------------------------------------------------
 
