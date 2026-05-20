@@ -6,7 +6,17 @@ import tseslint from "typescript-eslint";
 import { defineConfig, globalIgnores } from "eslint/config";
 
 export default defineConfig([
-  globalIgnores(["dist", "src/routeTree.gen.ts"]),
+  globalIgnores([
+    "dist",
+    "src/routeTree.gen.ts",
+    // Playwright-E2E-Tests werden NICHT mit dem App-Lint geprueft --
+    // sie laufen in Node, nicht im Browser, und nutzen das @playwright/test-
+    // eigene Test-Pattern (test.beforeEach, page.locator etc.).
+    "e2e/",
+    "playwright.config.ts",
+    "playwright-report/",
+    "test-results/",
+  ]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [

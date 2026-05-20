@@ -19,5 +19,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test-setup.ts"],
     css: false,
+    // Playwright-Tests (e2e/) NICHT mit vitest sammeln -- die laufen mit
+    // `npm run test:e2e` (siehe playwright.config.ts). Vitest fokussiert
+    // sich auf Unit-/Component-Tests unter src/.
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    exclude: ["node_modules", "dist", "e2e", "playwright-report", "test-results"],
   },
 });

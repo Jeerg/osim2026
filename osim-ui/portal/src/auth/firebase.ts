@@ -4,10 +4,15 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator, type Auth } from "firebase/auth";
 
+// Project-ID MUSS mit dem Backend (app/core/config.py: firebase_project_id)
+// uebereinstimmen -- Tokens im Emulator haben "aud" = projectId und das
+// Backend verifiziert sie gegen die eigene firebase_project_id. Plan 01-10
+// (E2E-Tests) hat diesen Mismatch zuerst dokumentiert: Defaults waren
+// divergent (Frontend "osim-ui-dev" vs. Backend "osim-dev" aus .env.example).
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? "demo-api-key",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? "osim-ui-dev.local",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? "osim-ui-dev",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? "osim-dev.local",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? "osim-dev",
 };
 
 const app = initializeApp(firebaseConfig);

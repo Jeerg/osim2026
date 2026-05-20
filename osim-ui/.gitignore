@@ -76,3 +76,9 @@ Thumbs.db
 data/
 uploads/
 local-storage/
+
+# Playwright artifacts (Plan 01-10)
+portal/playwright-report/
+portal/test-results/
+portal/blob-report/
+portal/playwright/.cache/
