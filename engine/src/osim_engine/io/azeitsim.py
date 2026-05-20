@@ -167,6 +167,7 @@ def run_azeitsim(
     boot_timeout: float = 10.0,
     run_timeout: float = 120.0,
     stable_polls: int = 4,
+    min_sim_duration: int = 0,
 ) -> RunResult:
     """Führt AZeitSim.exe auf einer Kopie der `input_otx` aus.
 
@@ -217,7 +218,8 @@ def run_azeitsim(
         steuerung_hwnd = _open_steuerung(main_hwnd, timeout=5.0)
         _start_simulation(steuerung_hwnd)
         duration, events = _wait_for_completion(
-            steuerung_hwnd, timeout=run_timeout, stable_polls=stable_polls
+            steuerung_hwnd, timeout=run_timeout, stable_polls=stable_polls,
+            min_sim_duration=min_sim_duration,
         )
         _save_otx(main_hwnd, working_otx)
         wall_seconds = time.perf_counter() - wall_start
@@ -288,9 +290,18 @@ def _parse_int_or_none(s: str | None) -> int | None:
 
 
 def _wait_for_completion(
-    steuerung_hwnd: int, *, timeout: float, stable_polls: int
+    steuerung_hwnd: int, *, timeout: float, stable_polls: int,
+    min_sim_duration: int = 0,
 ) -> tuple[int | None, int | None]:
-    """Pollt das Steuerungsfenster, bis die Event-Zahl stabil ist."""
+    """Pollt das Steuerungsfenster, bis die Event-Zahl stabil ist.
+
+    Args:
+        min_sim_duration: Mindest-Sim-Zeit (in Sekunden) bis "stable" als
+            Stopp-Signal akzeptiert wird. Ohne diesen Guard erkennt das
+            Polling bei m_bIsEntAktiv=True-Modellen sehr früh "fertig",
+            weil zwischen den Entscheider-Auslösungen kaum Events anfallen.
+            Default 0 = sofort akzeptieren (kompatibel mit alten Aufrufern).
+    """
     deadline = time.perf_counter() + timeout
     last_events: int | None = None
     stable = 0
@@ -308,7 +319,8 @@ def _wait_for_completion(
         )
         if events == last_events and events is not None and events > 0:
             stable += 1
-            if stable >= stable_polls:
+            # Stable nur akzeptieren wenn Sim-Zeit mindestens min_sim_duration
+            if stable >= stable_polls and (duration or 0) >= min_sim_duration:
                 return duration, events
         else:
             stable = 0
@@ -317,22 +329,41 @@ def _wait_for_completion(
     return duration, events
 
 
-def _save_otx(main_hwnd: int, expected_path: Path) -> None:
-    """Sendet ID_FILE_SAVE und wartet, bis die Datei modifiziert wurde."""
+def _save_otx(main_hwnd: int, expected_path: Path, timeout: float = 60.0) -> None:
+    """Sendet ID_FILE_SAVE und wartet, bis die Datei modifiziert wurde.
+
+    Args:
+        timeout: Maximale Wartezeit auf mtime-Änderung. Default 60s
+            (Bosch2-OTX hat 18 MB und braucht spürbar länger als kleine
+            Modelle). Für sehr große Modelle ggf. weiter erhöhen.
+
+    Nach Erkennung der mtime-Änderung wird gewartet, bis die Datei-
+    Größe sich für 1s stabil hält (Indikator für abgeschlossenen Write).
+    """
     mtime_before = expected_path.stat().st_mtime
     _post_command(main_hwnd, ID_FILE_SAVE)
-    deadline = time.perf_counter() + 5.0
+    deadline = time.perf_counter() + timeout
     while time.perf_counter() < deadline:
         time.sleep(0.2)
         try:
             if expected_path.stat().st_mtime > mtime_before:
-                # Noch kurz warten, bis der Write vollständig ist
-                time.sleep(0.3)
+                # Warten bis Datei-Größe stabil → Write abgeschlossen
+                last_size = -1
+                stable_since = time.perf_counter()
+                while time.perf_counter() - stable_since < 1.0:
+                    time.sleep(0.2)
+                    try:
+                        size = expected_path.stat().st_size
+                    except FileNotFoundError:
+                        continue
+                    if size != last_size:
+                        last_size = size
+                        stable_since = time.perf_counter()
                 return
         except FileNotFoundError:
             pass
     raise RuntimeError(
-        f"Save-Operation hat OTX nicht modifiziert: {expected_path}"
+        f"Save-Operation hat OTX nicht modifiziert (timeout={timeout}s): {expected_path}"
     )
 
 
