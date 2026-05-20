@@ -1,4 +1,5 @@
 // Plan 01-05 Task 3: PDurchlaufplanViewer-Standard.
+// Plan 01-07 Task 2: Tab-Switch Standard/Design (additiv erweitert).
 //
 // Portierung von PDlplViewerStd.h (C++). Zeigt die Plan-Properties +
 // zwei Sub-Tabellen (Knoten / Kanten). Der Backend-Tree wraps die
@@ -8,12 +9,19 @@
 // Add/Remove fuer Knoten/Kanten geht via onMethodCall("addChild", [klass])
 // und onMethodCall("removeChild", [oid]) — der ViewerHost (Plan 05 Task 3)
 // routet diese Methoden auf model-store.addChildSkeleton/removeNode.
+//
+// Plan 01-07: Der Standard-Viewer rahmt jetzt einen Tab-Switch (Standard /
+// Design); im Design-Modus wird die PDurchlaufplanViewerDesign-Komponente
+// (graphisch, reactflow) angezeigt. Beide Modi teilen das gleiche obj.
 
+import { useState } from "react";
 import { useChildDialog } from "@/viewers/core/ChildDialog";
 import { OCtrlVariable } from "@/viewers/octrl";
 import { registerViewer } from "@/viewers/core/viewer-registry";
+import { PDurchlaufplanViewerDesign } from "@/viewers/design/PDurchlaufplanViewerDesign";
 import type {
   ChildDialogComponent,
+  ChildDialogProps,
   OtxJsonNode,
 } from "@/viewers/core/types";
 
@@ -140,7 +148,12 @@ function formatPropertyValue(v: unknown): string {
   return String(v);
 }
 
-export const PDurchlaufplanViewerStd: ChildDialogComponent = ({ obj }) => {
+/**
+ * Standard-Modus: Properties + Knoten-/Kanten-Tabellen.
+ * Extrahiert aus dem urspruenglichen PDurchlaufplanViewerStd, damit der
+ * Tab-Switch beide Modi mounten kann.
+ */
+function PDurchlaufplanStandardMode({ obj }: ChildDialogProps) {
   // Achtung: Add/Remove muss am PARENT-Knoten der Sub-Liste hängen, nicht
   // an der _group. Aber: Im Backend ist die _group nur eine virtuelle
   // Konstruktion — der echte Parent ist der Durchlaufplan. addChild
@@ -154,16 +167,7 @@ export const PDurchlaufplanViewerStd: ChildDialogComponent = ({ obj }) => {
   const kaGroup = findGroup(obj, "Kanten");
 
   return (
-    <div className="p-6" data-testid="pdurchlaufplan-viewer-std">
-      <header className="mb-4 border-b border-gray-200 pb-2">
-        <h2 className="text-lg font-semibold text-gray-800">
-          Durchlaufplan: {obj.name}
-        </h2>
-        <p className="text-xs text-gray-500">
-          PDurchlaufplan · OID <code>{obj.oid}</code>
-        </p>
-      </header>
-
+    <div className="p-6" data-testid="pdurchlaufplan-viewer-std-mode-standard">
       <section className="mb-6 max-w-2xl">
         <h3 className="mb-2 text-sm font-semibold text-gray-700">
           Plan-Properties
@@ -205,6 +209,66 @@ export const PDurchlaufplanViewerStd: ChildDialogComponent = ({ obj }) => {
           ]}
         />
       </section>
+    </div>
+  );
+}
+
+type ViewerMode = "standard" | "design";
+
+export const PDurchlaufplanViewerStd: ChildDialogComponent = (props) => {
+  const { obj } = props;
+  const [mode, setMode] = useState<ViewerMode>("standard");
+
+  return (
+    <div
+      className="flex h-full flex-col"
+      data-testid="pdurchlaufplan-viewer-std"
+    >
+      <header className="border-b border-gray-200 px-6 pb-2 pt-4">
+        <h2 className="text-lg font-semibold text-gray-800">
+          Durchlaufplan: {obj.name}
+        </h2>
+        <p className="text-xs text-gray-500">
+          PDurchlaufplan · OID <code>{obj.oid}</code>
+        </p>
+        <div className="mt-3 flex gap-1 border-b border-transparent">
+          <button
+            type="button"
+            onClick={() => setMode("standard")}
+            className={[
+              "border-b-2 px-3 py-1 text-xs",
+              mode === "standard"
+                ? "border-blue-600 font-semibold text-blue-700"
+                : "border-transparent text-gray-600 hover:text-gray-800",
+            ].join(" ")}
+            data-testid="pdurchlaufplan-tab-standard"
+            aria-pressed={mode === "standard"}
+          >
+            Standard
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("design")}
+            className={[
+              "border-b-2 px-3 py-1 text-xs",
+              mode === "design"
+                ? "border-blue-600 font-semibold text-blue-700"
+                : "border-transparent text-gray-600 hover:text-gray-800",
+            ].join(" ")}
+            data-testid="pdurchlaufplan-tab-design"
+            aria-pressed={mode === "design"}
+          >
+            Design
+          </button>
+        </div>
+      </header>
+      <div className="flex-1 overflow-auto">
+        {mode === "standard" ? (
+          <PDurchlaufplanStandardMode {...props} />
+        ) : (
+          <PDurchlaufplanViewerDesign {...props} />
+        )}
+      </div>
     </div>
   );
 };

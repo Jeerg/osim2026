@@ -20,6 +20,10 @@ import "./AGruppeViewer";
 // aktiviert. Spaetere Plan-07/Plan-08-Viewer schliessen analog an.
 import "@/viewers/matrix";
 
+// Design-Viewer (Plan 01-07). Analog Matrix-Viewer: eigener Folder,
+// Side-Effect-Import zum Aktivieren der Registry-Eintraege.
+import "@/viewers/design";
+
 // Re-Exports fuer direkten Import in Tests / sonstigen Konsumenten.
 export { PGObjBaseViewer } from "./PGObjBaseViewer";
 export { PSimulatorViewer } from "./PSimulatorViewer";

@@ -393,5 +393,12 @@ registerKlass(
   { m_sName: "Neue Gruppe", m_sBeschreibung: "" },
 );
 
+// Plan 01-07: Synthetische Klasse fuer den Design-Modus eines Durchlauf-
+// plans. Wird vom Tab-Switch in PDurchlaufplanViewerStd ueber die
+// viewer-registry geholt; hat keine eigenen Edit-Properties (der Design-
+// Viewer rendert die Knoten/Kanten visuell, Edit-Operationen laufen
+// transparent ueber die echten Knoten-OIDs ins normale model-store-Update).
+registerKlass("PDurchlaufplanDesign", {}, {});
+
 // Re-export fuer Komponenten-Konsumenten.
 export { registerTypeMetadata, getMetadataFor } from "@/viewers/core/OCtrl.types";
