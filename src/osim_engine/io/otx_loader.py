@@ -742,6 +742,42 @@ class _PTagesEinsatzzeitHandler(ClassHandler):
 # ----------------------------------------------------------------------
 
 
+@register_handler("PAssozRessEnt")
+class _PAssozRessEntHandler(ClassHandler):
+    """P5-G: Entscheider-aware Belegungs-Assoz (cpp:21-111)."""
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.assoziation.ent_beleg import PAssozRessEnt
+        a = PAssozRessEnt(loader.simulator)
+        copy_scalars(a, obj, ("m_sName",))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for ress in resolve_list(loader, obj, "m_lRessBeleg"):
+            if ress not in py.m_lRessBeleg if hasattr(py, "m_lRessBeleg") else True:
+                if hasattr(py, "m_lRessBeleg") and isinstance(py.m_lRessBeleg, list):
+                    py.m_lRessBeleg.append(ress)
+                py.m_lRessourcen.append(ress)
+
+
+@register_handler("PAssozELogikEnt")
+class _PAssozELogikEntHandler(ClassHandler):
+    """P5-G: Entscheider-aware ELogik-Belegungs-Assoz."""
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.assoziation.ent_beleg import PAssozELogikEnt
+        a = PAssozELogikEnt(loader.simulator)
+        copy_scalars(a, obj, ("m_sName",))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        for ress in resolve_list(loader, obj, "m_lRessBeleg"):
+            if hasattr(py, "m_lRessBeleg") and isinstance(py.m_lRessBeleg, list):
+                if ress not in py.m_lRessBeleg:
+                    py.m_lRessBeleg.append(ress)
+            py.m_lRessourcen.append(ress)
+
+
 @register_handler("PAssozBeleg")
 class _PAssozBelegHandler(ClassHandler):
     def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
