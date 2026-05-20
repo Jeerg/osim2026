@@ -28,6 +28,10 @@ import "@/viewers/design";
 // Cross-Tree-Editoren Knoten × Ressource.
 import "@/viewers/linking";
 
+// Arbeitszeit-Viewer (Plan 01-08): AEinsatzWunsch + AKapBed. Schicht-/
+// Kapazitaets-Sichten.
+import "@/viewers/arbeitszeit";
+
 // Re-Exports fuer direkten Import in Tests / sonstigen Konsumenten.
 export { PGObjBaseViewer } from "./PGObjBaseViewer";
 export { PSimulatorViewer } from "./PSimulatorViewer";
