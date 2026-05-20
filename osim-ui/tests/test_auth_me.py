@@ -167,6 +167,74 @@ def test_unauthenticated_request_returns_401_problem_detail() -> None:
     assert "Missing" in body["detail"] or "Authorization" in body["detail"]
 
 
+def test_search_path_is_set_per_tenant_request(db_engine: AsyncEngine) -> None:
+    """Nach Bootstrap setzt get_db den search_path auf tenant_{slug},public.
+
+    Wir wiring uns einen Probe-Endpoint live in die App und rufen ihn mit
+    tenant_id-Claim auf.
+    """
+    from fastapi import Depends
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.auth.dependencies import get_tenant_id
+    from app.core.database import get_db
+
+    # Bootstrap erst.
+    uid = "searchtest1"
+    email = "s@example.com"
+    client, (p1, p2) = _client_with_token(uid, email)
+    p1.start(); p2.start()
+    try:
+        r0 = client.post("/api/v1/auth/me", headers={"Authorization": "Bearer fake-token"})
+    finally:
+        p1.stop(); p2.stop()
+    assert r0.status_code == 200
+    expected_tid = r0.json()["tenant_id"]
+
+    async def _probe(
+        db: AsyncSession = Depends(get_db),
+        tid: str = Depends(get_tenant_id),
+    ):
+        r = await db.execute(text("SHOW search_path"))
+        return {"tenant_id": tid, "search_path": r.scalar_one()}
+
+    # Wenn der Endpoint schon registriert ist (vom vorherigen Test), nicht
+    # doppelt mounten -- FastAPI duplicate-routes werfen sonst.
+    paths = {getattr(r, "path", "") for r in app.routes}
+    if "/__probe_search_path__" not in paths:
+        app.add_api_route("/__probe_search_path__", _probe, methods=["GET"])
+
+    # Mock liefert jetzt einen Token MIT tenant_id-Claim.
+    decoded_with_tid = {
+        "uid": uid,
+        "user_id": uid,
+        "email": email,
+        "tenant_id": expected_tid,
+        "role": "owner",
+    }
+    p3 = patch("app.auth.middleware.verify_token", return_value=decoded_with_tid)
+    p3.start()
+    try:
+        with TestClient(app) as client2:
+            resp = client2.get(
+                "/__probe_search_path__",
+                headers={"Authorization": "Bearer fake-token"},
+            )
+    finally:
+        p3.stop()
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["tenant_id"] == expected_tid
+    # PostgreSQL trimmt Quotes auf safe-identifiers in SHOW search_path.
+    # Erwartetes Format: "tenant_searchtest1, public".
+    assert expected_tid in body["search_path"]
+    assert "public" in body["search_path"]
+    # Reihenfolge: tenant kommt vor public.
+    sp = body["search_path"]
+    assert sp.index(expected_tid) < sp.index("public")
+
+
 def test_malformed_token_returns_401(db_engine: AsyncEngine) -> None:
     """Ungueltiges Bearer-Token (raises InvalidIdTokenError) -> 401."""
     from firebase_admin import auth as fb_auth
