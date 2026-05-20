@@ -40,4 +40,26 @@ export default defineConfig([
       "react-refresh/only-export-components": "off",
     },
   },
+  // Viewer-Foundation: ViewerHost und ChildCtrl waehlen die ChildDialog-
+  // Komponente ZUR RENDER-ZEIT aus der viewer-registry. Das ist der
+  // GENAUE Sinn der Registry (D-07) — wir deaktivieren die strict-Regel
+  // "react-hooks/static-components" fuer diese Files. Re-Mount bei
+  // Klassen-Wechsel ist gewollt.
+  //
+  // Plus: ChildDialog.tsx exportiert Context + Hook (useChildDialog) neben
+  // der Komponente — Fast-Refresh-Regel ist hier irrelevant.
+  {
+    files: ["src/viewers/core/**/*.{ts,tsx}"],
+    rules: {
+      "react-hooks/static-components": "off",
+      "react-refresh/only-export-components": "off",
+    },
+  },
+  // Test-Dateien duerfen mehr (mock-Components, beforeEach mit Side-Effects).
+  {
+    files: ["**/__tests__/**/*.{ts,tsx}", "src/test-setup.ts"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
 ]);
