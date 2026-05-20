@@ -122,7 +122,7 @@ def pytest_collection_modifyitems(
 
 
 @pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
+def event_loop() -> Generator[asyncio.AbstractEventLoop]:
     """Session-scoped event loop fuer pytest-asyncio."""
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -135,11 +135,11 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
+async def db_engine() -> AsyncGenerator[AsyncEngine]:
     """Erzeugt eine frische Test-DB-Engine pro Test, dropt alles am Ende."""
-    from app.core.database import Base
     # WICHTIG: Modelle muessen importiert sein, damit Base.metadata sie kennt.
     import app.models  # noqa: F401
+    from app.core.database import Base
 
     engine = create_async_engine(TEST_DATABASE_URL, pool_pre_ping=True)
 

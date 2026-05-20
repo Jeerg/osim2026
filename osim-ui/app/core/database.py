@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import AsyncAdaptedQueuePool, NullPool
 from sqlalchemy.sql import text
 
 from app.core.config import settings
@@ -42,14 +43,30 @@ class Base(DeclarativeBase):
     """Basis-Klasse für alle ORM-Models."""
 
 
-engine: AsyncEngine = create_async_engine(
-    settings.database_url,
-    pool_size=20,
-    max_overflow=10,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    future=True,
-)
+# Pool-Strategie:
+# - In TEST-Umgebung: NullPool -- jede Connection wird fresh geoeffnet und
+#   sofort geschlossen. Verhindert cross-loop-Probleme auf Windows.
+# - In Prod/Dev: AsyncAdaptedQueuePool mit 20+10 fuer 50-User-Concurrency
+#   (siehe 3fls D-CC08). Kein pool_pre_ping (Bug auf Win/ProactorEventLoop),
+#   stattdessen pool_recycle=1800 fuer stale-Connection-Vermeidung.
+_IS_TEST = settings.environment == "test"
+
+if _IS_TEST:
+    engine: AsyncEngine = create_async_engine(
+        settings.database_url,
+        poolclass=NullPool,
+        future=True,
+    )
+else:
+    engine = create_async_engine(
+        settings.database_url,
+        poolclass=AsyncAdaptedQueuePool,
+        pool_size=20,
+        max_overflow=10,
+        pool_pre_ping=False,
+        pool_recycle=1800,
+        future=True,
+    )
 
 AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     bind=engine,
@@ -72,7 +89,7 @@ def _validate_schema_name(name: str) -> None:
         )
 
 
-async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
+async def get_db(request: Request) -> AsyncGenerator[AsyncSession]:
     """FastAPI-Dependency: tenant-scoped Session mit gesetztem search_path.
 
     Liest ``tenant_id`` aus ``request.state`` (gesetzt von TenantAuthMiddleware).
@@ -99,7 +116,7 @@ async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def get_db_unscoped(request: Request) -> AsyncGenerator[AsyncSession, None]:
+async def get_db_unscoped(request: Request) -> AsyncGenerator[AsyncSession]:
     """FastAPI-Dependency ohne tenant-search_path-Switch.
 
     Verwendung:
