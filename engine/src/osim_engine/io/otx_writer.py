@@ -434,12 +434,26 @@ class OtxWriter:
             klass_name = self.klass_by_oid[oid]
             handler = _WRITERS.get(klass_name)
             if handler is None:
-                # Fallback: leere Property-Map, keine Sub-Refs — der Reader
-                # akzeptiert ein leeres Objekt, der Loader meldet es als
-                # `unsupported`.
-                line = format_object(
-                    klass=klass_name, oid=oid, props={}, sub_refs=[]
+                # Welle G19-D (Fortsetzung von G15): props={} verlor wieder
+                # die m_l*-Container und Sub-Refs. Wenn original_otx
+                # verfügbar ist, komplette attrs + sub_refs übernehmen.
+                src_obj = (
+                    original_otx.by_oid.get(oid) if original_otx is not None else None
                 )
+                if src_obj is not None:
+                    flat_subrefs = [
+                        ref for block in src_obj.sub_refs for ref in block
+                    ]
+                    line = format_object(
+                        klass=klass_name,
+                        oid=oid,
+                        props=dict(src_obj.attrs),
+                        sub_refs=flat_subrefs,
+                    )
+                else:
+                    line = format_object(
+                        klass=klass_name, oid=oid, props={}, sub_refs=[]
+                    )
                 object_lines.append(line)
                 written_oids.add(oid)
                 continue
@@ -451,6 +465,37 @@ class OtxWriter:
                     type(handler).__name__, klass_name, oid, exc,
                 )
                 props, sub_refs = ({}, [])
+
+            # Welle G19-D: GENERISCHE m_l*-Container-Pointer-Übernahme.
+            # Der WriterHandler kennt nicht alle m_l*-Attribute (z.B.
+            # ASimulator hat 25+ Container-Listen, der Handler nennt nur
+            # die wichtigen). Pro Klasse die m_l*-Lücken aus dem Original
+            # auffüllen. Wenn der Handler schon eine Value für ein m_l*
+            # gesetzt hat (z.B. handler-resolved m_lStartKante), bleibt
+            # die — nur unbeschriebene m_l*-Slots werden aus original_otx
+            # ergänzt.
+            #
+            # Konsequenz: Jeder Roundtrip ohne Wire-Mutation ist semantisch
+            # stabil. Bei Wire-Mutationen mit Listen-Edits (Phase 2)
+            # muss der Apply-Pfad (otx_json_tree._apply_wire_to_instances)
+            # die m_l*-Werte explizit überschreiben — die Generic-Adoption
+            # tritt dann zurück.
+            if original_otx is not None:
+                src_obj = original_otx.by_oid.get(oid)
+                if src_obj is not None:
+                    for attr_name, attr_val in src_obj.attrs.items():
+                        if attr_name.startswith("m_l") and attr_name not in props:
+                            props[attr_name] = attr_val
+                    # sub_refs aus dem Original übernehmen wenn Handler
+                    # keine geliefert hat. format_object erwartet eine flat
+                    # list[int] — wir flatten aus list[list[int]] (Reader-
+                    # Format mit Basisklassen-Blöcken). Diese Flach-Form
+                    # ist beim Pass-Through bereits etabliert.
+                    if not sub_refs and src_obj.sub_refs:
+                        sub_refs = [
+                            ref for block in src_obj.sub_refs for ref in block
+                        ]
+
             line = format_object(
                 klass=klass_name, oid=oid, props=props, sub_refs=sub_refs
             )
@@ -616,14 +661,25 @@ class _PDurchlaufplanWriter(WriterHandler):
         props = _serialize_scalars(py, self.SCALARS)
         sk_oid = writer.get_oid(getattr(py, "m_lStartKante", None))
         ek_oid = writer.get_oid(getattr(py, "m_lEndKante", None))
-        if sk_oid is not None:
+        # Welle G19-D: nur schreiben wenn das Original sie hatte. Der Loader
+        # infert m_lStartKante/m_lEndKante via _infer_start_kante/_infer_end_kante
+        # wenn nicht explizit im OTX. Beim Roundtrip würden wir sonst neue
+        # Properties einführen die im Original nicht standen.
+        src = getattr(writer, "_original_otx", None)
+        src_obj = src.by_oid.get(oid) if src is not None else None
+        # Nur ECHTE Original-Werte (>0) zählen — ONULL/0 entspricht "nicht
+        # gesetzt" und wäre vom Loader inferiert.
+        src_sk = src_obj.attrs.get("m_lStartKante") if src_obj is not None else None
+        src_ek = src_obj.attrs.get("m_lEndKante") if src_obj is not None else None
+        src_had_sk = isinstance(src_sk, int) and src_sk > 0
+        src_had_ek = isinstance(src_ek, int) and src_ek > 0
+        # Wenn original_otx fehlt (frischer Sim), beide Defaults: schreiben.
+        if sk_oid is not None and (src_obj is None or src_had_sk):
             props["m_lStartKante"] = sk_oid
-        if ek_oid is not None:
+        if ek_oid is not None and (src_obj is None or src_had_ek):
             props["m_lEndKante"] = ek_oid
-        # Welle G15: m_lKnoten/m_lKanten als Container-OID-Pointer aus dem
-        # Original übernehmen — die Python-Instanz hat sie als Listen, nicht
-        # als Pointer. Ohne dieses Adopt geht die ganze Knoten-Topologie beim
-        # ersten Save verloren (Modell-Korruption).
+        # m_lKnoten/m_lKanten kommen via _adopt_container_pointers + dem
+        # generischen m_l*-Lückenfüller in OtxWriter.write().
         _adopt_container_pointers(writer, oid, props, self.CONTAINER_POINTERS)
         return props, []
 
