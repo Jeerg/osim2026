@@ -315,6 +315,12 @@ class OtxWriter:
         self.oid_by_id: dict[int, int] = {}
         self.obj_by_oid: dict[int, Any] = {}
         self.klass_by_oid: dict[int, str] = {}
+        # Welle G15 (osim-ui Bug): WriterHandler brauchen Zugriff auf das
+        # original_otx, um m_l*-Container-Pointer (PDurchlaufplan.m_lKnoten,
+        # ASimulator.m_lAusl, etc.) 1:1 zu übernehmen. Die Python-Instanzen
+        # haben diese Pointer nicht — der Loader hat sie zu Python-Listen
+        # aufgelöst. Wird in write() gesetzt.
+        self._original_otx: OtxFile | None = None
 
     def get_oid(self, py_obj: Any) -> int | None:
         """Sucht die OID eines Python-Objekts in der aktuellen Map."""
@@ -410,6 +416,10 @@ class OtxWriter:
         Wenn `original_otx` + `include_unsupported_passthrough` aktiv:
         Skelette für nicht-geladene OtxObjects werden mitgeschrieben.
         """
+        # Welle G15: original_otx auf self speichern, damit Handler darauf
+        # zugreifen können (PDurchlaufplan-Container-Pointer-Übernahme).
+        self._original_otx = original_otx
+
         # OID-Vergabe (oder Übernahme aus Loader).
         if instances is not None:
             self.adopt_oids_from_instances(instances, original_otx=original_otx)
@@ -452,15 +462,24 @@ class OtxWriter:
             for oid, otx_obj in sorted(original_otx.by_oid.items()):
                 if oid in written_oids:
                     continue
-                # 1:1-Rendition: Klasse, OID, leeres Props, originale Sub-Refs
-                # (flach gemerged über alle Basisklassen-Blöcke).
+                # Welle G15 (osim-ui Bug-Fix): props={} verlor m_lKnoten/
+                # m_lKanten/m_lAusl-Pointer aus dem Original — beim Re-Load
+                # waren die LLists komplett leer (Modell-Korruption beim
+                # ersten Save). Korrektur: die originalen attrs 1:1
+                # übernehmen. WriterHandler-Klassen kommen oben aus dem
+                # Re-Serialize-Pfad mit den korrekten neuen Werten; nur die
+                # nicht-handler-bewehrten Klassen brauchen Pass-Through.
                 flat_subrefs = [
                     ref for block in otx_obj.sub_refs for ref in block
                 ]
+                # attrs aus Original übernehmen (vollständig). Filter:
+                # Reader-spezifische Hilfs-Keys raus (header "size", etc.).
+                # In OtxObject.attrs sind ausschließlich domain-Properties,
+                # also kann der dict 1:1 übernommen werden.
                 line = format_object(
                     klass=otx_obj.klass,
                     oid=oid,
-                    props={},
+                    props=dict(otx_obj.attrs),
                     sub_refs=flat_subrefs,
                 )
                 object_lines.append(line)
@@ -532,12 +551,21 @@ class _ASimulatorWriter(WriterHandler):
         "m_bIsProduktionEnde", "m_keim", "m_aktKeim",
         "m_sStartDate", "m_sEndDate", "m_name", "m_sName",
     )
+    # Welle G15: Container-Pointer aus dem Original übernehmen, sonst gehen
+    # m_lAusl, m_lDlpl, m_lBetriebsmittel etc. beim ersten Save verloren →
+    # Re-Load liefert leere Listen → Modell-Korruption.
+    CONTAINER_POINTERS = (
+        "m_lAusl", "m_lDlpl", "m_lBetriebsmittel", "m_lPersonal",
+        "m_lRessMenge", "m_lEinsatzWunsch", "m_lKapBedarf", "m_lPerson",
+        "m_lGenerator", "m_lParameterMenge", "m_lParameter",
+        "m_lTrigger", "m_lProzess", "m_lAssozBeleg", "m_lAssozRessource",
+        "m_lRessBeleg", "m_lSpeicherProz", "m_lTagRess",
+        "m_lOViewerInfo", "m_lGridColRowInfo",
+    )
 
     def serialize(self, writer, sim, oid):
         props = _serialize_scalars(sim, self.SCALARS)
-        # Container-Refs als Property (zeigt auf zugehörige LList-Pseudo-OID).
-        # Für die minimale Foundation reichen wir das nicht aus — der
-        # Loader iteriert by_oid, nicht über die LList-Container.
+        _adopt_container_pointers(writer, oid, props, self.CONTAINER_POINTERS)
         return props, []
 
 
@@ -553,9 +581,36 @@ class _PAslEinzelWriter(WriterHandler):
         return props, []
 
 
+def _adopt_container_pointers(writer, oid, props, attr_names):
+    """Welle G15: übernimmt m_l*-Container-OID-Pointer 1:1 aus original_otx.
+
+    Hintergrund: PDurchlaufplan.m_lKnoten ist im OTX ein int-Pointer auf
+    einen PDlplKnotenLList-Container (eigenes OtxObject). Der Loader löst
+    das zu `py.m_lKnoten: list[Knoten]` auf — die Python-Instanz hat den
+    OTX-Pointer nicht mehr. Beim Re-Serialisieren würde der Pointer
+    verloren gehen → re-Load liefert leere Knoten-Liste → Modell-
+    Korruption.
+
+    Diese Funktion übernimmt die int-Pointer 1:1 aus dem original_otx,
+    falls vorhanden. Wenn kein original_otx existiert (frisch erzeugter
+    Sim), bleibt der Pointer leer — der Reader liefert dann eine leere
+    Liste, was korrekt ist für einen leeren Plan.
+    """
+    src = getattr(writer, "_original_otx", None)
+    if src is None:
+        return
+    src_obj = src.by_oid.get(oid)
+    if src_obj is None:
+        return
+    for name in attr_names:
+        if name in src_obj.attrs:
+            props[name] = src_obj.attrs[name]
+
+
 @register_writer("PDurchlaufplan")
 class _PDurchlaufplanWriter(WriterHandler):
     SCALARS = ("m_sName",)
+    CONTAINER_POINTERS = ("m_lKnoten", "m_lKanten")
 
     def serialize(self, writer, py, oid):
         props = _serialize_scalars(py, self.SCALARS)
@@ -565,9 +620,11 @@ class _PDurchlaufplanWriter(WriterHandler):
             props["m_lStartKante"] = sk_oid
         if ek_oid is not None:
             props["m_lEndKante"] = ek_oid
-        # Knoten + Kanten als Sub-Refs (für Loader: resolve_list("m_lKnoten")
-        # erwartet eine LList — Skelett-Pass-Through übernimmt die echte
-        # LList, hier reicht Sub-Refs-Container-Skeleton).
+        # Welle G15: m_lKnoten/m_lKanten als Container-OID-Pointer aus dem
+        # Original übernehmen — die Python-Instanz hat sie als Listen, nicht
+        # als Pointer. Ohne dieses Adopt geht die ganze Knoten-Topologie beim
+        # ersten Save verloren (Modell-Korruption).
+        _adopt_container_pointers(writer, oid, props, self.CONTAINER_POINTERS)
         return props, []
 
 
