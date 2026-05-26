@@ -2,6 +2,19 @@
 
 Dieses Repo enthält **osim-ui**: Web-Frontend + Orchestrator-Backend für die headless `osim-engine` (PPS-Simulator).
 
+## Brand & UI Style (verbindlich für alle Neuentwicklungen · Stand 2026-05-26)
+
+Dieses Repo folgt dem 3FLS-EAM Brand & UI Style Guide. Bei **jeder** UI-/Frontend-/Branding-/Style-Arbeit und in **jeder UI-Phase** ist `docs/3FLS-EAM-STYLE-GUIDE.md` verbindlich zu lesen und einzuhalten:
+
+- **Blau-Primary** (`#1E4F9C`, re-keyed von Cyan `#0EA5C7`); Magenta `#C026D3` strikt Logo-Bound (keine UI-Verwendung).
+- shadcn als UI-Library, Token-Architektur per `portal/src/styles/tokens.css` (ad-hoc Hex/RGB ESLint-blockiert).
+- Topbar: diagonaler Blau-Gradient (Navy `#1F264C` → Ice-Blau `#B2C9E8`), **weiße Schrift**; **Logo unverändert, ohne Backdrop** rechts (Asset `portal/public/logo-3fls-eam.png`).
+- Tree-View-Pattern: Header neutral-grau, Item-Icon Blau, Indentation 22 px, Monospace-IDs (Cascadia Code).
+- **Segoe UI** als Body-Font (vormals Geist Variable), 4 px-Spacing-Grid.
+- A11y: `:focus-visible` mit Token-Focus-Ring, Status nie nur via Farbe.
+
+Bei Unklarheiten: Guide-Datei konsultieren, nicht eigenmächtig Design-Entscheidungen treffen.
+
 ## Was Claude wissen muss
 
 1. **Drei verwandte Codebasen** im gleichen Workspace (`C:\Users\JörgWFischer\PycharmProjects\`):
