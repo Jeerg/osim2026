@@ -917,7 +917,26 @@ class _PTagesEinsatzzeitWriter(WriterHandler):
 def _make_assoz_writer():
     class _H(WriterHandler):
         def serialize(self, writer, py, oid):
-            return _serialize_scalars(py, ("m_sName",)), []
+            props = _serialize_scalars(py, ("m_sName",))
+            # m_LinkStatusList ist ein Scalar-Pointer auf eine
+            # PAssozBelegLinkStatusList (pro-Ressource-Belegungs-Status).
+            # Die generische m_l*-Container-Adoption in write() erfasst ihn
+            # NICHT, weil "m_LinkStatusList" mit "m_L" (Großbuchstabe) beginnt
+            # und `startswith("m_l")` case-sensitiv ist. Ohne explizite
+            # Übernahme verliert der Roundtrip den Pointer → LinkStatusList +
+            # LinkInfo werden orphaned, und der pro-Ressource gesetzte Status
+            # (osim-ui Matrix-Cell-Edit) geht beim Save→Reload verloren.
+            # 1:1 aus original_otx übernehmen (OID-stabil über den instances-
+            # Pfad; bei osim-ui-Saves trägt original_otx nach dem Wire-
+            # Reconcile bereits den aktualisierten Pointer).
+            src = (
+                writer._original_otx.by_oid.get(oid)
+                if writer._original_otx is not None
+                else None
+            )
+            if src is not None and "m_LinkStatusList" in src.attrs:
+                props["m_LinkStatusList"] = src.attrs["m_LinkStatusList"]
+            return props, []
 
     return _H
 

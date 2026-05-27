@@ -176,6 +176,99 @@ def test_unsupported_passthrough_disabled_drops_extra_objects(
 
 
 # ----------------------------------------------------------------------
+# PAssozBeleg-Link-Status (osim-ui P3, 2026-05-27)
+# ----------------------------------------------------------------------
+#
+# Kontext: osim-ui schreibt den Belegungs-Status einer Ressource an einem
+# Knoten als `PAssozBelegLinkInfo` (m_oRessBeleg + m_eStatus + m_eBaseStatus)
+# in der `PAssozBelegLinkStatusList` (sub_refs[0]) eines `PAssozBeleg`. Beide
+# Klassen haben KEINEN Loader-/Writer-Handler — sie überleben den Roundtrip
+# rein über den Pass-Through. Dieser Test sichert ab, dass der Pass-Through
+# sie verlustfrei round-trippt (sonst gingen Cell-Status-Edits beim Save→
+# Reload verloren — der G16-Risikofall). Referenz: osim-ui Handoff 2026-05-27
+# §P3 + ../osim-ui/.planning -> CONTEXT-P1-osim-ui-integration-TODO.md.
+
+
+def test_roundtrip_preserves_assoz_link_status(
+    embb_pre_run_otx_path: Path,
+) -> None:
+    """`PAssozBelegLinkStatusList`/`-LinkInfo` überleben den Roundtrip 1:1.
+
+    Prüft Count-Stabilität, die `PAssozBelegLinkInfo`-Attribute
+    (m_oRessBeleg/m_eStatus/m_eBaseStatus) und die `sub_refs`-Verkettung
+    LinkStatusList → LinkInfo.
+    """
+    original = load_otx_file(embb_pre_run_otx_path)
+    dumped_text = dump_simulator_to_otx(
+        original.simulator,
+        original_otx=original.otx,
+        instances=original.instances,
+        include_unsupported_passthrough=True,
+    )
+    back = parse_otx(dumped_text)
+
+    def _by_klass(by_oid, klass):
+        return [o for o in by_oid.values() if o.klass == klass]
+
+    # 1. Count-Stabilität für beide Status-Klassen.
+    for klass in ("PAssozBeleg", "PAssozBelegLinkStatusList", "PAssozBelegLinkInfo"):
+        n_orig = len(_by_klass(original.otx.by_oid, klass))
+        n_back = len(_by_klass(back.by_oid, klass))
+        assert n_back == n_orig, (
+            f"{klass}: Original {n_orig}, nach Roundtrip {n_back}"
+        )
+
+    # 1b. PAssozBeleg.m_LinkStatusList-Pointer überlebt (sonst werden alle
+    #     LinkStatusLists orphaned → Status-Verlust). Regression für den
+    #     Assoz-Writer-Bug (m_LinkStatusList wird nicht von der m_l*-Adoption
+    #     erfasst).
+    def _lsl_ptrs(by_oid):
+        return {
+            o.attrs.get("m_dwObjID"): o.attrs.get("m_LinkStatusList")
+            for o in _by_klass(by_oid, "PAssozBeleg")
+        }
+
+    ptrs_orig = _lsl_ptrs(original.otx.by_oid)
+    ptrs_back = _lsl_ptrs(back.by_oid)
+    mismatches = {
+        oid: (ptrs_orig[oid], ptrs_back.get(oid))
+        for oid in ptrs_orig
+        if ptrs_orig[oid] is not None and ptrs_orig[oid] != ptrs_back.get(oid)
+    }
+    assert not mismatches, (
+        f"PAssozBeleg.m_LinkStatusList-Pointer nach Roundtrip verloren/"
+        f"verändert (Beispiele): {dict(list(mismatches.items())[:5])}"
+    )
+
+    # 2. LinkInfo-Attribute (Ressource-Pointer + Status) identisch.
+    def _li_key(o):
+        return (
+            o.attrs.get("m_oRessBeleg"),
+            o.attrs.get("m_eStatus"),
+            o.attrs.get("m_eBaseStatus"),
+        )
+
+    li_orig = sorted(_li_key(o) for o in _by_klass(original.otx.by_oid, "PAssozBelegLinkInfo"))
+    li_back = sorted(_li_key(o) for o in _by_klass(back.by_oid, "PAssozBelegLinkInfo"))
+    assert li_back == li_orig, (
+        f"PAssozBelegLinkInfo-Attribute verändert: {li_orig} -> {li_back}"
+    )
+
+    # 3. sub_refs-Verkettung LinkStatusList → LinkInfo erhalten (nur die
+    #    nicht-leeren Listen, deren Status-Info abweicht vom ABL_STD-Default).
+    def _lsl_subrefs(by_oid):
+        return sorted(
+            tuple(tuple(block) for block in o.sub_refs)
+            for o in _by_klass(by_oid, "PAssozBelegLinkStatusList")
+            if any(o.sub_refs)
+        )
+
+    assert _lsl_subrefs(back.by_oid) == _lsl_subrefs(original.otx.by_oid), (
+        "PAssozBelegLinkStatusList sub_refs (→ LinkInfo) nach Roundtrip verändert"
+    )
+
+
+# ----------------------------------------------------------------------
 # Sekundär: Original-OTX-Files aus OSim2004 (opt-in via Skip)
 # ----------------------------------------------------------------------
 
