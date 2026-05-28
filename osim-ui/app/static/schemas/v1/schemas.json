@@ -185,7 +185,7 @@
       "klass": "PRessMenge",
       "label_de": "Mengenressource",
       "viewer_hints": ["std", "matrix"],
-      "description_de": "Plan-Begriff. Real-OTX-Klassen: PSpeicher/PSpeicherProz. Schema-Match in Phase 3.",
+      "description_de": "Mengen-Ressource (Bestand/Lager). HINWEIS 2026-05-28: Die Phase-1-Attrs (m_iMenge, m_iNachschubMenge, m_iMaxMenge, m_iNachschubIntervall) entsprechen NICHT der osim-engine-Klasse (echte Attrs: m_iBestandAnfang, m_iBestandMax, m_iBestandAktuell + Counter). Schema-Re-Sync in Phase 3 (JSON Editor mit Engine-Reflection). Bis dahin werden die Phase-1-Attrs vom existierenden Viewer-Stub gelesen — kein Bruch.",
       "properties": [
         {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
         {"name": "m_iMenge", "label_de": "Menge (Anfangsbestand)", "octrl_type": "Variable", "value_type": "int"},
@@ -210,6 +210,60 @@
         {"name": "m_lRessourcen", "label_de": "Ressourcen-Liste", "octrl_type": "List", "list_item_klass": "PBetriebsmittel"},
         {"name": "m_LinkStatusList", "label_de": "Link-Status-Liste", "octrl_type": "List", "list_item_klass": "PAssozBelegLinkStatusList", "readonly": true},
         {"name": "m_sUserString", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PAssozMenge",
+      "label_de": "Mengen-Assoziation (Basis)",
+      "viewer_hints": ["std"],
+      "description_de": "Abstrakte Basis-Klasse fuer die 4 konkreten Mengen-Assoziations-Typen (Erzgt/Verbr/VerbrZwischen/Abfr). Verbindet einen Durchlaufplan-Knoten mit einer PRessMenge (Lager/Bestand).",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_lMengRess", "label_de": "Mengen-Ressource", "octrl_type": "Link", "link_target_klass": "PRessMenge"}
+      ]
+    },
+    {
+      "klass": "PAssozMengeErzgt",
+      "label_de": "Mengen-Assoziation: Erzeuger",
+      "viewer_hints": ["matrix"],
+      "description_de": "Knoten produziert m_iMengeAus Einheiten am Prozess-Ende.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_lMengRess", "label_de": "Mengen-Ressource", "octrl_type": "Link", "link_target_klass": "PRessMenge"},
+        {"name": "m_iMengeAus", "label_de": "Ausgehende Menge", "octrl_type": "Variable", "value_type": "int"}
+      ]
+    },
+    {
+      "klass": "PAssozMengeVerbr",
+      "label_de": "Mengen-Assoziation: Verbraucher",
+      "viewer_hints": ["matrix"],
+      "description_de": "Knoten verbraucht m_iMengeEin Einheiten am Prozess-Beginn.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_lMengRess", "label_de": "Mengen-Ressource", "octrl_type": "Link", "link_target_klass": "PRessMenge"},
+        {"name": "m_iMengeEin", "label_de": "Eingehende Menge", "octrl_type": "Variable", "value_type": "int"}
+      ]
+    },
+    {
+      "klass": "PAssozMengeVerbrZwischen",
+      "label_de": "Mengen-Assoziation: Zwischen-Verbrauch",
+      "viewer_hints": ["matrix"],
+      "description_de": "Verbrauch mit getrennter Kosten-Aggregation; Sim-Semantik identisch zu PAssozMengeVerbr.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_lMengRess", "label_de": "Mengen-Ressource", "octrl_type": "Link", "link_target_klass": "PRessMenge"},
+        {"name": "m_iMengeEin", "label_de": "Eingehende Menge", "octrl_type": "Variable", "value_type": "int"}
+      ]
+    },
+    {
+      "klass": "PAssozMengeAbfr",
+      "label_de": "Mengen-Assoziation: Abfrage",
+      "viewer_hints": ["matrix"],
+      "description_de": "Knoten prueft, ob m_iMengeAbfr Einheiten verfuegbar sind, ohne sie zu entnehmen.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_lMengRess", "label_de": "Mengen-Ressource", "octrl_type": "Link", "link_target_klass": "PRessMenge"},
+        {"name": "m_iMengeAbfr", "label_de": "Abzufragende Menge", "octrl_type": "Variable", "value_type": "int"}
       ]
     },
     {
