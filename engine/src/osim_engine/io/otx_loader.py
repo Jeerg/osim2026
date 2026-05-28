@@ -800,6 +800,42 @@ register_skip("PAssozBelegLinkInfo")
 
 
 # ----------------------------------------------------------------------
+# Phase-1.3 W3: PRessMenge (Bestands-Ressource / Lager)
+# (PRessMenge.odh). Voraussetzung für PAssozMenge-Roundtrip-Tests
+# (Plan 01.3-04): ohne PRessMenge-Handler wird das vom Erzeuger /
+# Verbraucher referenzierte Lager beim Reload nicht instanziiert →
+# `m_lMengRess` bleibt None → key_link-Assertion fällt.
+#
+# Persistierte Skalare (siehe PRessMenge.odh:44-50):
+#   m_sName, m_iBestandAnfang, m_iBestandMax, m_fAnfangswert,
+#   m_fKostenZusatz
+# Sim-Laufzeit-Counter (m_iPtkKummErzgMengeGesamt, …) werden NICHT
+# als Loader-Scalars gelesen — sie werden in on_sim_begin / on_rec_init
+# auf 0 zurückgesetzt (siehe PRessMenge.cpp). Konsistent mit dem
+# Loader-Vertrag für andere Ressourcen.
+# ----------------------------------------------------------------------
+
+
+@register_handler("PRessMenge")
+class _PRessMengeHandler(ClassHandler):
+    """Bestands-Ressource (Lager). V5-Material-Fluss-Pflichtklasse."""
+
+    SCALARS = (
+        "m_sName",
+        "m_iBestandAnfang",
+        "m_iBestandMax",
+        "m_fAnfangswert",
+        "m_fKostenZusatz",
+    )
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.menge import PRessMenge
+        r = PRessMenge(loader.simulator)
+        copy_scalars(r, obj, self.SCALARS)
+        return r
+
+
+# ----------------------------------------------------------------------
 # Phase-1.3 W2: PAssozMenge-Familie (Material-Fluss-Assoziationen)
 # (PAssozRessource.{odh:579-898,cpp}). 1 abstract + 4 konkrete Subklassen.
 #

@@ -216,11 +216,25 @@ def _iter_simulator_tree(sim: PSimulator):
         for p in getattr(a, "m_lParameter", []) or []:
             yield from emit(type(p).__name__, p)
 
+    # Knoten-Sub-Tree: PAssozRessource-Familie + PAssozSpeicher.
+    # Phase 01.3 W3 (Rule 2): ohne diese Iteration bekommen am Knoten
+    # hängende Assoziationen (PAssozBeleg / PAssozMengeErzgt / Verbr /
+    # VerbrZwischen / Abfr) keine OID, wenn der Sim NICHT via Loader
+    # aufgebaut wurde — Roundtrip-Tests aus In-Memory-Setups (Plan 01.3-04)
+    # verlieren dann genau die Klassen, die sie testen sollen.
+    def visit_knoten(kn):
+        for assoz in getattr(kn, "m_lAssozRess", []) or []:
+            yield from emit(type(assoz).__name__, assoz)
+        assoz_speich = getattr(kn, "m_lAssozSpeich", None)
+        if assoz_speich is not None:
+            yield from emit(type(assoz_speich).__name__, assoz_speich)
+
     # 3. Pläne (inkl. Sub-Pläne über Knoten)
     def visit_plan(plan):
         yield from emit(type(plan).__name__, plan)
         for kn in getattr(plan, "m_lKnoten", []) or []:
             yield from emit(type(kn).__name__, kn)
+            yield from visit_knoten(kn)
             # Sub-Plan über Rück-/Alt-Knoten
             sub = getattr(kn, "m_lDlpl", None)
             if sub is not None:
@@ -246,6 +260,15 @@ def _iter_simulator_tree(sim: PSimulator):
 
     for p in sim.m_lDlpl:
         yield from visit_plan(p)
+
+    # 3b. V1-Pragma: Top-Level-Knoten direkt am Simulator (sim.m_lKnoten).
+    # Phase 01.3 W3 (Rule 2): vor dieser Erweiterung wurden sim.m_lKnoten
+    # ignoriert — Folge: keine OID für V1-Knoten und damit keine OID für
+    # ihre Assoziationen. test_v5_material-Setups (Top-Level-Knoten +
+    # PAssozMengeErzgt/Verbr/Abfr) konnten nicht round-trippen.
+    for kn in getattr(sim, "m_lKnoten", []) or []:
+        yield from emit(type(kn).__name__, kn)
+        yield from visit_knoten(kn)
 
     # 4. Ressourcen
     for r in sim.m_lRessBeleg:
@@ -944,6 +967,35 @@ def _make_assoz_writer():
 register_writer("PAssozBeleg")(_make_assoz_writer())
 register_writer("PAssozRessEnt")(_make_assoz_writer())
 register_writer("PAssozELogikEnt")(_make_assoz_writer())
+
+
+# Phase 01.3 Welle 3 — PRessMenge (Lager / Bestands-Ressource)
+#
+# Symmetrisch zum Loader-Handler in otx_loader.py. Voraussetzung für
+# PAssozMenge-Roundtrip (Plan 01.3-04): Ohne PRessMenge-Writer würde
+# der Reload das Lager über den Pass-Through-Skelett-Pfad einlesen, das
+# aber im Loader weiterhin keinen Handler hätte → m_lMengRess-Bindung
+# nach Roundtrip wäre None.
+#
+# Skalare: 1:1 zum Loader-Handler (PRessMenge.odh:44-50). Sim-Laufzeit-
+# Counter werden NICHT geschrieben (werden in on_sim_begin auf 0
+# zurückgesetzt).
+
+
+@register_writer("PRessMenge")
+class _PRessMengeWriter(WriterHandler):
+    """Bestands-Ressource (Lager) — Skalare aus PRessMenge.odh:44-50."""
+
+    SCALARS = (
+        "m_sName",
+        "m_iBestandAnfang",
+        "m_iBestandMax",
+        "m_fAnfangswert",
+        "m_fKostenZusatz",
+    )
+
+    def serialize(self, writer, py, oid):
+        return _serialize_scalars(py, self.SCALARS), []
 
 
 # Phase 01.3 Welle 2 — PAssozMenge-Familie (Material-Fluss-Assoziationen)
