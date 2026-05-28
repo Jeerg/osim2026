@@ -5,14 +5,14 @@ milestone_name: milestone
 current_phase: 01.3
 current_plan: 4
 status: in-progress
-stopped_at: "Phase 01.3 Welle 2 abgeschlossen (Pläne 01.3-02 + 01.3-03): Loader UND Writer für die 5 PAssozMenge-Klassen sind registriert, Set-Equality (test_writer_handles_all_known_loader_classes) wieder grün. Plan-03-Commits: f85eb28 (feat: _make_passozmenge_writer-Factory + 5 register_writer-Aufrufe in otx_writer.py, +46 LOC) + 9ddcf9c (test: 8 Unit-Tests test_passozmenge_*, +214 LOC). m_lMengRess als expliziter Scalar-Pointer-Serializer analog _PTagRessWriter.m_oRessBeleg (AUDIT.md Sektion 4.4); KEIN LinkStatusList-Pass-Through (Sektion 4.3). Smoke-Sweep (unit + integration/io + test_v5_material): 104 passed. Pre-existing Failures in test_azeitsim_runner + test_python_vs_cpp bleiben out-of-scope (siehe Plan-03-SUMMARY Deferred Issues). Race-Condition mit parallelem Plan 02 im selben Repo dokumentiert. Nächster Schritt: Plan 01.3-04 ausführen (Roundtrip-Tests in test_otx_roundtrip_passozmenge.py)."
-last_updated: "2026-05-28T17:00:00.000Z"
+stopped_at: "Phase 01.3 Welle 3 (Plan 05) abgeschlossen: schemas.json um 5 PAssozMenge-Klassen erweitert (PAssozMenge abstract + Erzgt/Verbr/VerbrZwischen/Abfr), PRessMenge-description_de mit Phase-3-Re-Sync-Hinweis ergänzt. Commit b86eb29 (feat: +55 LOC -1 LOC). API-Container-Sync via docker compose cp + restart api durchgezogen — Container-Datei + _SCHEMAS_CACHE im laufenden FastAPI-Prozess beide verifiziert (alle 5 Klassen vorhanden). Schema-Checkpoint best-effort PASSED (HTTP-Endpoint auth-geschützt, in-process-Verifikation per docker compose exec api python -c verbindlich). User-Direktive 'baller alles durch dann test' eingehalten. Plan 06 (UI-Migration PRessMengeMatrixViewer auf @osim/graphobject MatrixGrid) kann jetzt die Subklassen-Liste + Mengen-Attrs aus dem Schema lesen. Memory feedback-sim-grafik-viewer-immer in Plan-05-SUMMARY für Folgepläne (06/07 Sim-Tests) notiert."
+last_updated: "2026-05-28T17:30:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 35
-  completed_plans: 25
-  percent: 20
+  completed_plans: 26
+  percent: 21
 ---
 
 # Project State
