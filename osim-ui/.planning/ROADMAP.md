@@ -21,6 +21,7 @@ Vier Bausteine ziehen sich durch ALLE Phasen — nicht phasen-spezifisch:
 - [x] **Phase 1: OViewer-Framework + OTX-Modellierung** — Backend-Foundation, OViewer-Schicht, 12 konkrete Viewer, OTX-im-Browser-Bearbeitung (completed 2026-05-21)
 - [ ] **Phase 1.1: UI-Polish & LList-Resolution** (INSERTED) — Workspace demo-tauglich machen: GraphView des Durchlaufplans als primärer Use-Case erreichbar, OCtrlList traversiert Engine-LListPtr-Ketten, Tree navigierbar, kompakte Modell-Bibliothek, Viewer-Toolbar mit Funktion, eigenes Brand-Design
 - [ ] **Phase 1.2: Matrix-Foundation + erste Matrix-Viewer** (INSERTED) — Graph-Foundation erweitern um Matrix-Cell-Rendering, Spalten-/Zeilen-Header, Inline-Cell-Editing, Block-Select/Copy/Paste. Als Konsumenten: PRessBelegMatrixViewer (kanonisches Matrix-Beispiel), PDlplConnKnotenViewer (Graph-Detail), PRessVerknuepfungViewer (Graph mit Kennzahl-Vorgriff).
+- [ ] **Phase 1.3: PAssozMenge Wire-Roundtrip + PRessMengeMatrixViewer-Migration** (INSERTED) — Engine-A2-Vorarbeit: OTX-Wire-Roundtrip für die 4 PAssozMenge-Subklassen (Erzgt/Verbr/VerbrZwischen/Abfr) im osim-engine; danach Migration des PRessMengeMatrixViewer von der Legacy-matrix-common.tsx auf die @osim/graphobject Matrix-Foundation. Schließt das aus Phase 01.2 Track A deferred A2-Backlog ab.
 - [ ] **Phase 2: Sim-Lauf + Trace** — Worker, Orchestrator, Status-Polling, Trace-Download
 - [ ] **Phase 3: JSON Editor** — Engine-Reflection-Schema + Form-Editor (Alternative zum OViewer für strukturierte Felder)
 - [ ] **Phase 4: Live Viz** — GraphObject-Vollausbau + Durchlaufplan-Live-View + KPI-Charts + WebSocket
@@ -126,6 +127,33 @@ Plans:
 - [x] 01.2-07-PLAN.md — Welle F: PDlplConnKnotenViewer (Graph-Detail + Listener-no-op-Hook)
 - [x] 01.2-08-PLAN.md — Welle G: PRessVerknuepfungViewer (Graph + Kennzahl-Slot-Placeholder)
 - [ ] 01.2-09-PLAN.md — Welle H: E2E-Spec + UAT-Checkliste + Phase-Sign-Off
+
+### Phase 1.3: PAssozMenge Wire-Roundtrip + PRessMengeMatrixViewer-Migration (INSERTED)
+**Goal**: Vorbereiten und ausführen der A2-Backlog-Welle aus Phase 01.2 Track A. Engine erhält OTX-Wire-Roundtrip für die vier `PAssozMenge`-Subklassen (`PAssozMengeErzgt` / `PAssozMengeVerbr` / `PAssozMengeVerbrZwischen` / `PAssozMengeAbfr`) analog zum existierenden `PAssozBeleg`-Pattern (`engine/src/osim_engine/io/otx_writer.py:917-946`, `otx_loader.py:782-797`). Anschließend Migration des `PRessMengeMatrixViewer` (osim-ui) von der Legacy-`matrix-common.tsx` auf die `@osim/graphobject` Matrix-Foundation analog zum `PRessBelegMatrixViewer`. Damit liegt die Material-Familie der OSim-Suite auf demselben Wire+UI-Stand wie die Belegungs-Familie und das Track-A-A2-Defer aus Session 2026-05-28b ist abgeschlossen.
+**Depends on**: Phase 1.2 (Matrix-Foundation stabil, `@osim/graphobject`-Paket etabliert, `PRessBelegMatrixViewer` als Referenz-Implementation). Phase 1.1 (GraphObject-Foundation für Matrix-Cells).
+**Success Criteria** (what must be TRUE):
+  1. **C++-Audit**: `PAssozRessource.odh` + `PAssozRessource.cpp` sind auditiert, alle im OTX persistierten Attrs der PAssozMenge-Subklassen sind in einem AUDIT-Doc dokumentiert (m_iMengeAus für Erzgt, m_iMengeEin für Verbr/VerbrZwischen, abfr-spezifische Felder).
+  2. **Engine: PAssozMenge-OTX-Loader-Handler**: `engine/src/osim_engine/io/otx_loader.py` hat Class-Handler für `PAssozMenge`, `PAssozMengeErzgt`, `PAssozMengeVerbr`, `PAssozMengeVerbrZwischen`, `PAssozMengeAbfr`. Handler instanziieren die existierenden Sim-Klassen aus `engine/src/osim_engine/resources/assoziation/menge.py`, lesen `m_sName` + spezifische Mengen-Attrs, resolven `m_lMengRess`-Pointer auf `PRessMenge`.
+  3. **Engine: PAssozMenge-OTX-Writer**: `engine/src/osim_engine/io/otx_writer.py` hat Writer für die 4 konkreten Subklassen. Writer schreiben `m_sName` + die jeweils zutreffenden Mengen-Felder (Erzgt: `m_iMengeAus`; Verbr/VerbrZwischen: `m_iMengeEin`; Abfr: ggf. `m_iMengeAbfrage`).
+  4. **Round-Trip-Tests**: Mindestens ein Demo-OTX mit PAssozMenge-Instanzen (Vorlage: `v5_erzeuger_verbraucher.otx` oder ein konstruiertes Fixture) round-trippt: `load_to_wire → wire_to_otx → load_to_wire` ergibt strukturell identische Sim-State (gleiche Anzahl PAssozMenge*-Objekte, identische Attr-Werte, intakte Kollektionsverkettung).
+  5. **Engine-Tests grün**: Alle existierenden Roundtrip-Tests (Stand: 70+) bleiben grün; neue Tests für PAssozMenge (≥ 8 — pro Subklasse mindestens 1 Roundtrip + 1 Multi-Instance-Test) sind grün; `uv run pytest` zeigt 0 Regressionen.
+  6. **Schema-Export für UI**: API-Endpoint `/api/v1/schemas` (oder das beim Modul-Import eingelesene `app/static/schemas/v1/schemas.json`) liefert die PAssozMenge-Subklassen mit korrekten Attrs für UI-Konsum; Schema-Generator (`python -m osim_engine.schema dump` oder Reflection-Pfad) deckt die neuen Handler ab.
+  7. **PRessMengeMatrixViewer migriert**: `osim-ui/portal/src/viewers/PRessMenge/PRessMengeMatrixViewer.tsx` nutzt `MatrixGrid` aus `@osim/graphobject` (analog `PRessBelegMatrixViewer`). Zeilen = PRessMenge-Objekte (oder die zugewiesenen Material-Instanzen), Spalten = `PDlplKnoten`, Cells = PAssozMenge-Status/-Menge. `matrix-common.tsx` ist gelöscht; keine Konsumenten mehr.
+  8. **PRessMengeMatrixViewer-Tests**: Mindestens 8 Vitest-Specs für 2D-Matrix-Rendering, Cell-Edit, Block-Copy/Paste — analog `PRessBelegMatrixViewer`-Spec-Familie. Plus mindestens 1 Clipboard-Spec für Document-Listener-Verdrahtung.
+  9. **UI-Wire-Edit funktioniert**: Live im Browser: Modell mit PAssozMenge-Instanzen laden → Plan auswählen → PRessMengeMatrixViewer als Tab im Workspace öffnen → Cell-Edit funktioniert (Persistenz hängt am gleichen Save-/Lock-Stand wie Welle 1.2-H; falls Bug noch offen, übernehmen wir denselben Stand statt eines neuen).
+ 10. **E2E-Smoke**: Playwright-Spec lädt Demo-Modell mit PAssozMenge, navigiert zum `PRessMengeMatrixViewer`, editiert eine Cell, prüft mindestens Foundation-Mechanik (Block-Copy/Paste-Cycle analog `matrix-cell-edit-persistence.spec.ts` Test 2). Persistenz-Test gegen Engine-Round-Trip darf `test.fixme` sein, falls Save-/Lock-Bug aus 1.2-H noch offen.
+**Canonical refs**:
+  - C:\Users\JörgWFischer\PycharmProjects\OSim2004\OSimV01(Fj)\OSimPro\PAssozRessource.odh (Class-Definitionen PAssozMenge*)
+  - C:\Users\JörgWFischer\PycharmProjects\OSim2004\OSimV01(Fj)\OSimPro\PAssozRessource.cpp (Sim-Methoden + Attr-Persistierung)
+  - C:\Users\JörgWFischer\PycharmProjects\OSim2004\OSimV01(Fj)\OSimPro\PRessMengeMatrixViewer.cpp + .h (Original-UI-Vorlage)
+  - engine/src/osim_engine/resources/assoziation/menge.py (existierende Sim-Resource-Klassen)
+  - engine/src/osim_engine/io/otx_writer.py:917-946 (_make_assoz_writer + PAssozBeleg-Pattern als Schablone)
+  - engine/src/osim_engine/io/otx_loader.py:782-797 (_PAssozBelegHandler-Pattern als Schablone)
+  - osim-ui/portal/src/viewers/PRessBelegMatrix/PRessBelegMatrixViewer.tsx (Referenz-UI-Migration)
+  - osim-ui/portal/src/viewers/PRessMenge/matrix-common.tsx (zu löschende Legacy-Implementation)
+  - osim-ui/portal/packages/graphobject/src/matrix/ (MatrixGrid + MatrixCell als Foundation-Target)
+  - .planning/STATE.md (Track-A-A2-Defer-Notiz vom 2026-05-28b)
+**Plans**: TBD (ca. 5-7 Wellen — Engine: Audit / Loader / Writer / Round-Trip-Tests / Schema-Export; UI: Viewer-Migration / Viewer-Tests / E2E-Smoke)
 
 ### Phase 2: Sim-Lauf + Trace
 **Goal**: Aus dem in Phase 1 modellierten Modell heraus kann der User einen Sim-Lauf starten, den Status verfolgen und die JSONL-Trace herunterladen. Worker-Isolation (1 Worker = 1 OS-Prozess = 1 `s_verteil`-Singleton) ist strikt durchgesetzt.
