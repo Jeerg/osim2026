@@ -58,7 +58,7 @@ import { PDlplPersonalViewer } from "@/viewers/PDlpl/PDlplPersonalViewer";
 import { AEinsatzWunschViewer } from "@/viewers/AZeit/AEinsatzWunschViewer";
 import { AKapBedViewer } from "@/viewers/AZeit/AKapBedViewer";
 import { AGruppeViewer } from "@/viewers/AZeit/AGruppeViewer";
-import { PRessMengeMatrixViewer } from "@/viewers/PRess/PRessMengeMatrixViewer";
+import { PRessMengeMatrixViewer } from "@/viewers/PRessMenge/PRessMengeMatrixViewer";
 import { PRessBelegMatrixViewer } from "@/viewers/PRessBelegMatrix/PRessBelegMatrixViewer";
 import { PDlplConnKnotenViewer } from "@/viewers/PDlplConnKnoten/PDlplConnKnotenViewer";
 import { PRessVerknuepfungViewer } from "@/viewers/PRessVerknuepfung/PRessVerknuepfungViewer";
