@@ -51,6 +51,7 @@ portal/.vite/
 portal/playwright-report/
 portal/test-results/
 portal/playwright/.cache/
+portal/uat-shots/
 
 # Local env
 .env
