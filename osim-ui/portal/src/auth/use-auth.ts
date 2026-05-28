@@ -1,7 +1,12 @@
-// Plan 01-04 Task 1: useAuth-Hook. 1:1 aus tbx_stzrim.
 import { useContext } from "react";
 import { AuthContext, type AuthState } from "./auth-provider";
 
+/**
+ * Hook für den Zugriff auf den AuthContext.
+ *
+ * Wirft, wenn außerhalb von <AuthProvider> aufgerufen — fängt einen häufigen
+ * Test-/Storybook-Bug ab (Component ohne Provider gemountet → silent null).
+ */
 export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
   if (!ctx) {

@@ -1,5 +1,16 @@
-@import "tailwindcss";
-@plugin "@tailwindcss/forms";
+/*
+ * globals.css — Base/Reset + body styling.
+ *
+ * Welle G17-D: Token-Definitionen wurden nach `tokens.css` ausgelagert
+ * (Style-Guide §3.1). Diese Datei enthält NUR:
+ *  - tokens.css-Import (Pflicht-Reihenfolge: tokens VOR base)
+ *  - body/html/scroll-Reset
+ *  - Focus-Ring (Style-Guide §8.1)
+ *  - React-Flow Drag-Ghost (Welle G15)
+ *  - Bottom-Stripe (Style-Guide §2.4)
+ */
+
+@import "./tokens.css";
 
 html,
 body,
@@ -7,19 +18,89 @@ body,
   height: 100%;
 }
 
-body {
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+@layer base {
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+
+  /* Subtile Scrollbar (SaaS-Standard) */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
 }
 
-/* osim-ui design tokens (light only fuer Phase 1).
- * Plan 05+ kann shadcn nachziehen und das hier ersetzen. */
-:root {
-  --bg: #ffffff;
-  --fg: #111827;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --accent: #1d4ed8;
-  --accent-fg: #ffffff;
-  --error: #b91c1c;
+/* Focus-Ring (Style-Guide §8.1) — niemals outline:none ohne Ersatz */
+@layer base {
+  *:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  [role="button"]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+}
+
+/*
+ * Topbar-Gradient (Style-Guide §2.1) — diagonaler Blau-Verlauf als Brand-Hero.
+ * Token-basiert (--gradient-topbar in tokens.css), damit kein ad-hoc Color-
+ * String in der TSX landet (ESLint-Guardrail §9.1).
+ */
+.topbar-brand {
+  background: var(--gradient-topbar);
+}
+
+/*
+ * Bottom-Stripe (Style-Guide §2.4) — 4px Blau-Gradient am Body-Bottom als
+ * Brand-Echo. Sticky position damit es immer sichtbar bleibt.
+ */
+body::after {
+  content: "";
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/*
+ * Welle G15 — Drag-Ghost-Sichtbarkeit für React-Flow-Knoten.
+ *
+ * React-Flow setzt während eines aktiven Drags die Klasse `dragging` und/oder
+ * das Attribut `data-dragging="true"` auf den .react-flow__node-Wrapper.
+ * Standard-DragDrop-UX: Opacity 0.75 + drop-shadow + grabbing-Cursor.
+ */
+.react-flow__node.dragging,
+.react-flow__node[data-dragging="true"],
+.react-flow__node:active {
+  opacity: 0.75;
+  cursor: grabbing !important;
+  filter: drop-shadow(0 8px 16px rgba(30, 79, 156, 0.35));
+  transform-origin: center center;
+}
+
+.react-flow__pane.dragging {
+  cursor: grabbing !important;
 }

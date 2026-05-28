@@ -1,61 +1,47 @@
-// Plan 01-04 Task 2: ChildDialog — React-Composition.
-//
-// Stellt einen Context bereit, in dem alle eingebetteten OCtrls das
-// aktuelle Objekt + die Standard-Callbacks abrufen koennen. Der
-// useOCtrlBinding-Hook in OCtrl.types.ts greift hier zu.
-//
-// In OViewer.h Abschnitt 2 entspricht das dem Child-Dialog, der das
-// Object + alle OCtrls beherbergt. Hier ist es ein React-Provider, der
-// die Props per Context durchreicht — idiomatisch fuer React.
-
-import { createContext, useContext, type ReactNode } from "react";
-import type {
-  ChildDialogProps,
-  ChildDialogProviderProps,
-  MethodArg,
-  Oid,
-  OtxJsonNode,
-  PropertyValue,
-} from "./types";
-
-interface ChildDialogContextValue {
-  obj: OtxJsonNode;
-  onPropertyChange: (oid: Oid, key: string, value: PropertyValue) => void;
-  onMethodCall: (oid: Oid, method: string, args?: MethodArg[]) => void;
-}
-
-export const ChildDialogContext =
-  createContext<ChildDialogContextValue | null>(null);
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 /**
- * Hook fuer alle OCtrls (und andere Sub-Components), die das aktuelle
- * ChildDialog-Objekt + die Standard-Callbacks brauchen.
+ * Base-Layout für Property-Editor-Dialoge ("ChildDialog" im C++-OViewer-
+ * Vokabular). Wrapped Header / Body / Footer; konkrete Viewer komponieren
+ * darin ihre OCtrls.
+ *
+ * Modal vs. embedded ist Wahl des Parents — `ChildDialog` selbst ist nur
+ * Layout, kein `<Dialog>`-Wrapper. Plan 08 nutzt das für die konkreten
+ * Viewer (PSimulatorViewer etc.).
  */
-export function useChildDialog(): ChildDialogContextValue {
-  const ctx = useContext(ChildDialogContext);
-  if (!ctx) {
-    throw new Error(
-      "useChildDialog must be used inside a <ChildDialog> provider",
-    );
-  }
-  return ctx;
+export interface ChildDialogProps {
+  title: string;
+  description?: string;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
 }
 
-/**
- * ChildDialog-Provider — Wrappt die konkrete ChildDialog-Komponente
- * (aus der viewer-registry) in einen Context-Provider, der das aktuelle
- * Objekt und die Standard-Callbacks fuer alle OCtrls bereitstellt.
- */
-export function ChildDialog(props: ChildDialogProviderProps): ReactNode {
-  const { obj, onPropertyChange, onMethodCall, children } = props;
+export function ChildDialog({
+  title,
+  description,
+  footer,
+  children,
+  className,
+}: ChildDialogProps) {
   return (
-    <ChildDialogContext.Provider value={{ obj, onPropertyChange, onMethodCall }}>
-      {children}
-    </ChildDialogContext.Provider>
+    <div
+      data-slot="child-dialog"
+      className={cn("flex h-full flex-col gap-4 p-4", className)}
+    >
+      <header className="space-y-1">
+        <h3 className="text-lg font-semibold leading-none tracking-tight">
+          {title}
+        </h3>
+        {description && (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        )}
+      </header>
+      <div className="flex-1 overflow-auto">{children}</div>
+      {footer && (
+        <div className="flex justify-end gap-2 border-t pt-3">{footer}</div>
+      )}
+    </div>
   );
 }
-
-/**
- * Re-export — viele Konsumenten importieren beides aus diesem Modul.
- */
-export type { ChildDialogProps };

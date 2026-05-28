@@ -1,0 +1,12 @@
+{
+  "name": "@osim/graphobject-canvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HTML5-Canvas-Renderer für @osim/graphobject. Beweis-of-Concept der renderer-agnostischen Foundation — implementiert das DrawContext-Interface aus @osim/graphobject gegen ein CanvasRenderingContext2D. Track C4 des Architektur-Audits 2026-05-28.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "peerDependencies": {
+    "@osim/graphobject": "0.1.0"
+  }
+}

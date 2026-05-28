@@ -1,0 +1,15 @@
+{
+  "name": "@osim/graphobject-react-flow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React-Flow-Adapter für @osim/graphobject. Übersetzt OGraphGrid in React-Flow-Nodes/Edges, stellt GraphFlowCanvas + OsimNode + GridBackground bereit. Stand 2026-05-28b: API über Path-Alias eingerichtet, physische Dateien noch unter portal/src/graph/foundation/ (siehe MIGRATION.md im Schwester-Paket).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "peerDependencies": {
+    "@osim/graphobject": "0.1.0",
+    "@xyflow/react": "^12.10.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

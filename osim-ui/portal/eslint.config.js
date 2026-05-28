@@ -5,18 +5,17 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 import { defineConfig, globalIgnores } from "eslint/config";
 
+// Flat-Config (1:1 aus tbx_stzrim/portal/eslint.config.js mit zwei osim-ui-spezifischen Anpassungen):
+//
+// 1. routeTree.gen.ts global-ignore (Generated File).
+// 2. react-refresh/only-export-components downgrade auf `warn` für TanStack-
+//    Router-Konvention: routes/*.tsx MUSS `export const Route` + Component
+//    nebeneinander haben — die HMR-Constraint ist hier irrelevant, weil der
+//    Router-Vite-Plugin den Route-Manifest eh neu generiert.
+//    Auch in ui/button.tsx (cva-export) und auth-provider.tsx (Context-Export)
+//    sind diese gemischten Exports gewollt und 1:1 aus 3fls übernommen.
 export default defineConfig([
-  globalIgnores([
-    "dist",
-    "src/routeTree.gen.ts",
-    // Playwright-E2E-Tests werden NICHT mit dem App-Lint geprueft --
-    // sie laufen in Node, nicht im Browser, und nutzen das @playwright/test-
-    // eigene Test-Pattern (test.beforeEach, page.locator etc.).
-    "e2e/",
-    "playwright.config.ts",
-    "playwright-report/",
-    "test-results/",
-  ]),
+  globalIgnores(["dist", "src/routeTree.gen.ts"]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [
@@ -26,60 +25,18 @@ export default defineConfig([
       reactRefresh.configs.vite,
     ],
     languageOptions: {
-      ecmaVersion: 2022,
+      ecmaVersion: 2020,
       globals: globals.browser,
     },
     rules: {
-      // TanStack-Router-File-Routes muessen sowohl `Route` als auch die
-      // Component exportieren — das ist der vom Plugin vorgegebene
-      // Convention. Wir erlauben `Route` als zusaetzlichen Export.
-      // Analog fuer Context-Provider-Pattern (z.B. AuthContext + AuthProvider).
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true, allowExportNames: ["Route", "AuthContext"] },
-      ],
-    },
-  },
-  // Route-Dateien des TanStack Routers kombinieren konventionell den
-  // Route-Const-Export mit einer in-File-Komponente. Wir disablen
-  // hier die Fast-Refresh-Regel; HMR funktioniert in Praxis trotzdem,
-  // weil der Router-Plugin im Hintergrund die Route-Defs handlt.
-  {
-    files: ["src/routes/**/*.{ts,tsx}"],
-    rules: {
-      "react-refresh/only-export-components": "off",
-    },
-  },
-  // Viewer-Foundation: ViewerHost und ChildCtrl waehlen die ChildDialog-
-  // Komponente ZUR RENDER-ZEIT aus der viewer-registry. Das ist der
-  // GENAUE Sinn der Registry (D-07) — wir deaktivieren die strict-Regel
-  // "react-hooks/static-components" fuer diese Files. Re-Mount bei
-  // Klassen-Wechsel ist gewollt.
-  //
-  // Plus: ChildDialog.tsx exportiert Context + Hook (useChildDialog) neben
-  // der Komponente — Fast-Refresh-Regel ist hier irrelevant.
-  {
-    files: ["src/viewers/core/**/*.{ts,tsx}"],
-    rules: {
-      "react-hooks/static-components": "off",
-      "react-refresh/only-export-components": "off",
-    },
-  },
-  // OCtrl-Familie: einige OCtrls exportieren Konvertierungs-Helfer
-  // (colorrefToHex / hexToColorref) oder Types (LogFontValue) neben der
-  // Komponente. Fast-Refresh-Regel deaktivieren — HMR funktioniert hier
-  // implizit via React-Reconciler.
-  {
-    files: ["src/viewers/octrl/**/*.{ts,tsx}"],
-    rules: {
-      "react-refresh/only-export-components": "off",
-    },
-  },
-  // Test-Dateien duerfen mehr (mock-Components, beforeEach mit Side-Effects).
-  {
-    files: ["**/__tests__/**/*.{ts,tsx}", "src/test-setup.ts"],
-    rules: {
-      "react-refresh/only-export-components": "off",
+      "react-refresh/only-export-components": "warn",
+      // ViewerRegistry resolves stable component references per (klass, hint).
+      // ESLint v7's react-hooks erkennt diese Pattern-Architektur als
+      // "Component created during render" — false positive für das hier
+      // dokumentierte Routing-Pattern (siehe ViewerFrame.tsx und
+      // RESEARCH.md §Pattern 1). Downgrade auf warn, damit die
+      // Foundation-Schicht baut.
+      "react-hooks/static-components": "warn",
     },
   },
 ]);

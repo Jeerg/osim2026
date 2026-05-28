@@ -1,0 +1,181 @@
+/*
+ * tokens.css — Single Source of Truth für alle Design-Tokens (Welle G17-D).
+ *
+ * Vollständig nach `docs/3FLS-EAM-STYLE-GUIDE.md` (rev. 2026-05-26: Blau-Primary
+ * re-keyed von Cyan, Magenta nur Logo-Bound, Segoe UI). Tailwind 4 `@theme`-Block
+ * exponiert die Tokens als CSS-Variablen
+ * und als utility-Klassen (`bg-primary`, `text-foreground`, etc.). Niemals
+ * ad-hoc Hex-Strings in TSX/CSS — neue Farbe? Erst Token hier definieren.
+ *
+ * Re-keying-Regel: Wenn der Brand wechselt, nur Primary-Familie + abgeleitete
+ * Surface-Soft-Tokens austauschen. Surface/Border/Text bleiben brand-agnostic.
+ */
+
+@import "tailwindcss";
+
+@theme {
+  /* ============================================================
+   * 1. Primary — Blau (verbindlich aus Style-Guide §1.1, rev. 2026-05-26).
+   *    Re-keyed von Cyan #0EA5C7. Token-Namen mit `-cyan`-Suffix sind
+   *    historisch beibehalten (brand-neutraler Alias) — nur Werte getauscht.
+   * ============================================================ */
+  --color-primary: #1E4F9C;
+  --color-primary-hover: #18407F;
+  --color-primary-light: #C7D7EF;
+  --color-primary-mid: #4A6FAC;
+  --color-primary-dark: #15265F;
+  --color-surface-soft-cyan: #EEF3FB;
+  --color-surface-soft-cyan-2: #E2EAF6;
+
+  /* Topbar-Gradient (Style-Guide §2.1) — diagonaler Blau-Verlauf,
+   * Navy oben-links → Ice-Blau oben-rechts (Logo-Bereich). */
+  --gradient-topbar: linear-gradient(
+    135deg,
+    #1F264C 0%,
+    #1C366B 28%,
+    #1E4F94 52%,
+    #6E93C8 78%,
+    #B2C9E8 100%
+  );
+
+  /* ============================================================
+   * 2. Surface & Background (Style-Guide §3.2 Sektion 2)
+   * ============================================================ */
+  --color-surface: #FFFFFF;
+  --color-bg: #F0F2F5;
+  --color-surface-hover: #F4F6F8;
+
+  /* ============================================================
+   * 3. Border (Style-Guide §3.2 Sektion 3)
+   * ============================================================ */
+  --color-border: #DDE2EA;
+  --color-border-light: #EAECF0;
+
+  /* ============================================================
+   * 4. Text (Style-Guide §3.2 Sektion 4)
+   * ============================================================ */
+  --color-text: #1F2937;
+  --color-text-muted: #6B7280;
+  --color-text-inverse: #FFFFFF;
+
+  /* ============================================================
+   * 5. Semantic (Style-Guide §3.2 Sektion 5)
+   * ============================================================ */
+  --color-success: #10B981;
+  --color-success-hover: #059669;
+  --color-success-bg: #D1FAE5;
+  --color-success-border: #6EE7B7;
+
+  --color-warning: #F59E0B;
+  --color-warning-hover: #D97706;
+  --color-warning-bg: #FEF3C7;
+  --color-warning-border: #FCD34D;
+
+  --color-danger: #EF4444;
+  --color-danger-hover: #DC2626;
+  --color-danger-bg: #FEE2E2;
+  --color-danger-border: #FCA5A5;
+
+  --color-info: #3B82F6;
+  --color-info-hover: #2563EB;
+  --color-info-bg: #DBEAFE;
+  --color-info-border: #93C5FD;
+
+  /* Focus-Ring per Semantic (Style-Guide §8.1) */
+  --color-focus-ring: rgba(30, 79, 156, 0.4);
+  --color-focus-ring-success: rgba(16, 185, 129, 0.4);
+  --color-focus-ring-danger: rgba(239, 68, 68, 0.4);
+
+  /* ============================================================
+   * 6. Status-Badges (Style-Guide §3.2 Sektion 6)
+   * ============================================================ */
+  --status-idle-bg: #F4F6F8;
+  --status-idle-text: #6B7280;
+  --status-running-bg: #DBEAFE;
+  --status-running-text: #1E40AF;
+  --status-finished-bg: #D1FAE5;
+  --status-finished-text: #065F46;
+  --status-failed-bg: #FEE2E2;
+  --status-failed-text: #991B1B;
+  --status-aborted-bg: #FEF3C7;
+  --status-aborted-text: #92400E;
+
+  /* ============================================================
+   * 7. Layout (Style-Guide §3.2 Sektion 7)
+   * ============================================================ */
+  --sidebar-width: 300px;
+  --sidebar-width-collapsed: 64px;
+  --header-height: 80px;
+
+  /* ============================================================
+   * 8. Typography (Style-Guide §4, rev. 2026-05-26: Segoe UI statt Geist)
+   * ============================================================ */
+  --font-sans: "Segoe UI", "Inter", Arial, sans-serif;
+  --font-mono: "Cascadia Code", "Fira Mono", Consolas, monospace;
+
+  /* ============================================================
+   * 10. Shape (Radius) (Style-Guide §3.2 Sektion 10)
+   * ============================================================ */
+  --radius-sm: 4px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 99px;
+
+  /* ============================================================
+   * 11. Shadow (Style-Guide §3.2 Sektion 11) — sparsam!
+   * ============================================================ */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+
+  /* ============================================================
+   * shadcn-Mapping — semantische Tokens auf Brand-Palette
+   * (CSS-Variablen, die shadcn-Komponenten automatisch konsumieren)
+   * ============================================================ */
+  --color-background: var(--color-surface);
+  --color-foreground: var(--color-text);
+  /* Button-/Badge-Text auf dunklem Blau-Primary MUSS weiß sein (Style-Guide
+   * §8.2 Kontrast). Ohne dieses Token fiel `text-primary-foreground` auf das
+   * dunkle --color-foreground zurück → unlesbar auf #1E4F9C. */
+  --color-primary-foreground: var(--color-text-inverse);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-text);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-text);
+  --color-secondary: var(--color-bg);
+  --color-secondary-foreground: var(--color-text);
+  --color-muted: var(--color-bg);
+  --color-muted-foreground: var(--color-text-muted);
+  --color-accent: var(--color-surface-soft-cyan);
+  --color-accent-foreground: var(--color-primary-dark);
+  --color-destructive: var(--color-danger);
+  --color-destructive-foreground: var(--color-text-inverse);
+  --color-input: var(--color-border);
+  --color-ring: var(--color-primary);
+
+  /* Brand-Alias für Legacy-Code (Phase-1.1-Migrations-Brücke).
+   * NEUE Komponenten nutzen `primary`/`primary-*` direkt — diese Aliase
+   * werden in einer späteren Welle entfernt sobald alle Konsumenten
+   * migriert sind. */
+  --color-brand-50: var(--color-surface-soft-cyan);
+  --color-brand-100: var(--color-surface-soft-cyan-2);
+  --color-brand-200: var(--color-primary-light);
+  --color-brand-300: var(--color-primary-mid);
+  --color-brand-400: var(--color-primary-mid);
+  --color-brand-500: var(--color-primary);
+  --color-brand-600: var(--color-primary-hover);
+  --color-brand-700: var(--color-primary-dark);
+  --color-brand-800: var(--color-primary-dark);
+  --color-brand-900: var(--color-primary-dark);
+
+  --color-surface-50: #FAFBFC;
+  --color-surface-100: var(--color-bg);
+  --color-surface-200: var(--color-border-light);
+  --color-surface-300: var(--color-border);
+  --color-surface-400: #B8C0CC;
+  --color-surface-500: var(--color-text-muted);
+  --color-surface-600: #4B5563;
+  --color-surface-700: #374151;
+  --color-surface-800: #1F2937;
+  --color-surface-900: var(--color-text);
+}

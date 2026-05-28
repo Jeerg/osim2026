@@ -1,15 +1,17 @@
-"""structlog-Konfiguration für osim-ui.
+"""Strukturiertes Logging via structlog.
 
-- Dev: Console-Renderer, lesbar, farbig
-- Prod / Staging: JSON-Renderer, Cloud-Logging-kompatibel
+JSON-Renderer in Produktion (Cloud-Logging-kompatibel), ConsoleRenderer in Dev.
 
-Wird in app/main.py:lifespan einmal beim Startup aufgerufen.
+3fls-Pattern-Parität (siehe tbx_stzrim/app/core/logging.py):
+    * merge_contextvars für request-scoped Kontext-Binding (TenantAuthMiddleware
+      bindet tenant_id / user_email / method / path)
+    * TimeStamper mit ISO-Format
+    * ProcessorFormatter brückt structlog in stdlib-logging
 """
 
 from __future__ import annotations
 
 import logging
-import sys
 
 import structlog
 
@@ -17,56 +19,43 @@ from app.core.config import settings
 
 
 def configure_logging() -> None:
-    """Initialisiert structlog + stdlib logging.
+    """Configure structlog mit JSON (Prod) oder Console (Dev) Rendering."""
+    is_dev = settings.environment == "dev"
 
-    Idempotent -- mehrfacher Aufruf ist safe.
-    """
-    log_level_name = settings.log_level
-    log_level = getattr(logging, log_level_name, logging.INFO)
-
-    # stdlib root-logger
-    logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stdout,
-        level=log_level,
-        force=True,
-    )
-
-    # Gemeinsame Prozessoren
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
-        structlog.processors.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
     ]
 
-    if settings.environment in ("prod", "staging"):
-        # JSON-Output (cloud-logging-freundlich)
-        renderer: structlog.types.Processor = structlog.processors.JSONRenderer()
-        processors = [
-            *shared_processors,
-            structlog.processors.format_exc_info,
-            structlog.processors.dict_tracebacks,
-            renderer,
-        ]
+    if is_dev:
+        renderer: structlog.types.Processor = structlog.dev.ConsoleRenderer(
+            colors=True
+        )
     else:
-        # Dev / Test: Console-Renderer
-        renderer = structlog.dev.ConsoleRenderer(colors=True)
-        processors = [
-            *shared_processors,
-            structlog.processors.format_exc_info,
-            renderer,
-        ]
+        renderer = structlog.processors.JSONRenderer()
 
     structlog.configure(
-        processors=processors,
-        wrapper_class=structlog.make_filtering_bound_logger(log_level),
-        context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        processors=[
+            *shared_processors,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
 
-
-def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
-    """Convenience-Wrapper für strukturiertes Loggen."""
-    return structlog.get_logger(name)
+    # Bridge stdlib-logging zu structlog
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        structlog.stdlib.ProcessorFormatter(
+            processors=[*shared_processors, renderer],
+        )
+    )
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.addHandler(handler)
+    root_logger.setLevel(logging.INFO)

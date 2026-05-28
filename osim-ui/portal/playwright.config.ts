@@ -1,56 +1,73 @@
-// Playwright-Konfiguration fuer das osim-ui-Portal (Plan 01-10 Task 2).
-//
-// Strategie: Tests laufen gegen das lokale Dev-Stack (docker-compose +
-// uvicorn + npm run dev). Der Playwright-Test-Runner *startet keine
-// Services selbst* -- wir setzen voraus, dass der Entwickler vor dem
-// Lauf `docker compose up` + `uvicorn app.main:app` + `npm run dev`
-// laufen hat. Das ist sauberer als webServer in der Config, weil:
-//   - docker-compose-Lifecycle ist orthogonal zum Test-Lifecycle.
-//   - Firebase-Emulator-Aufstart dauert 5-10s und blockiert sonst jeden
-//     Lauf, auch lokale Re-Runs.
-//
-// Test-Suites:
-//   00-smoke.spec.ts        — Health-Check / Login-Redirect
-//   01-auth-flow.spec.ts    — Register/Login via Firebase-Emulator
-//   02-upload-edit-save.spec.ts — Wichtigster E2E: Upload -> Edit -> Save -> Reload
-//   03-viewer-navigation.spec.ts — Alle 12 Viewer ohne Crash
-//   04-lock-recovery.spec.ts — Lock-Banner + IndexedDB-Recovery-Prompt
-//
-// Tests skippen sich automatisch, wenn das Backend nicht erreichbar ist
-// (siehe e2e/fixtures/skip-if-no-backend.ts).
+/**
+ * Playwright-Konfiguration für die End-to-End-Tests von osim-ui (Plan 01-12).
+ *
+ * Diese Tests laufen NICHT als Teil der Vitest-Unit-Suite. Sie setzen einen
+ * laufenden docker-compose-Stack voraus (postgres + firebase-emulator + minio
+ * + api + portal — siehe Plan 01-05) und prüfen die drei kritischen
+ * User-Journeys der Phase 1:
+ *
+ *   1. modeling-flow.spec.ts    — Happy-Path (Upload → Edit → Save → Reload)
+ *   2. lock-conflict.spec.ts    — Single-Editor-Lock zwischen zwei Sessions
+ *   3. snapshot-restore.spec.ts — IndexedDB-Crash-Recovery-Dialog
+ *
+ * Ausführung:
+ *   cd portal
+ *   npx playwright install chromium    # einmalig
+ *   npm run test:e2e                   # alle drei Specs
+ *   npm run test:e2e:ui                # interaktive Playwright-UI
+ *
+ * Voraussetzungen vor `npm run test:e2e`:
+ *   docker compose up -d
+ *   bash scripts/wait-healthy.sh 90
+ *   uv run alembic --config db/alembic.ini upgrade head
+ *   uv run python scripts/seed_firebase_emulator.py
+ *
+ * Hinweis fuer Reproduzierbarkeit:
+ *   fullyParallel=false + workers=1 — Tests teilen sich den docker-compose-State
+ *   (Postgres-Tenant-Schema + Firebase-Emulator-User). Echte Parallelisierung
+ *   erfordert per-Test-DB-Reset und ist im Phase-2-Backlog dokumentiert.
+ */
 import { defineConfig, devices } from "@playwright/test";
-
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /.*\.spec\.ts$/,
-  fullyParallel: false, // Tests teilen den Firebase-Emulator -- seriell ist sicherer.
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // Tests teilen sich den docker-compose-Stack — serielle Ausführung.
+  fullyParallel: false,
   workers: 1,
-  reporter: process.env.CI ? "github" : "html",
-
+  retries: 0,
+  // Timeout pro Test grosszuegig (Upload + Workspace-Load kann auf langsamen
+  // Maschinen ~30 s dauern; 60 s als Sicherheits-Puffer).
+  timeout: 60_000,
+  expect: {
+    // Default-Timeout fuer expect-Polls (z.B. expect(...).toBeVisible).
+    timeout: 10_000,
+  },
+  reporter: [
+    ["list"],
+    ["html", { open: "never", outputFolder: "playwright-report" }],
+  ],
   use: {
-    baseURL: BASE_URL,
+    baseURL: "http://localhost:3002",
+    // Trace nur bei Re-Try (was bei retries=0 effektiv "nie" ist) plus
+    // screenshot/video bei Fehler — laesst CI-Logs schlank.
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    actionTimeout: 15_000,
-    navigationTimeout: 30_000,
+    // Standard-Viewport; OSim-UI ist auf Desktop ausgelegt.
+    viewport: { width: 1440, height: 900 },
+    // Browser-Locale auf Deutsch, damit datetimeformatte etc. den
+    // erwarteten Format ausgeben.
+    locale: "de-DE",
+    timezoneId: "Europe/Berlin",
   },
-
   projects: [
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-
-  // KEIN webServer-Config. Entwickler startet selber:
-  //   1) docker compose up -d   (Postgres + Firebase-Emulator + Minio)
-  //   2) uv run alembic upgrade head
-  //   3) uv run uvicorn app.main:app   (Terminal 1)
-  //   4) cd portal && npm run dev      (Terminal 2)
-  //   5) npx playwright test           (Terminal 3)
+  // KEIN webServer-Block: Tests setzen voraus, dass `docker compose up`
+  // bereits laeuft. Begruendung: webServer wuerde portal+api+postgres+firebase
+  // separat starten muessen, was den compose-Stack dupliziert. README
+  // dokumentiert die Vorbedingungen.
 });

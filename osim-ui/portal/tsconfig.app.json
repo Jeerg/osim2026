@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "ES2023",
+    "useDefineForClassFields": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "types": ["vite/client", "node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": false,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+
+    /* Path alias */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@osim/graphobject": ["./packages/graphobject/src/index.ts"],
+      "@osim/graphobject/*": ["./packages/graphobject/src/*"],
+      "@osim/graphobject-react-flow": [
+        "./packages/graphobject-react-flow/src/index.ts"
+      ],
+      "@osim/graphobject-react-flow/*": [
+        "./packages/graphobject-react-flow/src/*"
+      ],
+      "@osim/graphobject-canvas": [
+        "./packages/graphobject-canvas/src/index.ts"
+      ],
+      "@osim/graphobject-canvas/*": [
+        "./packages/graphobject-canvas/src/*"
+      ]
+    }
+  },
+  "include": ["src", "packages/*/src"]
+}

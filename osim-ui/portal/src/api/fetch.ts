@@ -1,23 +1,19 @@
-// Plan 01-04 Task 1: apiFetch — leichtgewichtiger Fetch-Wrapper, der
-// den Firebase-JWT als Authorization-Header anhaengt.
-//
-// Aus tbx_stzrim/portal/src/api/fetch.ts uebernommen, abgespeckt:
-// - Kein apiFetchBlob (Phase 1 hat keinen Binary-Export-Use-Case;
-//   Plan 09 fuer OTX-Download wird das nachziehen).
-// - Kein parseContentDispositionFilename-Import (gehoert zu apiFetchBlob).
 import { auth } from "@/auth/firebase";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 /**
- * Error class thrown by apiFetch on non-2xx responses.
+ * Error-Klasse, die `apiFetch` bei non-2xx-Responses wirft.
  *
- * Carries status + parsed body so callers koennen je nach Status
- * differenziert reagieren (404 = "Modell weg", 422 = Validierungsfehler,
- * 5xx = generischer Fehler-Toast).
+ * Eigene Klasse statt `new Error("API error 401")`, weil Caller den HTTP-Status
+ * status-spezifisch behandeln müssen (409 Lock-Konflikt vs. 423 Locked vs. 404
+ * Modell-nicht-gefunden) und auf den geparsten Body (RFC-7807 `code`-Feld via
+ * `error-message.ts`) zugreifen.
  */
 export class ApiError extends Error {
+  /** HTTP-Statuscode (z.B. 401, 409, 422, 500). */
   readonly status: number;
+  /** Parsed Response-Body wenn JSON, sonst Raw-Text, sonst null. */
   readonly body: unknown;
 
   constructor(status: number, statusText: string, body: unknown) {
@@ -29,12 +25,19 @@ export class ApiError extends Error {
 }
 
 /**
- * Fetch-Wrapper, der den Firebase-JWT automatisch anhaengt.
+ * Leichtgewichtiger Fetch-Wrapper für die osim-ui-Backend-API.
  *
- * @param path - relativer oder absoluter Pfad. Wenn relativ (mit "/" beginnend),
- *               wird BASE_URL davorgehaengt.
- * @param init - Standard-fetch-RequestInit. Bei body wird Content-Type auf
- *               application/json default-gesetzt, falls nicht ueberschrieben.
+ * Eigenschaften:
+ *  - hängt automatisch einen frischen Firebase-ID-Token als `Authorization`-
+ *    Header an, wenn ein User authentisiert ist (`getIdToken(false)` nutzt den
+ *    Firebase-internen Cache + Auto-Refresh).
+ *  - setzt `Accept: application/json` und (bei body und ohne explizites
+ *    Content-Type) `Content-Type: application/json` per Default.
+ *  - wirft `ApiError` mit geparstem Body bei non-2xx.
+ *  - returnt `undefined as T` bei 204.
+ *
+ * Phase 1: kein `apiFetchBlob` — kommt in Plan 04 (OTX-Download). Phase 3
+ * tauscht Caller potenziell gegen `openapi-fetch` für typsichere Schema-Pfade.
  */
 export async function apiFetch<T>(
   path: string,
@@ -42,7 +45,14 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
-  if (init?.body && !headers.has("Content-Type")) {
+  // FormData ausnehmen: der Browser setzt selbst `Content-Type:
+  // multipart/form-data; boundary=...` und Vorab-Setzen würde den
+  // boundary-Parameter killen → FastAPI rejected mit 422.
+  if (
+    init?.body &&
+    !headers.has("Content-Type") &&
+    !(init.body instanceof FormData)
+  ) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -52,15 +62,17 @@ export async function apiFetch<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const url = path.startsWith("http") ? path : `${BASE_URL}${path}`;
-  const response = await fetch(url, { ...init, headers });
+  const response = await fetch(`${BASE_URL}${path}`, {
+    ...init,
+    headers,
+  });
 
   if (!response.ok) {
     let body: unknown = null;
     try {
       const text = await response.text();
       body = text
-        ? ((): unknown => {
+        ? (() => {
             try {
               return JSON.parse(text);
             } catch {
@@ -69,12 +81,12 @@ export async function apiFetch<T>(
           })()
         : null;
     } catch {
-      // Body-Read fehlgeschlagen — Status reicht fuer Caller.
+      // Body konnte nicht gelesen werden — Status reicht für die meisten Caller.
     }
     throw new ApiError(response.status, response.statusText, body);
   }
 
-  // 204 No Content — undefined als T zurueckgeben (Caller typisiert das).
+  // 204 No Content — return undefined als T (Caller-Type definiert die Form).
   if (response.status === 204) {
     return undefined as T;
   }

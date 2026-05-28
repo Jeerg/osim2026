@@ -1,8 +1,14 @@
-# Phase 1 — Vertikale MVP-Slice
+# Phase 1 — Vertikale MVP-Slice  ⚠️ DEPRECATED
 
-**Milestone:** v0.1.0  
-**Stand:** 2026-05-20 (Entwurf, vor Discussion-Phase)  
-**Aufwand-Schätzung:** 2–3 Wochen (1 Dev)
+> **Diese Datei beschreibt den ALTEN Phase-1-Scope ("Login → Upload → Sim → Trace") und ist nach dem Reframe vom 2026-05-21 nicht mehr maßgeblich.**
+>
+> **Aktuelle Quelle der Wahrheit für Phase 1:** [`01-CONTEXT.md`](./01-CONTEXT.md) — OViewer-Framework + OTX-im-Browser-Modellierung.
+>
+> Der Sim-Lauf, der hier beschrieben ist, wurde zur neuen [Phase 2](../02-sim-lauf/02-PRELIMINARY-PLAN.md) verschoben. Diese Datei bleibt als Historie / Audit-Trail erhalten.
+
+**Milestone:** v0.1.0
+**Stand:** 2026-05-20 (DEPRECATED 2026-05-21)
+**Aufwand-Schätzung:** 2–3 Wochen (1 Dev) — bezieht sich auf den abgelösten Scope
 
 ---
 

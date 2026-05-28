@@ -1,290 +1,457 @@
-"""Model-Lifecycle-Service: Upload → DB+Storage; List/Get; Save-back.
+"""Modell-Service: OTX-Upload + Wire-Roundtrip + Versionierung + Delete.
 
-Implementiert D-03 (Storage + Versionierung) und D-14 (Save-back als neue
-Version, Original unveraendert).
+Phase 1 zentral fuer SC-3 (Upload→Tree), SC-6 (Edit-Operationen), SC-7 (Lock
++ Save), SC-8 (versioniertes Save-back).
 
-Two-Step-Commit-Pattern:
-  1. Storage put_object zuerst (so kann ein DB-Rollback nicht "verwaiste"
-     storage-keys hinterlassen, die spaeter nicht aufgeraeumt werden).
-  2. DB-Row schreiben + commit.
+Storage-Layout-Konvention (D-03):
 
-Sollte Schritt 2 trotzdem failen, bleibt das Storage-Objekt als
-"orphan" liegen -- akzeptabel in Phase 1, mit Aufraeum-Job in Phase 4+.
+    tenants/{tenant_id}/models/{model_id}/
+        original.otx          ← initial upload, D-14: unveraenderlich
+        v_<YYYYMMDDTHHMMSSZ>.otx   ← jede save_wire-Operation
+
+D-14 (Original-Unchanged-Constraint): das Original wird nur einmal beim
+Upload geschrieben und danach nie wieder veraendert. Jedes Save-back legt
+eine neue versionierte Datei daneben + aktualisiert ``storage_key`` in der
+``models``-Tabelle. ``original_storage_key`` zeigt immer auf das Original.
+
+Threat-Mitigations (siehe PLAN §threat_model):
+    * T-04-01 (Path-Traversal via Upload-Filename): Filename aus UploadFile
+      wird IGNORIERT; storage_key wird serverseitig konstruiert.
+    * T-04-02 (DoS via Mega-Upload): Size-Check vor put_object — > 30 MB →
+      HTTPException 413 ``E_UPLOAD_TOO_LARGE``.
+    * T-04-03 (Cross-Tenant Storage-Zugriff): tenant_id ist im storage_key
+      enthalten; ModelService konstruiert Keys mit Tenant-Prefix. Kein
+      direkter Storage-Zugriff von ausserhalb.
+    * T-04-11 (Wire mit unsupported -> Loader-Crash): save_wire prüft
+      ``is_save_safe`` zuerst → 422 statt Loader-Exception.
+
+Stack: sync. ``conn`` ist eine bereits durch ``get_db`` etablierte
+Connection mit search_path auf das Tenant-Schema gesetzt.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from pathlib import PurePosixPath
+import tempfile
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from uuid import UUID
 
 import structlog
 from fastapi import HTTPException
-from sqlalchemy import desc, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from sqlalchemy.engine import Connection
 
-from app.models.model import Model
-from app.models.model_version import ModelVersion
-from app.services.otx_service import OtxParseError, parse_otx_bytes
-from app.services.storage import Storage
+from app.api.schemas.model import ModelMeta, ModelTreeWire
+from app.services.otx_json_tree import is_save_safe, load_to_wire, wire_to_otx
+from app.services.storage import StorageService
 
-logger = structlog.get_logger(__name__)
-
-# Maximale Upload-Groesse (Bytes) -- 50 MB ist die Plan-Vorgabe.
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+log = structlog.get_logger(__name__)
 
 
-def _storage_key(
-    tenant_id: str,
-    model_id: int,
-    version: int,
-    filename: str,
-    *,
-    timestamp: datetime | None = None,
-) -> str:
-    """Baut einen Storage-Key fuer eine ModelVersion.
+# ---------------------------------------------------------------------------
+# Konstanten / Limits
+# ---------------------------------------------------------------------------
 
-    Format:
-        ``tenants/{tenant_id}/models/{model_id}/v{N}-{YYYYMMDDTHHMMSS}-{filename}``
+# Upload-Cap (Mitigation T-04-02). 30 MB deckt Bosch2_wechseln (~18 MB) + Puffer
+# ab. Phase 2 / 5 erhoehen den Cap, wenn realistische Modelle das brauchen.
+MAX_UPLOAD_BYTES: int = 30 * 1024 * 1024
 
-    Der Timestamp im Pfad stellt Eindeutigkeit sicher, auch wenn die
-    Versionsnummer (theoretisch durch Race) doppelt vergeben werden sollte.
+# Whitelist akzeptierter MIME-Types. ``None`` (kein Header) tolerieren wir
+# fuer Curl-Tests + Browser-Form-Uploads, die "application/octet-stream"
+# setzen koennen.
+ALLOWED_MIME_TYPES: frozenset[str | None] = frozenset(
+    {
+        None,
+        "application/octet-stream",
+        "application/x-otx",
+        "text/plain",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _utcnow() -> datetime:
+    """UTC-now naiv (Python 3.12+-kompatible Variante)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _storage_prefix(tenant_id: str, model_id: UUID) -> str:
+    return f"tenants/{tenant_id}/models/{model_id}"
+
+
+def _storage_key(tenant_id: str, model_id: UUID, filename: str) -> str:
+    return f"{_storage_prefix(tenant_id, model_id)}/{filename}"
+
+
+def _version_filename() -> str:
+    """``v_<YYYYMMDDTHHMMSSZ>.otx``."""
+    ts = _utcnow().strftime("%Y%m%dT%H%M%SZ")
+    return f"v_{ts}.otx"
+
+
+def _coerce_datetime(value) -> datetime:
+    """Glaette ``datetime`` / ISO-String-Returns (analog lock_service)."""
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        return datetime.fromisoformat(value)
+    raise TypeError(f"Unsupported created_at type: {type(value)!r}")
+
+
+# ---------------------------------------------------------------------------
+# ModelService
+# ---------------------------------------------------------------------------
+
+
+class ModelService:
+    """Sync-Service fuer Modell-Lifecycle.
+
+    Eine Instanz pro Request (FastAPI-Dependency-Scope), weil sie eine
+    Connection haelt. Die Connection hat per ``get_db`` bereits
+    ``SET search_path TO tenant_<id>, public`` ausgefuehrt — alle hier
+    abgesetzten Queries treffen das Tenant-Schema.
     """
-    if timestamp is None:
-        timestamp = datetime.now(UTC)
-    ts = timestamp.strftime("%Y%m%dT%H%M%S")
-    # Filename sanitisieren: nur Basename, keine separator-Zeichen.
-    safe_name = PurePosixPath(filename).name.replace("\\", "_")
-    return f"tenants/{tenant_id}/models/{model_id}/v{version}-{ts}-{safe_name}"
 
+    def __init__(
+        self,
+        conn: Connection,
+        storage: StorageService,
+        tenant_id: str,
+        user_uid: str,
+    ) -> None:
+        self.conn = conn
+        self.storage = storage
+        self.tenant_id = tenant_id
+        self.user_uid = user_uid
 
-# ---------------------------------------------------------------------------
-# Lifecycle: Upload
-# ---------------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # upload_otx
+    # ------------------------------------------------------------------
 
+    def upload_otx(
+        self,
+        name: str,
+        content: bytes,
+        content_type: str | None = None,
+    ) -> ModelMeta:
+        """Upload + Persistierung des Original-OTX (D-14).
 
-async def register_model_from_otx(
-    *,
-    file_bytes: bytes,
-    filename: str,
-    tenant_id: str,
-    user_uid: str,
-    db: AsyncSession,
-    storage: Storage,
-) -> Model:
-    """Parst eine OTX-Datei, speichert sie und legt ``Model`` + ``ModelVersion``
-    Version 1 (source="upload") an.
+        Args:
+            name: anzeige-Name fuer das Modell (vom User vergeben).
+            content: raw bytes der .otx-Datei. Latin-1-Encoding wird vom
+                Aufrufer NICHT decodiert — wir speichern bytes 1:1.
+            content_type: optionaler MIME-Type aus dem Upload-Header.
 
-    Raises:
-        HTTPException(413): wenn die Datei groesser als MAX_UPLOAD_BYTES.
-        HTTPException(422): wenn der Parser die Datei nicht versteht
-            (zero coverage, Loader-Crash, leere Datei).
-    """
-    if len(file_bytes) == 0:
-        raise HTTPException(status_code=422, detail="Leeres File.")
-    if len(file_bytes) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File zu gross (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB).",
-        )
+        Returns:
+            ``ModelMeta`` mit id, name, created_at, storage_keys.
 
-    try:
-        result = parse_otx_bytes(file_bytes)
-    except OtxParseError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    # 1) DB-Row anlegen (ohne current_version_id), flush um die id zu bekommen.
-    base_name = PurePosixPath(filename).name
-    stem = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
-    model = Model(
-        name=stem or "Unbenanntes Modell",
-        original_filename=base_name,
-        owner_uid=user_uid,
-        coverage_ratio_at_upload=result.coverage_ratio,
-        loaded_summary=dict(result.loaded),
-        unsupported_summary=dict(result.unsupported),
-    )
-    db.add(model)
-    await db.flush()  # -> model.id verfuegbar
-
-    # 2) Storage put_object FIRST.
-    storage_key = _storage_key(
-        tenant_id=tenant_id,
-        model_id=model.id,
-        version=1,
-        filename=base_name,
-    )
-    await storage.put_object(storage_key, file_bytes, "application/octet-stream")
-
-    # 3) ModelVersion + Verknuepfung.
-    version = ModelVersion(
-        model_id=model.id,
-        version=1,
-        source="upload",
-        storage_key=storage_key,
-        bytes_size=len(file_bytes),
-        created_by_uid=user_uid,
-    )
-    db.add(version)
-    await db.flush()  # -> version.id
-
-    model.current_version_id = version.id
-    await db.commit()
-
-    logger.info(
-        "model_uploaded",
-        model_id=model.id,
-        tenant_id=tenant_id,
-        owner_uid=user_uid,
-        coverage_ratio=result.coverage_ratio,
-        bytes=len(file_bytes),
-    )
-
-    # KEIN db.refresh nach commit: NullPool/asyncpg recycelt die Connection
-    # und der neue Connect haette keinen search_path -> "relation models
-    # does not exist". Die server_default-Spalten (created_at, updated_at)
-    # haben durch flush() bereits ihre Werte erhalten.
-    return model
-
-
-# ---------------------------------------------------------------------------
-# Lifecycle: List + Get
-# ---------------------------------------------------------------------------
-
-
-async def list_models(db: AsyncSession) -> list[Model]:
-    """Liefert alle Modelle des aktuellen Tenants (sortiert nach Update-Zeit)."""
-    rows = (
-        await db.execute(
-            select(Model).order_by(desc(Model.updated_at))
-        )
-    ).scalars().all()
-    return list(rows)
-
-
-async def get_model(model_id: int, db: AsyncSession) -> Model:
-    """Liefert das angeforderte Modell oder raised 404."""
-    row = (
-        await db.execute(select(Model).where(Model.id == model_id))
-    ).scalar_one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
-    return row
-
-
-async def get_version(version_id: int, db: AsyncSession) -> ModelVersion:
-    """Liefert die angeforderte Version oder raised 404."""
-    row = (
-        await db.execute(select(ModelVersion).where(ModelVersion.id == version_id))
-    ).scalar_one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"Version {version_id} not found")
-    return row
-
-
-async def get_current_version_bytes(
-    model: Model, db: AsyncSession, storage: Storage
-) -> tuple[ModelVersion, bytes]:
-    """Laedt die aktuelle Version eines Modells aus dem Storage.
-
-    Raises 404, wenn das Modell keine current_version_id hat (sollte
-    nicht passieren -- jede registrierte Modell-Row hat Version 1) oder
-    das Storage-Objekt fehlt.
-    """
-    if model.current_version_id is None:
-        raise HTTPException(
-            status_code=404, detail="Modell hat keine aktive Version."
-        )
-    version = await get_version(model.current_version_id, db)
-    data = await storage.get_object(version.storage_key)
-    return version, data
-
-
-async def get_initial_version_bytes(
-    model: Model, db: AsyncSession, storage: Storage
-) -> tuple[ModelVersion, bytes]:
-    """Laedt Version 1 (Original-Upload) -- nutzlich fuer Download-Original."""
-    initial = (
-        await db.execute(
-            select(ModelVersion).where(
-                ModelVersion.model_id == model.id,
-                ModelVersion.version == 1,
+        Raises:
+            HTTPException 413 ``E_UPLOAD_TOO_LARGE`` wenn ``content`` > 30 MB.
+            HTTPException 415 ``E_INVALID_OTX_MIMETYPE`` bei verbotenem MIME.
+        """
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail={
+                    "code": "E_UPLOAD_TOO_LARGE",
+                    "message": (
+                        f"Upload uebersteigt {MAX_UPLOAD_BYTES // (1024 * 1024)} MB "
+                        f"Limit (Datei: {len(content) // (1024 * 1024)} MB)."
+                    ),
+                },
             )
+
+        if content_type not in ALLOWED_MIME_TYPES:
+            raise HTTPException(
+                status_code=415,
+                detail={
+                    "code": "E_INVALID_OTX_MIMETYPE",
+                    "message": (
+                        f"MIME-Type {content_type!r} ist nicht erlaubt. "
+                        "Akzeptiert: application/octet-stream, "
+                        "application/x-otx, text/plain."
+                    ),
+                },
+            )
+
+        model_id = uuid.uuid4()
+        original_key = _storage_key(self.tenant_id, model_id, "original.otx")
+
+        # 1. Original ins Storage (Latin-1-Pass-Through; bytes 1:1).
+        self.storage.put_object(original_key, content)
+
+        # 2. DB-Row anlegen. storage_key initial == original_storage_key
+        #    (kein Save-back bislang).
+        self.conn.execute(
+            text(
+                """
+                INSERT INTO models(id, name, storage_key, original_storage_key, created_by_uid)
+                VALUES (:id, :name, :sk, :osk, :uid)
+                """
+            ),
+            {
+                "id": str(model_id),
+                "name": name,
+                "sk": original_key,
+                "osk": original_key,
+                "uid": self.user_uid,
+            },
         )
-    ).scalar_one_or_none()
-    if initial is None:
-        raise HTTPException(
-            status_code=404, detail="Keine Initial-Version fuer Modell vorhanden."
+        self.conn.commit()
+
+        meta = self.get_meta(model_id)
+        log.info(
+            "model.uploaded",
+            model_id=str(model_id),
+            name=name,
+            size_bytes=len(content),
+            tenant_id=self.tenant_id,
         )
-    data = await storage.get_object(initial.storage_key)
-    return initial, data
+        return meta
 
+    # ------------------------------------------------------------------
+    # get_meta / get_wire
+    # ------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Lifecycle: Save-back -> neue Version
-# ---------------------------------------------------------------------------
+    def get_meta(self, model_id: UUID) -> ModelMeta:
+        """Lade Metadaten oder raise 404."""
+        row = self.conn.execute(
+            text(
+                """
+                SELECT id, name, storage_key, original_storage_key,
+                       created_at, created_by_uid
+                FROM models
+                WHERE id = :id
+                """
+            ),
+            {"id": str(model_id)},
+        ).one_or_none()
 
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "E_MODEL_NOT_FOUND",
+                    "message": f"Modell {model_id} nicht gefunden.",
+                },
+            )
 
-async def create_new_version(
-    *,
-    model: Model,
-    otx_bytes: bytes,
-    tenant_id: str,
-    user_uid: str,
-    db: AsyncSession,
-    storage: Storage,
-    source: str = "save_back",
-) -> ModelVersion:
-    """Legt eine neue Version fuer ein bestehendes Modell an.
-
-    - Neue Versionsnummer = max(existing)+1
-    - storage_key enthaelt Timestamp -> Eindeutigkeit
-    - model.current_version_id wird aktualisiert
-    - Two-Step-Commit (storage erst, dann DB)
-    """
-    if len(otx_bytes) == 0:
-        raise HTTPException(status_code=422, detail="Leeres OTX nicht erlaubt.")
-    if len(otx_bytes) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="OTX zu gross.")
-
-    # Hoechste vorhandene Versionsnummer holen.
-    max_version_raw = (
-        await db.execute(
-            select(ModelVersion.version)
-            .where(ModelVersion.model_id == model.id)
-            .order_by(desc(ModelVersion.version))
-            .limit(1)
+        # storage_key == original_storage_key bedeutet: noch kein Save-back.
+        current_version_key: str | None = (
+            row.storage_key
+            if row.storage_key != row.original_storage_key
+            else None
         )
-    ).scalar_one_or_none()
-    next_version = (max_version_raw or 0) + 1
+        return ModelMeta(
+            id=UUID(row.id) if isinstance(row.id, str) else row.id,
+            name=row.name,
+            created_at=_coerce_datetime(row.created_at),
+            original_storage_key=row.original_storage_key,
+            current_version_key=current_version_key,
+            created_by_uid=row.created_by_uid,
+        )
 
-    storage_key = _storage_key(
-        tenant_id=tenant_id,
-        model_id=model.id,
-        version=next_version,
-        filename=model.original_filename,
-    )
-    await storage.put_object(storage_key, otx_bytes, "application/octet-stream")
+    def get_wire(self, model_id: UUID) -> ModelTreeWire:
+        """Lade die aktuelle Wire-Form des Modells.
 
-    version = ModelVersion(
-        model_id=model.id,
-        version=next_version,
-        source=source,
-        storage_key=storage_key,
-        bytes_size=len(otx_bytes),
-        created_by_uid=user_uid,
-    )
-    db.add(version)
-    await db.flush()
-    model.current_version_id = version.id
-    # updated_at wird durch onupdate=func.now() automatisch gesetzt.
-    await db.commit()
-    # Kein db.refresh -- siehe Kommentar in register_model_from_otx.
+        Liest ``storage_key`` aus der DB (entweder ``original.otx`` oder die
+        letzte ``v_*.otx``-Version) und parst sie via Engine-Loader.
+        """
+        row = self.conn.execute(
+            text("SELECT storage_key FROM models WHERE id = :id"),
+            {"id": str(model_id)},
+        ).one_or_none()
 
-    logger.info(
-        "model_version_created",
-        model_id=model.id,
-        version=next_version,
-        source=source,
-        bytes=len(otx_bytes),
-    )
-    return version
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "E_MODEL_NOT_FOUND",
+                    "message": f"Modell {model_id} nicht gefunden.",
+                },
+            )
+
+        data = self.storage.get_object(row.storage_key)
+
+        # Engine-Loader erwartet einen Path. Tempfile schreiben (Latin-1-
+        # Pass-Through: data sind bereits Latin-1-bytes).
+        with tempfile.NamedTemporaryFile(
+            mode="wb", suffix=".otx", delete=False
+        ) as tmp:
+            tmp.write(data)
+            tmp_path = Path(tmp.name)
+
+        try:
+            return load_to_wire(tmp_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+    # ------------------------------------------------------------------
+    # save_wire
+    # ------------------------------------------------------------------
+
+    def save_wire(self, model_id: UUID, wire: ModelTreeWire) -> str:
+        """Schreibe das Wire als neue Version. Returnt den storage_key.
+
+        D-14: Original (``original_storage_key``) wird NICHT angefasst — das
+        Original bleibt fuer Audit/Rollback erreichbar.
+
+        Coverage-Check (T-04-11 Mitigation): wenn ``wire.coverage.unsupported``
+        nicht-leer ist (und nicht whitelisted), raise 422
+        ``E_OTX_COVERAGE_INCOMPLETE`` BEVOR der Writer aufgerufen wird.
+        """
+        ok, code = is_save_safe(wire)
+        if not ok:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": code,
+                    "message": (
+                        "Modell enthaelt Objekte ohne Loader-/Writer-Handler. "
+                        "Save-back wuerde Daten verlieren. Bitte Engine-"
+                        "Coverage ergaenzen (docs/engine-coverage.md)."
+                    ),
+                },
+            )
+
+        # Lade Original-Bytes fuer Pass-Through-Quelle des Writers.
+        row = self.conn.execute(
+            text(
+                "SELECT original_storage_key FROM models WHERE id = :id"
+            ),
+            {"id": str(model_id)},
+        ).one_or_none()
+
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "E_MODEL_NOT_FOUND",
+                    "message": f"Modell {model_id} nicht gefunden.",
+                },
+            )
+
+        original_bytes = self.storage.get_object(row.original_storage_key)
+
+        # Tempfile mit Original-OTX (Latin-1-Bytes) — wire_to_otx braucht
+        # einen Path.
+        with tempfile.NamedTemporaryFile(
+            mode="wb", suffix=".otx", delete=False
+        ) as tmp:
+            tmp.write(original_bytes)
+            tmp_path = Path(tmp.name)
+
+        try:
+            otx_text = wire_to_otx(wire, original_otx_path=tmp_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        # Neue Version persistieren — Latin-1-Encoding strikt.
+        new_filename = _version_filename()
+        new_key = _storage_key(self.tenant_id, model_id, new_filename)
+        self.storage.put_object(new_key, otx_text.encode("latin-1"))
+
+        # DB updaten: storage_key zeigt nun auf die neue Version.
+        self.conn.execute(
+            text("UPDATE models SET storage_key = :sk WHERE id = :id"),
+            {"sk": new_key, "id": str(model_id)},
+        )
+        self.conn.commit()
+
+        log.info(
+            "model.saved",
+            model_id=str(model_id),
+            version_key=new_key,
+            tenant_id=self.tenant_id,
+        )
+        return new_key
+
+    # ------------------------------------------------------------------
+    # list_models
+    # ------------------------------------------------------------------
+
+    def list_models(self) -> list[ModelMeta]:
+        """Liefere alle Modelle des Tenants, DESC nach created_at."""
+        rows = self.conn.execute(
+            text(
+                """
+                SELECT id, name, storage_key, original_storage_key,
+                       created_at, created_by_uid
+                FROM models
+                ORDER BY created_at DESC
+                """
+            )
+        ).all()
+
+        result: list[ModelMeta] = []
+        for row in rows:
+            current_version_key = (
+                row.storage_key
+                if row.storage_key != row.original_storage_key
+                else None
+            )
+            result.append(
+                ModelMeta(
+                    id=UUID(row.id) if isinstance(row.id, str) else row.id,
+                    name=row.name,
+                    created_at=_coerce_datetime(row.created_at),
+                    original_storage_key=row.original_storage_key,
+                    current_version_key=current_version_key,
+                    created_by_uid=row.created_by_uid,
+                )
+            )
+        return result
+
+    # ------------------------------------------------------------------
+    # delete_model
+    # ------------------------------------------------------------------
+
+    def delete_model(self, model_id: UUID) -> None:
+        """Loesche Modell-Row + Lock-Row + alle Storage-Objekte.
+
+        Lock-Row wird via ``ON DELETE CASCADE`` automatisch entfernt (siehe
+        ``app/services/auth_service.bootstrap_tenant_if_missing``).
+        """
+        # Prüfen ob das Modell überhaupt existiert (404 vs. lautlos).
+        existing = self.conn.execute(
+            text("SELECT 1 FROM models WHERE id = :id"),
+            {"id": str(model_id)},
+        ).one_or_none()
+        if existing is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "E_MODEL_NOT_FOUND",
+                    "message": f"Modell {model_id} nicht gefunden.",
+                },
+            )
+
+        # 1. Storage cleanen (best effort — falls Files fehlen, kein Fehler).
+        prefix = _storage_prefix(self.tenant_id, model_id)
+        deleted_count = self.storage.delete_prefix(prefix)
+
+        # 2. DB-Row loeschen (Lock-Row kaskadiert).
+        self.conn.execute(
+            text("DELETE FROM models WHERE id = :id"),
+            {"id": str(model_id)},
+        )
+        self.conn.commit()
+
+        log.info(
+            "model.deleted",
+            model_id=str(model_id),
+            tenant_id=self.tenant_id,
+            storage_files_deleted=deleted_count,
+        )
+
+
+__all__ = [
+    "MAX_UPLOAD_BYTES",
+    "ALLOWED_MIME_TYPES",
+    "ModelService",
+]

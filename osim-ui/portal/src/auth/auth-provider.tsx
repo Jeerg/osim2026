@@ -1,104 +1,114 @@
-// Plan 01-04 Task 1: AuthProvider.
-//
-// Abweichung von 3fls: osim-ui-Backend liefert tenant_id+role NICHT aus den
-// Firebase-Custom-Claims (die werden erst nach dem ersten POST /auth/me-Call
-// gesetzt — Lazy-Bootstrap aus Plan 01-02), sondern direkt aus der
-// AuthMeResponse. Deshalb fragen wir IMMER /auth/me ab und nehmen die Werte
-// von dort als Quelle der Wahrheit. Claims sind dann ab dem zweiten Token-
-// Refresh vorhanden, was aber fuer uns transparent ist.
 import { createContext, useEffect, useState, type ReactNode } from "react";
-import { onAuthStateChanged, type User } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signOut as firebaseSignOut,
+  type User,
+} from "firebase/auth";
 import { auth } from "./firebase";
 
+/**
+ * Auth-Zustand, der via Context an die App propagiert wird.
+ *
+ * `isLoading` ist die zentrale Race-Guard (Pitfall #8 aus PATTERNS.md §Frontend-
+ * Foundation): solange `onAuthStateChanged` nicht das erste Mal gefeuert hat
+ * (oder das Backend-/auth/me-Roundtrip noch läuft), darf der Auth-Guard in
+ * `_authenticated.tsx` NICHT navigieren — sonst landet ein gerade eingeloggter
+ * User auf /login.
+ *
+ * KEIN zusätzlicher `isReady`-Flag — RESEARCH.md Z.952 hat das vorgeschlagen,
+ * aber `isLoading` als Single-Source-of-Truth (3fls-Pattern) reicht.
+ */
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   tenantId: string | null;
-  role: string | null;
+  role: string;
   email: string | null;
-  /** True wenn der letzte /auth/me-Call den Tenant gerade angelegt hat. */
-  bootstrapped: boolean;
+  tenantStatus: string;
+  signOut: () => Promise<void>;
 }
 
-const initialState: AuthState = {
+const initialState: Omit<AuthState, "signOut"> = {
   user: null,
   isAuthenticated: false,
   isLoading: true,
   tenantId: null,
-  role: null,
+  role: "user",
   email: null,
-  bootstrapped: false,
+  tenantStatus: "",
 };
 
 export const AuthContext = createContext<AuthState | null>(null);
 
 interface AuthMeResponse {
-  tenant_id: string;
-  user_uid: string;
-  email: string;
-  role: string;
-  bootstrapped: boolean;
+  tenant_id?: string;
+  role?: string;
+  tenant_status?: string;
+  email?: string;
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-
 /**
- * Firebase Auth provider.
- * Subscribes to onAuthStateChanged, ruft beim Login POST /api/v1/auth/me
- * (Lazy-Bootstrap), und legt tenant_id/role im AuthState ab.
+ * Firebase-Auth-Provider für osim-ui.
  *
- * Falls /auth/me fehlschlaegt (Backend down), bleibt der User
- * eingeloggt aber ohne tenant_id — Route-Guards muessen das beruecksichtigen.
+ * Lifecycle:
+ *  1. Initial-Render: `isLoading=true`, `user=null`.
+ *  2. `onAuthStateChanged` feuert für jeden Sign-In/Sign-Out + initial.
+ *     - fbUser != null:
+ *         - `getIdTokenResult` → custom-Claims (`tenant_id`, `role`) lesen.
+ *         - `GET /api/v1/auth/me` (Bearer Token) → `tenantStatus`-String laden.
+ *         - setState(isLoading=false, isAuthenticated=true, …).
+ *     - fbUser == null:
+ *         - setState(isLoading=false, isAuthenticated=false, …) (reset).
+ *  3. `signOut()` ruft Firebase signOut auf; der Listener triggert Step 2b.
+ *
+ * Bemerkung Backend-Roundtrip: wir nutzen hier `fetch` direkt statt apiFetch
+ * (zirkuläre Import-Vermeidung — apiFetch importiert `auth` aus firebase.ts).
+ * Die Logik ist trotzdem 1:1 zu apiFetch: Authorization: Bearer <token>.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>(initialState);
+  const [state, setState] = useState<Omit<AuthState, "signOut">>(initialState);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setState({ ...initialState, isLoading: false });
-        return;
-      }
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        try {
+          const tokenResult = await fbUser.getIdTokenResult();
+          const claims = tokenResult.claims;
 
-      try {
-        const token = await user.getIdToken(false);
-        const res = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        });
+          // Backend-Roundtrip — tenantStatus aus /api/v1/auth/me.
+          let tenantStatus = "active";
+          try {
+            const token = await fbUser.getIdToken(false);
+            const baseUrl =
+              import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+            const res = await fetch(`${baseUrl}/api/v1/auth/me`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              const data = (await res.json()) as AuthMeResponse;
+              tenantStatus = data.tenant_status ?? "active";
+            }
+          } catch {
+            // Backend nicht erreichbar — Dev-Default "active" damit das UI
+            // ohne laufendes Backend weiter rendert (zeigt isAuthenticated).
+            tenantStatus = "active";
+          }
 
-        if (!res.ok) {
-          // Backend lehnt ab — als nicht-authentifiziert markieren.
-          // (User kann erneut versuchen, sobald Backend wieder verfuegbar.)
           setState({
-            user,
+            user: fbUser,
             isAuthenticated: true,
             isLoading: false,
-            tenantId: null,
-            role: null,
-            email: user.email,
-            bootstrapped: false,
+            tenantId: (claims.tenant_id as string) ?? null,
+            role: (claims.role as string) ?? "user",
+            email: fbUser.email,
+            tenantStatus,
           });
-          return;
+        } catch {
+          // Token-Extraktion gescheitert → wie nicht authentisiert behandeln.
+          setState({ ...initialState, isLoading: false });
         }
-
-        const data = (await res.json()) as AuthMeResponse;
-        setState({
-          user,
-          isAuthenticated: true,
-          isLoading: false,
-          tenantId: data.tenant_id,
-          role: data.role,
-          email: data.email,
-          bootstrapped: data.bootstrapped,
-        });
-      } catch {
-        // Netzwerkfehler oder Token-Probleme — als unauthenticated behandeln.
+      } else {
         setState({ ...initialState, isLoading: false });
       }
     });
@@ -106,5 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, []);
 
-  return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;
+  const signOut = async () => {
+    await firebaseSignOut(auth);
+  };
+
+  return (
+    <AuthContext.Provider value={{ ...state, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }

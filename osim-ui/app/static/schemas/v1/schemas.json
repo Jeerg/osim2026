@@ -1,0 +1,399 @@
+{
+  "version": 1,
+  "note": "Hand-curated PropertySchema fuer Phase 1. Klassennamen entsprechen den OTX-Reader-Klassen (osim_engine.io.otx_reader). Phase 3 ersetzt diese Hand-Pflege durch Engine-Reflection (E2.1-E2.6). Source: Dummy.otx-Scan (Vorstellung04) + OSim2004/inc/-Header als Domain-Quelle.",
+  "schemas": [
+    {
+      "klass": "ASimulator",
+      "label_de": "Simulator",
+      "viewer_hints": ["std", "einsatzzeit"],
+      "properties": [
+        {"name": "m_name", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_sStartDate", "label_de": "Start-Datum", "octrl_type": "Variable", "value_type": "string", "description_de": "DD.MM.YYYY (OSim-Legacy-Format)"},
+        {"name": "m_sEndDate", "label_de": "End-Datum", "octrl_type": "Variable", "value_type": "string", "description_de": "DD.MM.YYYY (OSim-Legacy-Format)"},
+        {"name": "m_iProduktionBezugsPeriode", "label_de": "Periodenlaenge (Sek.)", "octrl_type": "Variable", "value_type": "int", "description_de": "Bezugsperiode in Sekunden (Default 86400 = 24h)"},
+        {"name": "m_iProduktionEnde", "label_de": "Produktions-Endzeit (Sek.)", "octrl_type": "Variable", "value_type": "int", "nullable": true},
+        {"name": "m_bIsEntAktiv", "label_de": "Entitaetenverfolgung aktiv", "octrl_type": "Bool", "value_type": "boolean"},
+        {"name": "m_bPtkWartschl", "label_de": "Warteschlangen-Statistik", "octrl_type": "Bool", "value_type": "boolean"},
+        {"name": "m_bPtkBelegungList", "label_de": "Belegungs-Trace aktiv", "octrl_type": "Bool", "value_type": "boolean"},
+        {"name": "m_oGenerator", "label_de": "Zufallszahlen-Generator", "octrl_type": "Link", "link_target_klass": "PGenerator", "readonly": true, "description_de": "PAWLICEK-LCG-Singleton (Reproduzierbarkeitsvertrag — siehe CLAUDE.md)"},
+        {"name": "m_lAusl", "label_de": "Ausloeser-Liste", "octrl_type": "List", "list_item_klass": "PAslEinzel", "readonly": true},
+        {"name": "m_lDlpl", "label_de": "Durchlaufplaene", "octrl_type": "List", "list_item_klass": "PDurchlaufplan", "readonly": true},
+        {"name": "m_lRessBeleg", "label_de": "Belegungsressourcen", "octrl_type": "List", "list_item_klass": "PBetriebsmittel", "readonly": true},
+        {"name": "m_lRessMenge", "label_de": "Mengenressourcen", "octrl_type": "List", "list_item_klass": "PRessMenge", "readonly": true},
+        {"name": "m_lEinsatz", "label_de": "Einsatzzeit-Wuensche", "octrl_type": "List", "list_item_klass": "AEinsatzzeitWunsch", "readonly": true},
+        {"name": "m_lKlassen", "label_de": "Klassen-Liste", "octrl_type": "List", "list_item_klass": "PKlasse", "readonly": true},
+        {"name": "m_iProduktionEvtZaehler", "label_de": "Ereignis-Zaehler", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_bIsProduktionEnde", "label_de": "Produktion beendet", "octrl_type": "Bool", "value_type": "boolean", "readonly": true},
+        {"name": "m_periodNum", "label_de": "Aktuelle Periode", "octrl_type": "Variable", "value_type": "int", "readonly": true}
+      ]
+    },
+    {
+      "klass": "PSimulator",
+      "label_de": "Simulator (Plan-Alias)",
+      "viewer_hints": ["std", "einsatzzeit"],
+      "description_de": "Plan-Begriff fuer ASimulator. Wenn die Engine die Klasse als PSimulator liefert, gilt dieses Schema; sonst wird ASimulator verwendet.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_iSeed", "label_de": "Zufallszahlen-Seed", "octrl_type": "Variable", "value_type": "int", "description_de": "Identifiziert zusammen mit (m_dtStart, m_dtEnde, m_iPeriodenLaenge) einen Run eindeutig."},
+        {"name": "m_dtStart", "label_de": "Start-Datum", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_dtEnde", "label_de": "End-Datum", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_iPeriodenLaenge", "label_de": "Periodenlaenge (Sek.)", "octrl_type": "Variable", "value_type": "int"}
+      ]
+    },
+    {
+      "klass": "PDurchlaufplan",
+      "label_de": "Durchlaufplan",
+      "viewer_hints": ["std", "design", "matrix"],
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_iPtkAusloesungCount", "label_de": "Anzahl Ausloesungen", "octrl_type": "Variable", "value_type": "int", "readonly": true, "description_de": "Laufzeit-Statistik (nur lesen)"},
+        {"name": "m_iPtkBegAusloesungCount", "label_de": "Anzahl begonnener Ausloesungen", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_iPtkProzessCount", "label_de": "Anzahl Prozesse", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_dPtkDurchlaufzeit", "label_de": "Mittlere Durchlaufzeit", "octrl_type": "Variable", "value_type": "float", "readonly": true},
+        {"name": "m_dEinKostenVorgaenger", "label_de": "Einstands-Kosten", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_sUserString", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true},
+        {"name": "m_iUserInt", "label_de": "User-Integer", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_dUserDouble", "label_de": "User-Double", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_lKnoten", "label_de": "Knoten", "octrl_type": "List", "list_item_klass": "PDpKnBase", "description_de": "Liste der Prozess-Knoten dieses Durchlaufplans"},
+        {"name": "m_lKanten", "label_de": "Kanten", "octrl_type": "List", "list_item_klass": "PDlplKante"},
+        {"name": "m_lStartKante", "label_de": "Start-Kante", "octrl_type": "Link", "link_target_klass": "PDlplKante", "nullable": true, "readonly": true},
+        {"name": "m_lEndKante", "label_de": "End-Kante", "octrl_type": "Link", "link_target_klass": "PDlplKante", "nullable": true, "readonly": true},
+        {"name": "m_pntRaster", "label_de": "Raster-Position (x,y)", "octrl_type": "Variable", "value_type": "string", "description_de": "(x, y)-Tuple — 2D-Position im Designer-Grid"},
+        {"name": "m_lAssozRess", "label_de": "Ressourcen-Assoziationen", "octrl_type": "List", "list_item_klass": "PAssozBeleg", "readonly": true}
+      ]
+    },
+    {
+      "klass": "PDpKnKonstant",
+      "label_de": "Knoten (Konstante Dauer)",
+      "viewer_hints": ["std", "conn"],
+      "description_de": "TODO: Engine-Klasse liefert in Dummy.otx PProzess statt PDpKnKonstant — Schema-Match in Phase 3 via Engine-Reflection korrigieren.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_iDurchführungszeit", "label_de": "Durchfuehrungszeit (Sek.)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_iRüstzeit", "label_de": "Ruestzeit (Sek.)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_oid_betriebsmittel", "label_de": "Betriebsmittel", "octrl_type": "Link", "link_target_klass": "PBetriebsmittel"},
+        {"name": "m_oid_personal", "label_de": "Personal (optional)", "octrl_type": "Link", "link_target_klass": "PPerson", "nullable": true},
+        {"name": "m_iPriorität", "label_de": "Prioritaet", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_sBemerkung", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PDpKnAlternativ",
+      "label_de": "Knoten (Alternativ)",
+      "viewer_hints": ["std", "conn"],
+      "description_de": "TODO: Engine-Klasse liefert in Dummy.otx PProzess/PProzessList statt PDpKnAlternativ — Match in Phase 3.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_oids_alternativen", "label_de": "Alternative Knoten", "octrl_type": "List", "list_item_klass": "PDpKnBase"},
+        {"name": "m_iAuswahlstrategie", "label_de": "Auswahlstrategie", "octrl_type": "Enum", "value_type": "int",
+          "enum_values": [
+            {"value": 0, "label_de": "Zufaellig"},
+            {"value": 1, "label_de": "Reihum (Round Robin)"},
+            {"value": 2, "label_de": "Erste freie Ressource"},
+            {"value": 3, "label_de": "Minimale Belegung"}
+          ],
+          "description_de": "TODO: Enum-Werte aus Engine in Phase 3 via Reflection klaeren"
+        },
+        {"name": "m_iPriorität", "label_de": "Prioritaet", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_sBemerkung", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PDlplKante",
+      "label_de": "Kante (Durchlaufplan)",
+      "viewer_hints": ["std"],
+      "properties": [
+        {"name": "m_lVorgaenger", "label_de": "Vorgaenger-Knoten", "octrl_type": "Link", "link_target_klass": "PDpKnBase"},
+        {"name": "m_lNachfolger", "label_de": "Nachfolger-Knoten", "octrl_type": "Link", "link_target_klass": "PDpKnBase"},
+        {"name": "m_lKnotenOber", "label_de": "Durchlaufplan", "octrl_type": "Link", "link_target_klass": "PDurchlaufplan", "readonly": true},
+        {"name": "m_lVerknpfng", "label_de": "Verknuepfung", "octrl_type": "Link", "link_target_klass": "PVerknuepfung", "nullable": true},
+        {"name": "m_iPtkUebergangCount", "label_de": "Anzahl Uebergaenge", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_sUserString", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PAslEinzel",
+      "label_de": "Ausloeser (Einzel)",
+      "viewer_hints": ["std"],
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_iBeginTermin", "label_de": "Erster Ausloeser (Sek.)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_iSollDauer", "label_de": "Soll-Dauer (Sek.)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_iMaxWarteZeit", "label_de": "Maximale Wartezeit (Sek.)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_lDlpl", "label_de": "Durchlaufplan", "octrl_type": "Link", "link_target_klass": "PDurchlaufplan"},
+        {"name": "m_lTrigger", "label_de": "Trigger-Liste", "octrl_type": "List", "list_item_klass": "PTrigger", "readonly": true},
+        {"name": "m_iTrigCounter", "label_de": "Trigger-Zaehler", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_iAbgeCounter", "label_de": "Abge-Zaehler", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_dPtkDurchlaufzeit", "label_de": "Mittlere Durchlaufzeit", "octrl_type": "Variable", "value_type": "float", "readonly": true},
+        {"name": "m_sUserString", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PBetriebsmittel",
+      "label_de": "Betriebsmittel (Belegungsressource)",
+      "viewer_hints": ["std", "matrix", "verknuepfung"],
+      "description_de": "Domain-Begriff im Plan: 'PRessBeleg'. Real OTX-Klasse: PBetriebsmittel.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_sGroupName", "label_de": "Gruppen-Name", "octrl_type": "Variable", "value_type": "string", "nullable": true},
+        {"name": "m_iAnwWahrsch", "label_de": "Anwesenheits-Wahrscheinlichkeit (%)", "octrl_type": "Variable", "value_type": "int", "description_de": "0..100"},
+        {"name": "m_fKostFix", "label_de": "Fixkosten (Periode)", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_fKostVar", "label_de": "Variable Kosten (pro Einsatzstunde)", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_rsStatus", "label_de": "Status", "octrl_type": "Enum", "value_type": "string",
+          "enum_values": [
+            {"value": 0, "label_de": "Frei (rsFrei)"},
+            {"value": 1, "label_de": "Belegt (rsBelegt)"},
+            {"value": 2, "label_de": "Wartung (rsWartung)"},
+            {"value": 3, "label_de": "Stoerung (rsStoerung)"}
+          ],
+          "readonly": true,
+          "description_de": "Laufzeit-Status. TODO: Echte rsXxx-Enum-Werte aus Engine in Phase 3."
+        },
+        {"name": "m_dPtkEinsatzzeit", "label_de": "Mittlere Einsatzzeit (Sek.)", "octrl_type": "Variable", "value_type": "float", "readonly": true},
+        {"name": "m_dPtkUeberzeit", "label_de": "Mittlere Ueberzeit (Sek.)", "octrl_type": "Variable", "value_type": "float", "readonly": true}
+      ]
+    },
+    {
+      "klass": "PPerson",
+      "label_de": "Person (Personalressource)",
+      "viewer_hints": ["std", "verknuepfung"],
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_sGroupName", "label_de": "Gruppen-Name", "octrl_type": "Variable", "value_type": "string", "nullable": true},
+        {"name": "m_iAnwWahrsch", "label_de": "Anwesenheits-Wahrscheinlichkeit (%)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_fKostFix", "label_de": "Fixkosten", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_fKostVar", "label_de": "Variable Kosten", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_dPtkEinsatzzeit", "label_de": "Mittlere Einsatzzeit (Sek.)", "octrl_type": "Variable", "value_type": "float", "readonly": true}
+      ]
+    },
+    {
+      "klass": "PRessBeleg",
+      "label_de": "Belegungsressource (Plan-Alias)",
+      "viewer_hints": ["std", "matrix", "verknuepfung"],
+      "description_de": "Plan-Begriff fuer Belegungsressource. Real-OTX-Klasse: PBetriebsmittel.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_iKapazität", "label_de": "Kapazitaet", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_sEinheit", "label_de": "Einheit", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_dKostensatz", "label_de": "Kostensatz", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_iAnwWahrsch", "label_de": "Anwesenheits-Wahrscheinlichkeit (%)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_iPriorität", "label_de": "Prioritaet", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_sBemerkung", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PRessMenge",
+      "label_de": "Mengenressource",
+      "viewer_hints": ["std", "matrix"],
+      "description_de": "Plan-Begriff. Real-OTX-Klassen: PSpeicher/PSpeicherProz. Schema-Match in Phase 3.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_iMenge", "label_de": "Menge (Anfangsbestand)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_sEinheit", "label_de": "Einheit", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_iNachschubMenge", "label_de": "Nachschub-Menge", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_iNachschubIntervall", "label_de": "Nachschub-Intervall (Sek.)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_iMaxMenge", "label_de": "Maximale Menge (Kapazitaet)", "octrl_type": "Variable", "value_type": "int", "nullable": true},
+        {"name": "m_dKostensatz", "label_de": "Kostensatz pro Einheit", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_sBemerkung", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PAssozBeleg",
+      "label_de": "Ressourcen-Verknuepfung (Belegung)",
+      "viewer_hints": ["std"],
+      "description_de": "Plan-Begriff: 'PRessVerknuepfung'. Real-OTX-Klasse: PAssozBeleg.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_lKnoten", "label_de": "Knoten", "octrl_type": "Link", "link_target_klass": "PDpKnBase"},
+        {"name": "m_lOberAssoz", "label_de": "Ueber-Assoziation", "octrl_type": "Link", "link_target_klass": "PAssozBeleg", "nullable": true},
+        {"name": "m_lUnterAssoz", "label_de": "Unter-Assoziation", "octrl_type": "Link", "link_target_klass": "PAssozBeleg", "nullable": true},
+        {"name": "m_lRessourcen", "label_de": "Ressourcen-Liste", "octrl_type": "List", "list_item_klass": "PBetriebsmittel"},
+        {"name": "m_LinkStatusList", "label_de": "Link-Status-Liste", "octrl_type": "List", "list_item_klass": "PAssozBelegLinkStatusList", "readonly": true},
+        {"name": "m_sUserString", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PRessVerknuepfung",
+      "label_de": "Ressourcen-Verknuepfung (Plan-Alias)",
+      "viewer_hints": ["std"],
+      "description_de": "Plan-Begriff. Real-OTX-Klasse: PAssozBeleg / PAssozRessource.",
+      "properties": [
+        {"name": "m_oid_ressource", "label_de": "Ressource", "octrl_type": "Link", "link_target_klass": "PBetriebsmittel"},
+        {"name": "m_iAnteil", "label_de": "Anteil (%)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_sBemerkung", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true},
+        {"name": "m_iPriorität", "label_de": "Prioritaet", "octrl_type": "Enum", "value_type": "int",
+          "enum_values": [
+            {"value": 0, "label_de": "Hoch"},
+            {"value": 1, "label_de": "Mittel"},
+            {"value": 2, "label_de": "Niedrig"}
+          ],
+          "description_de": "TODO: Enum-Werte aus Engine in Phase 3."
+        },
+        {"name": "m_iMenge", "label_de": "Menge (Anzahl Einheiten)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_sEinheit", "label_de": "Einheit", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PDlplBetriebsmittel",
+      "label_de": "Durchlaufplan-Betriebsmittel-Verknuepfung",
+      "viewer_hints": ["std"],
+      "description_de": "Verknuepft einen Knoten mit einem Betriebsmittel. TODO: Real-OTX-Mapping in Phase 3.",
+      "properties": [
+        {"name": "m_oid_knoten", "label_de": "Knoten", "octrl_type": "Link", "link_target_klass": "PDpKnBase"},
+        {"name": "m_oid_betriebsmittel", "label_de": "Betriebsmittel", "octrl_type": "Link", "link_target_klass": "PBetriebsmittel"},
+        {"name": "m_iAnteil", "label_de": "Anteil (%)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_iPriorität", "label_de": "Prioritaet", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_sBemerkung", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PDlplPersonal",
+      "label_de": "Durchlaufplan-Personal-Verknuepfung",
+      "viewer_hints": ["std"],
+      "description_de": "Verknuepft einen Knoten mit einer Person. TODO: Real-OTX-Mapping in Phase 3.",
+      "properties": [
+        {"name": "m_oid_knoten", "label_de": "Knoten", "octrl_type": "Link", "link_target_klass": "PDpKnBase"},
+        {"name": "m_oid_personal", "label_de": "Person", "octrl_type": "Link", "link_target_klass": "PPerson"},
+        {"name": "m_iAnteil", "label_de": "Anteil (%)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_iPriorität", "label_de": "Prioritaet", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_sBemerkung", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "AEinsatzzeitWunsch",
+      "label_de": "Einsatzzeit-Wunsch",
+      "viewer_hints": ["std"],
+      "description_de": "Plan-Begriff: 'AEinsatzWunsch'. Real-OTX-Klasse: AEinsatzzeitWunsch.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_lEinsatzWunsch", "label_de": "Wunsch-Spezifikation", "octrl_type": "Link", "link_target_klass": "AEinsatzWunschLList", "readonly": true},
+        {"name": "m_lTagPerson", "label_de": "Tag-Person-Zuordnung", "octrl_type": "Link", "link_target_klass": "ATagPersonLList", "readonly": true},
+        {"name": "m_sUserString", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "AEinsatzWunsch",
+      "label_de": "Einsatzwunsch (Plan-Alias)",
+      "viewer_hints": ["std"],
+      "description_de": "Plan-Begriff. Real-OTX-Klasse: AEinsatzzeitWunsch.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_dtBeginn", "label_de": "Beginn", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_dtEnde", "label_de": "Ende", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_iAnteil", "label_de": "Anteil (%)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_iPriorität", "label_de": "Prioritaet", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_sBemerkung", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "AKapBedViewerInfo",
+      "label_de": "Kapazitaetsbedarf",
+      "viewer_hints": ["std"],
+      "properties": [
+        {"name": "m_iBedarf_PPZ", "label_de": "Bedarf Produktiv-Periode-Zeit", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_iBedarf_PAZ", "label_de": "Bedarf Produktiv-Auftrags-Zeit", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_lCellInfoList", "label_de": "Zellen-Info", "octrl_type": "List", "list_item_klass": "AKapBedCellInfoLList", "readonly": true},
+        {"name": "m_iDarstellungsModus", "label_de": "Darstellungs-Modus", "octrl_type": "Enum", "value_type": "int",
+          "enum_values": [
+            {"value": 0, "label_de": "Absolut (Stunden)"},
+            {"value": 1, "label_de": "Relativ (%)"}
+          ],
+          "description_de": "TODO: Enum-Werte aus Engine in Phase 3."
+        }
+      ]
+    },
+    {
+      "klass": "AKapBed",
+      "label_de": "Kapazitaetsbedarf (Plan-Alias)",
+      "viewer_hints": ["std"],
+      "description_de": "Plan-Begriff. Real-OTX-Klasse: AKapBedViewerInfo.",
+      "properties": [
+        {"name": "m_oid_periode", "label_de": "Periode", "octrl_type": "Link", "link_target_klass": "APeriode"},
+        {"name": "m_iSollKapazität", "label_de": "Soll-Kapazitaet", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_iIstKapazität", "label_de": "Ist-Kapazitaet", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_iAuslastung", "label_de": "Auslastung (%)", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_sBemerkung", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "AGruppe",
+      "label_de": "Personalgruppe",
+      "viewer_hints": ["std"],
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_oids_personal", "label_de": "Mitglieder (Personen)", "octrl_type": "List", "list_item_klass": "PPerson"},
+        {"name": "m_iSchichtModell", "label_de": "Schicht-Modell", "octrl_type": "Enum", "value_type": "int",
+          "enum_values": [
+            {"value": 0, "label_de": "Einschicht"},
+            {"value": 1, "label_de": "Zweischicht"},
+            {"value": 2, "label_de": "Dreischicht (Vollkonti)"},
+            {"value": 3, "label_de": "Flexibel"}
+          ],
+          "description_de": "TODO: Enum-Werte aus Engine in Phase 3."
+        },
+        {"name": "m_sBemerkung", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true}
+      ]
+    },
+    {
+      "klass": "PEinsatzzeitTag",
+      "label_de": "Schicht (Einsatzzeit-Tag)",
+      "viewer_hints": ["einsatzzeit", "std"],
+      "description_de": "Arbeitszeit-Muster: PEinsatzzeitTag aus OSimPro/PEinsatzzeit.odh. Schichtfenster (m_lTagesEinsatzzeit), Pausen (m_lPausen) und Tag/Ressource-Zuordnungen (m_lTagRess).",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string"},
+        {"name": "m_lTagesEinsatzzeit", "label_de": "Schichtfenster", "octrl_type": "List", "list_item_klass": "PTagesEinsatzzeit"},
+        {"name": "m_lPausen", "label_de": "Pausen", "octrl_type": "List", "list_item_klass": "PPauseZyklus"},
+        {"name": "m_lTagRess", "label_de": "Tag/Ressource-Zuordnungen", "octrl_type": "List", "list_item_klass": "PTagRess"}
+      ]
+    },
+    {
+      "klass": "PTagesEinsatzzeit",
+      "label_de": "Schichtfenster",
+      "viewer_hints": ["std"],
+      "description_de": "Teil-Einsatzzeit eines Tages (PTagesEinsatzzeit). Anfang/Ende in Stunden.",
+      "properties": [
+        {"name": "m_iEinsatzAnfang", "label_de": "Beginn (Uhr)", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_iEinsatzEnde", "label_de": "Ende (Uhr)", "octrl_type": "Variable", "value_type": "float"}
+      ]
+    },
+    {
+      "klass": "PTagRess",
+      "label_de": "Tag/Ressource-Zuordnung",
+      "viewer_hints": ["std"],
+      "description_de": "Tag (ab Sim-Beginn) + zugeordnete Ressource (PTagRess).",
+      "properties": [
+        {"name": "m_iTag", "label_de": "Tag (ab Sim-Beginn)", "octrl_type": "Variable", "value_type": "int"},
+        {"name": "m_oRessBeleg", "label_de": "Ressource", "octrl_type": "Link", "link_target_klass": "PRessBeleg"}
+      ]
+    },
+    {
+      "klass": "PPauseZyklus",
+      "label_de": "Pausenzyklus",
+      "viewer_hints": ["std"],
+      "description_de": "Wiederkehrende Pause (PPauseZyklus). Anfang/Ende in Stunden, Periode in Tagen.",
+      "properties": [
+        {"name": "m_iPausAnfang", "label_de": "Pausen-Beginn (Uhr)", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_iPausEnde", "label_de": "Pausen-Ende (Uhr)", "octrl_type": "Variable", "value_type": "float"},
+        {"name": "m_iPeriode", "label_de": "Bezugsperiode (Tage)", "octrl_type": "Variable", "value_type": "float"}
+      ]
+    },
+    {
+      "klass": "PGObjBase",
+      "label_de": "Objekt (generisch)",
+      "viewer_hints": ["std"],
+      "description_de": "Fallback-Schema fuer Objekte ohne spezifisches Schema. Wird vom PGObjBaseViewer-Stub (Plan 07) und in Plan 08 vom echten PGObjBaseViewer genutzt.",
+      "properties": [
+        {"name": "m_sName", "label_de": "Name", "octrl_type": "Variable", "value_type": "string", "nullable": true},
+        {"name": "m_sUserString", "label_de": "Bemerkung", "octrl_type": "Variable", "value_type": "string", "nullable": true},
+        {"name": "m_iUserInt", "label_de": "User-Integer", "octrl_type": "Variable", "value_type": "int", "nullable": true},
+        {"name": "m_dUserDouble", "label_de": "User-Double", "octrl_type": "Variable", "value_type": "float", "nullable": true},
+        {"name": "m_IsSelected", "label_de": "Selektiert", "octrl_type": "Bool", "value_type": "boolean", "readonly": true},
+        {"name": "m_dwObjID", "label_de": "Object-ID (OID)", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_pntRaster", "label_de": "Raster-Position", "octrl_type": "Variable", "value_type": "string", "nullable": true, "description_de": "(x, y)-Tuple — 2D-Position im Designer-Grid"},
+        {"name": "m_simulator", "label_de": "Simulator-OID", "octrl_type": "Variable", "value_type": "int", "readonly": true, "description_de": "Backlink zum Simulator-Root (typischerweise 0)"},
+        {"name": "m_lViewInf", "label_de": "View-Info-OID", "octrl_type": "Variable", "value_type": "int", "readonly": true},
+        {"name": "m_ClipboardInfo", "label_de": "Clipboard-Info", "octrl_type": "Variable", "value_type": "int", "readonly": true, "description_de": "MFC-Legacy. -1 = nicht im Clipboard."}
+      ]
+    }
+  ]
+}

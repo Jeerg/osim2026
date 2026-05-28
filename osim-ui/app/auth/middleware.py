@@ -1,20 +1,21 @@
-"""TenantAuthMiddleware -- pure ASGI, Firebase JWT-Validierung + Tenant-Kontext.
+"""Pure-ASGI ``TenantAuthMiddleware`` für Firebase-JWT-Validierung.
 
-Pattern aus tbx_stzrim/app/auth/middleware.py uebernommen, fuer osim-ui
-vereinfacht (kein Stripe-Webhook, kein Billing-State-Machine).
+3fls-Pattern (siehe ``tbx_stzrim/app/auth/middleware.py``), reduziert für
+osim-ui:
+    * KEIN Billing-/Subscription-/Grace-Period-Code (Phase 5+).
+    * KEIN ``auth_tenant_fallback_default`` (D-17 Lazy-Bootstrap liefert
+      echten ``tenant_id``).
+    * KEIN ``/api/v1/webhooks/stripe`` in der Whitelist (kein Stripe).
 
-Verantwortung:
-1. Whitelist-Pfade (/health, /readiness, /docs, ...) durchlassen.
-2. Bearer-Token aus Authorization-Header extrahieren -> verify_token.
-3. ``request.state`` populieren: user_uid, user_email, tenant_id (aus Claims).
-4. **Sonderfall /api/v1/auth/me**: Wenn der User noch keinen
-   tenant_id-Claim hat (= erster Login), trotzdem durchlassen, damit
-   der Handler lazy-bootstrappen kann. Fuer alle anderen API-Pfade
-   ohne tenant_id -> 401.
-5. Bei Verification-Fehler -> 401 mit RFC-7807 ProblemDetail-Body.
+osim-ui-spezifische Erweiterung gegenüber 3fls (D-17 Self-Service):
+    * Wenn das Firebase-JWT KEINEN ``tenant_id``-Claim hat, wird
+      ``bootstrap_tenant_if_missing(uid, email)`` synchron aufgerufen und der
+      neu angelegte ``tenant_id`` in ``scope["state"]`` gesetzt. Der Aufruf
+      läuft via ``asyncio.to_thread`` (sync SQLAlchemy nach D-18 darf den
+      Event-Loop nicht blockieren).
 
-ProblemDetail-Body wird hier *inline* gebaut, weil die Middleware vor der
-FastAPI-Exception-Handler-Pipeline laeuft.
+KEIN ``BaseHTTPMiddleware`` — Pure-ASGI per Starlette-#1678 / PATTERNS.md
+§Stack-Drift.
 """
 
 from __future__ import annotations
@@ -24,128 +25,132 @@ import json
 import logging
 
 import structlog
-from firebase_admin import auth as fb_auth
+from firebase_admin import auth
 
 from app.auth.firebase import verify_token
 
 logger = structlog.get_logger(__name__)
-_stdlib_log = logging.getLogger(__name__)
 
-# Pfade, die ohne Authorization durchgelassen werden.
-WHITELIST_PATHS = frozenset({
-    "/",
-    "/health",
-    "/readiness",
-    "/docs",
-    "/openapi.json",
-    "/redoc",
-    "/favicon.ico",
-})
-
-# Pfade, die auch ohne tenant_id-Claim durchgelassen werden (Bootstrap-Self-Service).
-TENANT_BOOTSTRAP_PATHS = frozenset({
-    "/api/v1/auth/me",
-})
-
-PROBLEM_CONTENT_TYPE = b"application/problem+json"
+# Pfade, die ohne Authentifizierung durchgelassen werden.
+WHITELIST_PATHS: frozenset[str] = frozenset(
+    {
+        "/",
+        "/health",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/favicon.ico",
+    }
+)
 
 
 class TenantAuthMiddleware:
-    """Pure ASGI-Middleware. Setzt tenant_id, user_uid, user_email, user_role auf scope['state']."""
+    """Pure-ASGI-Middleware für Firebase-JWT-Validierung + Tenant-Kontext.
 
-    def __init__(self, app):  # noqa: ANN001 (ASGI app-Typ)
+    Für jede HTTP-Request, die NICHT in ``WHITELIST_PATHS`` ist und NICHT
+    OPTIONS (CORS-Preflight):
+
+    1. Bearer-Token aus ``Authorization``-Header extrahieren.
+    2. Token via Firebase Admin SDK verifizieren (``verify_token``).
+    3. ``tenant_id`` aus Custom-Claims lesen; wenn fehlt → Lazy-Bootstrap
+       via ``bootstrap_tenant_if_missing`` (D-17 Self-Service).
+    4. Tenant-Kontext auf ``scope["state"]`` setzen für nachgelagerte
+       Handler.
+    5. structlog-contextvars binden (tenant_id, user_email, method, path).
+    """
+
+    def __init__(self, app):
         self.app = app
 
-    async def __call__(self, scope, receive, send):  # noqa: ANN001
+    async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
-        path: str = scope.get("path", "")
-        method: str = scope.get("method", "")
+        path = scope.get("path", "")
 
-        # Whitelist: ohne jegliche Auth durchlassen.
+        # Whitelist-Pfade ohne Auth durchlassen.
         if path in WHITELIST_PATHS:
             await self.app(scope, receive, send)
             return
 
-        # CORS-Preflight ohne Auth.
+        # CORS-Preflight (OPTIONS) ohne Auth durchlassen.
+        method = scope.get("method", "")
         if method == "OPTIONS":
             await self.app(scope, receive, send)
             return
 
-        # Authorization-Header lesen.
-        auth_header = ""
-        for k, v in scope.get("headers", []):
-            key = k.decode("latin-1") if isinstance(k, bytes) else k
-            if key.lower() == "authorization":
-                auth_header = v.decode("latin-1") if isinstance(v, bytes) else v
-                break
+        # Authorization-Header aus ASGI-Scope extrahieren.
+        headers = dict(
+            (
+                k.decode("latin-1") if isinstance(k, bytes) else k,
+                v.decode("latin-1") if isinstance(v, bytes) else v,
+            )
+            for k, v in scope.get("headers", [])
+        )
+        auth_header = headers.get("authorization", "")
 
         if not auth_header.startswith("Bearer "):
-            await self._send_problem(
-                send, 401, "Unauthorized", "Missing or malformed Authorization header.",
-                instance=path,
-            )
+            await self._send_error(scope, receive, send, 401, "Missing token")
             return
 
-        token = auth_header[len("Bearer "):]
+        token = auth_header[7:]  # "Bearer " strippen
 
         try:
-            # firebase-admin verify_token ist sync -> in to_thread, damit der
-            # Event-Loop nicht blockiert.
+            # verify_token ist sync (firebase-admin SDK) — in to_thread wrappen,
+            # damit der Event-Loop frei bleibt (3fls-Phase-17.8.5-Lesson).
             decoded = await asyncio.to_thread(verify_token, token)
-        except fb_auth.ExpiredIdTokenError:
-            await self._send_problem(send, 401, "Unauthorized", "Token expired.", instance=path)
+        except auth.ExpiredIdTokenError:
+            await self._send_error(scope, receive, send, 401, "Token expired")
             return
-        except fb_auth.InvalidIdTokenError:
-            await self._send_problem(send, 401, "Unauthorized", "Invalid token.", instance=path)
-            return
-        except Exception as exc:
-            _stdlib_log.warning("token_verify_unexpected_error", exc_info=True)
-            await self._send_problem(
-                send, 401, "Unauthorized", f"Token verification failed: {type(exc).__name__}",
-                instance=path,
-            )
+        except (auth.InvalidIdTokenError, Exception):
+            await self._send_error(scope, receive, send, 401, "Invalid token")
             return
 
-        uid = decoded.get("uid") or decoded.get("user_id")
-        email = decoded.get("email", "")
-        if not uid:
-            await self._send_problem(
-                send, 401, "Unauthorized", "Token has no uid claim.", instance=path,
-            )
-            return
-
+        # osim-ui-Erweiterung gegenüber 3fls: Lazy-Bootstrap wenn kein
+        # tenant_id-Claim im Token. CREATE SCHEMA IF NOT EXISTS + ON CONFLICT
+        # macht den Bootstrap idempotent gegen Race.
         tenant_id = decoded.get("tenant_id")
-        role = decoded.get("role") or "owner"  # Phase-1-Default
+        if not tenant_id:
+            # Lazy-Bootstrap per D-17 (Self-Service): erstmaliger Login eines
+            # Firebase-Users → tenant_{uid}-Schema wird angelegt.
+            # Lazy-Import vermeidet Circular (auth_service importiert engine,
+            # engine importiert config — middleware muss bootstrap nicht zum
+            # Module-Import-Zeitpunkt kennen).
+            try:
+                from app.services.auth_service import (
+                    bootstrap_tenant_if_missing,
+                )
 
-        # Sonderbehandlung /auth/me: Bootstrap-Pfad, tenant_id darf fehlen.
-        if path not in TENANT_BOOTSTRAP_PATHS and not tenant_id:
-            await self._send_problem(
-                send, 401, "Unauthorized",
-                "Token has no tenant_id claim. Call POST /api/v1/auth/me first.",
-                instance=path,
-            )
-            return
+                tenant_id = await asyncio.to_thread(
+                    bootstrap_tenant_if_missing,
+                    decoded["uid"],
+                    decoded.get("email", ""),
+                )
+            except Exception:
+                # DB-/Bootstrap-Fehler — defensiv 500, NICHT 401 (User ist
+                # authentifiziert, das System hat das Problem).
+                logging.getLogger(__name__).error(
+                    "tenant.bootstrap_failed", exc_info=True
+                )
+                await self._send_error(
+                    scope, receive, send, 500, "Tenant bootstrap failed"
+                )
+                return
 
-        # State populieren.
+        # Tenant-Kontext auf request.state setzen.
         if "state" not in scope:
             scope["state"] = {}
-        scope["state"]["user_uid"] = uid
-        scope["state"]["user_email"] = email
-        scope["state"]["user_role"] = role
-        if tenant_id:
-            scope["state"]["tenant_id"] = tenant_id
-        # Wenn tenant_id fehlt UND wir auf /auth/me sind: tenant_id NICHT
-        # setzen -- der Handler muss get_db_unscoped benutzen und legt
-        # den Tenant per ensure_tenant_bootstrap an.
+        scope["state"]["tenant_id"] = tenant_id
+        scope["state"]["user_role"] = decoded.get("role", "user")
+        scope["state"]["user_email"] = decoded.get("email", "")
+        scope["state"]["user_uid"] = decoded.get("uid", decoded.get("user_id", ""))
 
-        # structlog-Context binden (request-scoped).
+        # Request-Kontext für strukturiertes Logging binden.
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(
-            user_uid=uid,
-            tenant_id=tenant_id or "<bootstrap>",
+            tenant_id=tenant_id,
+            user_email=decoded.get("email", ""),
             method=method,
             path=path,
         )
@@ -153,29 +158,31 @@ class TenantAuthMiddleware:
         await self.app(scope, receive, send)
 
     @staticmethod
-    async def _send_problem(
-        send,  # noqa: ANN001
-        status: int,
-        title: str,
-        detail: str,
-        instance: str | None = None,
+    async def _send_error(
+        scope, receive, send, status_code: int, detail: str
     ) -> None:
-        """Sendet eine RFC-7807-ProblemDetail-Response."""
-        payload = {
-            "type": "about:blank",
-            "title": title,
-            "status": status,
-            "detail": detail,
-        }
-        if instance:
-            payload["instance"] = instance
-        body = json.dumps(payload).encode("utf-8")
-        await send({
-            "type": "http.response.start",
-            "status": status,
-            "headers": [
-                (b"content-type", PROBLEM_CONTENT_TYPE),
-                (b"content-length", str(len(body)).encode("utf-8")),
-            ],
-        })
-        await send({"type": "http.response.body", "body": body})
+        """JSON-Error-Response senden.
+
+        KEIN RFC-7807-Format hier — die Middleware antwortet vor dem
+        FastAPI-HTTPException-Handler. Der Handler liefert RFC-7807 für
+        Errors, die innerhalb der App entstehen; Middleware-Errors sind
+        bewusst einfach (``{"detail": "..."}``).
+        """
+        body = json.dumps({"detail": detail}).encode("utf-8")
+        response_headers = [
+            [b"content-type", b"application/json"],
+            [b"content-length", str(len(body)).encode("utf-8")],
+        ]
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status_code,
+                "headers": response_headers,
+            }
+        )
+        await send(
+            {
+                "type": "http.response.body",
+                "body": body,
+            }
+        )

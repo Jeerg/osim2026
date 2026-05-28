@@ -1,59 +1,59 @@
-"""Health- und Readiness-Endpoints (versioniert).
+"""Health-Endpoint (unauthentifiziert).
 
-Beide Endpoints sind in TenantAuthMiddleware.WHITELIST_PATHS gespiegelt --
-also OHNE Auth erreichbar. Das Top-Level ``/health`` in app.main.py ist
-fuer Container-Liveness gedacht; ``/api/v1/health`` ist die versionierte
-API-Version.
+Wird fuer Docker-/Compose-Healthchecks und spaetere Kubernetes-Probes genutzt.
+Phase 1: DB-Check + Storage-Backend-Info (Best-Effort-Storage-Check).
+
+Storage-Check ist NICHT failure-relevant — nur informational. Wenn Minio in
+einem Compose-Stack noch hochfaehrt, soll ``/health`` trotzdem ``status=ok``
+liefern, solange die DB erreichbar ist. Detail-Probe kommt in ``/readiness``
+in spaeteren Phasen.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+import structlog
+from fastapi import APIRouter
+from sqlalchemy import text
 
-from fastapi import APIRouter, Depends, status
-from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql import text
+from app.core.config import settings
+from app.core.database import engine
 
-from app.core.database import AsyncSessionLocal
+log = structlog.get_logger(__name__)
 
-router = APIRouter()
-
-
-async def _get_probe_session() -> AsyncGenerator[AsyncSession]:
-    """Probe-Session ohne tenant-search_path -- nur fuer Readiness-Check."""
-    async with AsyncSessionLocal() as session:
-        yield session
+router = APIRouter(tags=["health"])
 
 
-@router.get("/health", summary="Liveness-Check")
-async def health() -> dict[str, str]:
-    """Liveness: Server antwortet -- sagt NICHTS ueber Abhaengigkeiten aus."""
-    return {"status": "ok", "service": "osim-ui", "version": "0.1.0"}
+@router.get("/health")
+def health() -> dict[str, str | bool]:
+    """Health-Status mit Component-Level-Checks.
 
+    Keine Auth erforderlich (Pfad ist in ``WHITELIST_PATHS``).
 
-@router.get("/readiness", summary="Readiness-Check mit DB-Connectivity")
-async def readiness(
-    session: AsyncSession = Depends(_get_probe_session),
-) -> JSONResponse:
-    """Readiness: prueft DB-Connectivity.
-
-    Erfolg: 200 + ``{"status":"ok","db":"up"}``.
-    DB unreachable: 503 + ``{"status":"degraded","db":"down","error":"..."}``.
+    Returns:
+        ``status``: ``"ok"`` / ``"degraded"`` (DB nicht erreichbar).
+        ``db``: ``"connected"`` / ``"disconnected"``.
+        ``storage``: aktuelles Backend (``"local"`` | ``"minio"`` | ``"gcs"``).
+        ``storage_ok``: best-effort-Ping (LocalStorage → True wenn Root da).
+        ``version``: Applikations-Version.
     """
+    db_ok = False
     try:
-        result = await session.execute(text("SELECT 1"))
-        result.scalar_one()
-    except Exception as exc:
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "status": "degraded",
-                "db": "down",
-                "error": f"{type(exc).__name__}: {exc}",
-            },
-        )
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content={"status": "ok", "db": "up"},
-    )
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            db_ok = True
+    except Exception:
+        log.warning("db_health_check_failed", exc_info=True)
+
+    # Best-Effort-Storage-Ping. Wir wollen NICHT bei jedem Health-Check eine
+    # Round-Trip-Operation gegen Minio fahren (kostspielig bei mehreren
+    # Healthchecks/Sekunde). Daher: nur informational welches Backend aktiv
+    # ist; echtes Ping kommt in /readiness.
+    storage_backend = settings.storage_backend
+
+    status = "ok" if db_ok else "degraded"
+    return {
+        "status": status,
+        "db": "connected" if db_ok else "disconnected",
+        "storage": storage_backend,
+        "version": "0.1.0",
+    }

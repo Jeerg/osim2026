@@ -92,7 +92,7 @@ Ein vollwertiges, beratungs-taugliches **Web-Modellierungs-Werkzeug für OSim-Mo
 - **D-18:** **Volle FastAPI-Foundation in Phase 1**, auch wenn nicht alle Endpoints produktiv genutzt werden:
   - Versionierte APIs unter `/api/v1/`
   - Service-Layer (`app/services/`) klar getrennt von API-Routern
-  - SQLAlchemy 2 async + asyncpg
+  - **SQLAlchemy 2 sync + psycopg3** (Korrektur 2026-05-21 nach Pattern-Mapping: 3fls-Parität — async-Variante war ursprünglich gewählt, aber 3fls-Stack ist durchgängig sync, und Stack-Parität ist strategisch wichtiger als Async-I/O-Vorteile, die in Phase 1 ohnehin kaum greifen)
   - Alembic-Migrations mit initialer Migration (`001_initial_schema.py`)
   - Firebase-Auth-Middleware (`TenantAuthMiddleware`, 1:1 aus 3fls)
   - structlog für strukturiertes Logging

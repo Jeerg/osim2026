@@ -1,318 +1,211 @@
-"""/api/v1/models/* -- Modell-CRUD + Tree-Endpoints.
+"""HTTP-Endpoints fuer Modell-Lifecycle (``/api/v1/models``).
 
-Endpunkte:
-  POST   /api/v1/models/upload-otx       Upload + Parse + Storage
-  GET    /api/v1/models                  List (Tenant-isoliert via search_path)
-  GET    /api/v1/models/{id}             Detail + Coverage + Lock-Status
-  GET    /api/v1/models/{id}/tree        JSON-Tree der aktuellen Version
-  PUT    /api/v1/models/{id}/tree        JSON-Tree → neue Version (Save-back)
-  GET    /api/v1/models/{id}/download-original  Originale (v1) als Bytes
-  POST   /api/v1/models/{id}/lock        Edit-Lock akquirieren
-  DELETE /api/v1/models/{id}/lock        Edit-Lock freigeben
-  POST   /api/v1/models/{id}/lock/heartbeat  Lock-TTL refreshen
+Fuenf Endpoints — siehe ``.planning/phases/01-vertical-slice/01-04-...-PLAN.md``
+Task 5:
 
-Lock-Endpoints + PUT-Lock-Pflicht werden in Task 3 ergaenzt.
+    POST   /api/v1/models/upload-otx   (multipart)
+    GET    /api/v1/models               (list)
+    GET    /api/v1/models/{id}          (Meta + Wire)
+    PUT    /api/v1/models/{id}          (Save-back; lock_token erforderlich)
+    DELETE /api/v1/models/{id}          (204)
+
+Alle Endpoints benoetigen Auth (``TenantAuthMiddleware`` setzt
+``request.state``; ``get_current_user`` extrahiert).
+
+Service-Lifecycle: ``get_model_service`` instanziiert pro Request einen neuen
+``ModelService`` mit der per ``get_db`` etablierten Connection.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import Response
-from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 
-from app.auth.dependencies import get_tenant_id, get_user_email, get_user_uid
+import structlog
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
+from sqlalchemy.engine import Connection
+
+from app.api.schemas.model import (
+    GetModelResponse,
+    ModelMeta,
+    SaveModelRequest,
+    SaveModelResponse,
+    UploadOtxResponse,
+)
+from app.auth.dependencies import get_current_user
+from app.auth.schemas import CurrentUser
 from app.core.database import get_db
-from app.schemas.json_tree import JsonTreeDocument
-from app.schemas.model import (
-    LockInfo,
-    ModelDetail,
-    ModelListItem,
-    TreePutRequest,
-    TreePutResponse,
-    TreeResponse,
-    UploadResponse,
-)
-from app.services.json_tree_service import (
-    apply_tree_to_simulator,
-    serialize_simulator_to_tree,
-)
-from app.services.lock_service import (
-    acquire_lock,
-    get_lock_status,
-    heartbeat_lock,
-    release_lock,
-)
-from app.services.model_service import (
-    create_new_version,
-    get_current_version_bytes,
-    get_initial_version_bytes,
-    get_model,
-    list_models,
-    register_model_from_otx,
-)
-from app.services.otx_service import dump_simulator_bytes, parse_otx_bytes
-from app.services.storage import Storage, get_storage
+from app.services.lock_service import LockService
+from app.services.model_service import ModelService
+from app.services.storage import StorageService, get_storage
 
-router = APIRouter()
+log = structlog.get_logger(__name__)
+
+router = APIRouter(tags=["models"])
 
 
 # ---------------------------------------------------------------------------
-# Upload
+# Dependencies
 # ---------------------------------------------------------------------------
 
 
-@router.post(
-    "/upload-otx",
-    response_model=UploadResponse,
-    summary="Lade ein OTX-Modell hoch.",
-)
-async def upload_otx(
-    file: UploadFile = File(..., description="OTX-Datei (Latin-1)."),
-    tenant_id: str = Depends(get_tenant_id),
-    user_uid: str = Depends(get_user_uid),
-    db: AsyncSession = Depends(get_db),
-    storage: Storage = Depends(get_storage),
-) -> UploadResponse:
-    """Akzeptiert Multipart-Upload, legt Modell + Version 1 an, schreibt Bytes
-    in den Storage. Antwortet mit Coverage-Report.
+def get_storage_dep() -> StorageService:
+    """FastAPI-Dependency: liefert das StorageService-Backend.
+
+    Nicht-cached — Phase 1 ist LocalStorage (billig). Bei Bedarf (z.B.
+    Minio-Connection-Setup) kann hier ``functools.lru_cache`` ergaenzt
+    werden.
     """
-    raw = await file.read()
-    model = await register_model_from_otx(
-        file_bytes=raw,
-        filename=file.filename or "unbenannt.otx",
-        tenant_id=tenant_id,
-        user_uid=user_uid,
-        db=db,
-        storage=storage,
-    )
-    return UploadResponse(
-        id=model.id,
-        name=model.name,
-        coverage_ratio=model.coverage_ratio_at_upload,
-        loaded_summary=model.loaded_summary,
-        unsupported_summary=model.unsupported_summary,
-    )
+    return get_storage()
 
 
-# ---------------------------------------------------------------------------
-# List + Detail
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "",
-    response_model=list[ModelListItem],
-    summary="Liste aller Modelle des aktuellen Tenants.",
-)
-async def list_models_endpoint(
-    db: AsyncSession = Depends(get_db),
-) -> list[ModelListItem]:
-    models = await list_models(db)
-    return [ModelListItem.model_validate(m) for m in models]
-
-
-@router.get(
-    "/{model_id}",
-    response_model=ModelDetail,
-    summary="Detail eines Modells inkl. Coverage und Lock-Status.",
-)
-async def get_model_endpoint(
-    model_id: int,
-    user_uid: str = Depends(get_user_uid),
-    db: AsyncSession = Depends(get_db),
-) -> ModelDetail:
-    model = await get_model(model_id, db)
-    lock = await get_lock_status(model_id, db)
-    detail = ModelDetail.model_validate(model)
-    if lock is not None:
-        detail.lock_status = LockInfo(
-            holder_uid=lock.holder_uid,
-            holder_email=lock.holder_email,
-            acquired_at=lock.acquired_at,
-            last_heartbeat_at=lock.last_heartbeat_at,
-            expires_at=lock.expires_at,
-            is_self=(lock.holder_uid == user_uid),
-        )
-    return detail
-
-
-# ---------------------------------------------------------------------------
-# Tree (Browser-Editor-Vertrag)
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/{model_id}/tree",
-    response_model=TreeResponse,
-    summary="Aktuelle Modell-Version als JSON-Tree.",
-)
-async def get_tree(
-    model_id: int,
-    db: AsyncSession = Depends(get_db),
-    storage: Storage = Depends(get_storage),
-) -> TreeResponse:
-    model = await get_model(model_id, db)
-    version, data = await get_current_version_bytes(model, db, storage)
-    load_result = parse_otx_bytes(data)
-    tree = serialize_simulator_to_tree(
-        load_result.simulator,
-        load_result=load_result,
-        original_otx=load_result.otx,
-    )
-    return TreeResponse(model_id=model.id, version=version.version, tree=tree)
-
-
-@router.put(
-    "/{model_id}/tree",
-    response_model=TreePutResponse,
-    summary="JSON-Tree zurueckspielen -> neue Modell-Version.",
-)
-async def put_tree(
-    model_id: int,
-    payload: TreePutRequest,
+def get_model_service(
     request: Request,
-    tenant_id: str = Depends(get_tenant_id),
-    user_uid: str = Depends(get_user_uid),
-    db: AsyncSession = Depends(get_db),
-    storage: Storage = Depends(get_storage),
-) -> TreePutResponse:
-    # Validate tree schema (rekursiv).
-    try:
-        validated = JsonTreeDocument.model_validate(payload.tree)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid tree: {exc}") from exc
+    conn: Connection = Depends(get_db),
+    storage: StorageService = Depends(get_storage_dep),
+    user: CurrentUser = Depends(get_current_user),
+) -> ModelService:
+    """Pro-Request-Instanz von ModelService.
 
-    model = await get_model(model_id, db)
-
-    # Edit-Lock-Pflicht (Task 3): wenn ein anderer User den Lock haelt, 403.
-    # Wenn niemand den Lock haelt, akzeptieren wir den Save (Browser kann
-    # ohne Lock GET; PUT sollte aber nur mit Lock kommen -- der Frontend-
-    # Client setzt ihn vor dem Edit).
-    from app.services.lock_service import check_lock_for_edit  # lazy: Task 3
-    await check_lock_for_edit(model_id=model.id, user_uid=user_uid, db=db)
-
-    # Laden des aktuellen OTX (fuer original_otx-Pass-Through + instance-OIDs).
-    _version, data = await get_current_version_bytes(model, db, storage)
-    load_result = parse_otx_bytes(data)
-
-    # Tree-Properties auf Sim anwenden.
-    apply_tree_to_simulator(validated.model_dump(), load_result=load_result)
-
-    # Serialisieren und neue Version anlegen.
-    new_bytes = dump_simulator_bytes(
-        load_result.simulator,
-        original_otx=load_result.otx,
-        instances=load_result.instances,
-    )
-    new_version = await create_new_version(
-        model=model,
-        otx_bytes=new_bytes,
-        tenant_id=tenant_id,
-        user_uid=user_uid,
-        db=db,
+    Connection hat per ``get_db`` bereits ``search_path`` auf das Tenant-
+    Schema gesetzt. ``tenant_id`` + ``user_uid`` kommen aus dem
+    Auth-Context.
+    """
+    _ = request  # nicht direkt verwendet; Dependency-Hierarchie
+    return ModelService(
+        conn=conn,
         storage=storage,
+        tenant_id=user.tenant_id,
+        user_uid=user.uid,
     )
 
-    # expected_version-Hint: Phase 1 nur Warning-Header.
-    if payload.expected_version is not None and payload.expected_version != _version.version:
-        request.state.tree_version_warning = (
-            f"expected_version={payload.expected_version}, was={_version.version}"
+
+def get_lock_service(
+    conn: Connection = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> LockService:
+    """Pro-Request-Instanz von LockService (nutzt dieselbe Connection).
+
+    tenant_id wird mitgegeben, damit der Service den search_path nach
+    rollback wiederherstellen kann (Rule-1-Fix Plan 01-05 Task 7).
+    """
+    return LockService(conn, tenant_id=user.tenant_id)
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post("/upload-otx", response_model=UploadOtxResponse)
+async def upload_otx(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    service: ModelService = Depends(get_model_service),
+) -> UploadOtxResponse:
+    """Upload einer ``.otx``-Datei.
+
+    Multipart-Form-Felder:
+        - ``file``: die OTX-Datei (binary, Latin-1).
+        - ``name``: vom User vergebener Anzeige-Name.
+
+    Antwort: ``ModelMeta`` + sofort der initiale ``ModelTreeWire`` (so
+    erspart sich das Frontend den Folge-Get).
+
+    Errors:
+        413 E_UPLOAD_TOO_LARGE — > 30 MB
+        415 E_INVALID_OTX_MIMETYPE — unbekannter MIME-Type
+    """
+    content = await file.read()
+    meta = service.upload_otx(
+        name=name,
+        content=content,
+        content_type=file.content_type,
+    )
+    wire = service.get_wire(meta.id)
+    return UploadOtxResponse(model=meta, wire=wire)
+
+
+@router.get("", response_model=list[ModelMeta])
+def list_models(
+    service: ModelService = Depends(get_model_service),
+) -> list[ModelMeta]:
+    """Liste aller Modelle des Tenants, DESC nach ``created_at``."""
+    return service.list_models()
+
+
+@router.get("/{model_id}", response_model=GetModelResponse)
+def get_model(
+    model_id: UUID,
+    service: ModelService = Depends(get_model_service),
+) -> GetModelResponse:
+    """Modell-Meta + aktueller Wire-Stand.
+
+    404 wenn ``model_id`` nicht existiert (im Tenant).
+    """
+    meta = service.get_meta(model_id)
+    wire = service.get_wire(model_id)
+    return GetModelResponse(model=meta, wire=wire)
+
+
+@router.put("/{model_id}", response_model=SaveModelResponse)
+def save_model(
+    model_id: UUID,
+    body: SaveModelRequest,
+    service: ModelService = Depends(get_model_service),
+    lock_service: LockService = Depends(get_lock_service),
+    user: CurrentUser = Depends(get_current_user),
+) -> SaveModelResponse:
+    """Save-back: schreibt eine neue Version (``v_<ts>.otx``).
+
+    Mitigation T-04-04: ``lock_token`` muss zum Owner passen — sonst 423.
+
+    Aktivitaetsbeweis: erfolgreicher Save verlaengert die Lock-TTL (siehe
+    PLAN Task 5 Behavior). Damit verliert ein langer Save bei knapper TTL
+    den Lock nicht und nachfolgende Edits scheitern nicht mit 423.
+
+    Errors:
+        404 E_MODEL_NOT_FOUND
+        422 E_OTX_COVERAGE_INCOMPLETE (is_save_safe = False)
+        423 E_LOCK_EXPIRED (Token ungueltig / abgelaufen)
+    """
+    if not lock_service.validate_token(model_id, body.lock_token, user.uid):
+        raise HTTPException(
+            status_code=423,
+            detail={
+                "code": "E_LOCK_EXPIRED",
+                "message": (
+                    "Ihre Bearbeitungs-Sperre ist abgelaufen oder das Token "
+                    "ist ungueltig. Bitte das Modell neu oeffnen."
+                ),
+            },
         )
 
-    return TreePutResponse(
-        model_id=model.id,
-        version=new_version.version,
-        storage_key=new_version.storage_key,
-        bytes_size=new_version.bytes_size,
-    )
+    # Save = Aktivitaetsbeweis. Verlaengere die TTL, damit lange Saves den
+    # Lock nicht verlieren.
+    lock_service.heartbeat(model_id, body.lock_token, user.uid)
+
+    new_key = service.save_wire(model_id, body.wire)
+    meta = service.get_meta(model_id)
+    return SaveModelResponse(model=meta, saved_version_key=new_key)
 
 
-# ---------------------------------------------------------------------------
-# Download Original
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/{model_id}/download-original",
-    summary="Originale OTX-Bytes (Version 1) als latin-1 application/octet-stream.",
-)
-async def download_original(
-    model_id: int,
-    db: AsyncSession = Depends(get_db),
-    storage: Storage = Depends(get_storage),
+@router.delete("/{model_id}", status_code=204)
+def delete_model(
+    model_id: UUID,
+    service: ModelService = Depends(get_model_service),
 ) -> Response:
-    model = await get_model(model_id, db)
-    initial, data = await get_initial_version_bytes(model, db, storage)
-    return Response(
-        content=data,
-        media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": f'attachment; filename="{model.original_filename}"',
-            "X-Storage-Key": initial.storage_key,
-        },
-    )
+    """Modell loeschen (Storage + DB-Row + Lock kaskadiert).
 
-
-# ---------------------------------------------------------------------------
-# Edit-Lock Endpoints (D-13)
-# ---------------------------------------------------------------------------
-
-
-def _to_lock_info(lock, user_uid: str) -> LockInfo:
-    return LockInfo(
-        holder_uid=lock.holder_uid,
-        holder_email=lock.holder_email,
-        acquired_at=lock.acquired_at,
-        last_heartbeat_at=lock.last_heartbeat_at,
-        expires_at=lock.expires_at,
-        is_self=(lock.holder_uid == user_uid),
-    )
-
-
-@router.post(
-    "/{model_id}/lock",
-    response_model=LockInfo,
-    summary="Edit-Lock akquirieren (15 min TTL, heartbeat-faehig).",
-)
-async def acquire_lock_endpoint(
-    model_id: int,
-    user_uid: str = Depends(get_user_uid),
-    user_email: str = Depends(get_user_email),
-    db: AsyncSession = Depends(get_db),
-) -> LockInfo:
-    # Existenz des Modells validieren -> 404 wenn unbekannt.
-    await get_model(model_id, db)
-    lock = await acquire_lock(
-        model_id=model_id, user_uid=user_uid, user_email=user_email, db=db
-    )
-    return _to_lock_info(lock, user_uid)
-
-
-@router.delete(
-    "/{model_id}/lock",
-    status_code=204,
-    summary="Edit-Lock freigeben (idempotent).",
-)
-async def release_lock_endpoint(
-    model_id: int,
-    user_uid: str = Depends(get_user_uid),
-    db: AsyncSession = Depends(get_db),
-) -> Response:
-    await get_model(model_id, db)
-    await release_lock(model_id=model_id, user_uid=user_uid, db=db)
+    Returns 204 No Content. 404 wenn das Modell nicht existiert.
+    """
+    service.delete_model(model_id)
     return Response(status_code=204)
-
-
-@router.post(
-    "/{model_id}/lock/heartbeat",
-    response_model=LockInfo,
-    summary="Lock-TTL refreshen (verschiebt expires_at).",
-)
-async def heartbeat_lock_endpoint(
-    model_id: int,
-    user_uid: str = Depends(get_user_uid),
-    db: AsyncSession = Depends(get_db),
-) -> LockInfo:
-    await get_model(model_id, db)
-    lock = await heartbeat_lock(model_id=model_id, user_uid=user_uid, db=db)
-    return _to_lock_info(lock, user_uid)

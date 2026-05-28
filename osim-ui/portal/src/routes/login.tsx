@@ -1,14 +1,16 @@
-// Plan 01-04 Task 1: Login-Seite mit Email/Password + Self-Service-Signup.
-//
-// Phase 1 ist Self-Service: jeder neue User kann sich registrieren, der
-// Backend-Bootstrap legt automatisch einen Tenant an (Plan 02 D-17).
-import { useState, type FormEvent } from "react";
-import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
+import { useEffect, useState, type FormEvent } from "react";
 import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-} from "firebase/auth";
+  createFileRoute,
+  useNavigate,
+  useSearch,
+} from "@tanstack/react-router";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { LockIcon, MailIcon } from "lucide-react";
+import { toast } from "sonner";
 import { auth } from "@/auth/firebase";
+import { BrandLogo } from "@/components/BrandLogo";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface LoginSearch {
   redirect?: string;
@@ -22,122 +24,135 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
+/**
+ * Login-Seite — Email + Passwort gegen den Firebase-Emulator (Dev) bzw. den
+ * Production-Firebase-Tenant. Nach erfolgreichem Sign-In navigiert zu der via
+ * `?redirect=…` mitgegebenen URL oder zu `/` als Fallback.
+ *
+ * Wenn der User schon authentisiert ist (z.B. nach Manual-Navigation auf
+ * /login bei aktiver Session), redirected ein useEffect zur Ziel-Route, damit
+ * die Login-Form nicht versehentlich angezeigt wird.
+ */
 function LoginPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/login" });
+  const { isAuthenticated, isLoading } = Route.useRouteContext({
+    select: (ctx) => ({
+      isAuthenticated: ctx.auth.isAuthenticated,
+      isLoading: ctx.auth.isLoading,
+    }),
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [mode, setMode] = useState<"login" | "signup">("login");
+
+  // Auto-Redirect wenn bereits eingeloggt (z.B. direkter Hit auf /login).
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      const redirectTo = search.redirect ?? "/";
+      void navigate({ to: redirectTo });
+    }
+  }, [isLoading, isAuthenticated, navigate, search.redirect]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(null);
     setIsSubmitting(true);
     try {
-      if (mode === "signup") {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
+      await signInWithEmailAndPassword(auth, email, password);
       const redirectTo = search.redirect ?? "/";
       await navigate({ to: redirectTo });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Anmeldung fehlgeschlagen";
-      setError(msg);
+      // Firebase wirft `FirebaseError` mit `code` + `message` — die deutsche
+      // Übersetzung kommt in Plan 04 (apiErrorMessage erweitern). Für jetzt
+      // zeigen wir die Firebase-Message direkt im Toast.
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Anmeldung fehlgeschlagen.";
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm space-y-6 px-4">
-        <div className="flex flex-col items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight">osim-ui</h1>
-          <p className="text-sm text-gray-500">
-            {mode === "login" ? "Anmelden" : "Konto anlegen"}
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-surface-50 via-brand-50/40 to-surface-100">
+      {/* dezente Blob-Akzente im Hintergrund */}
+      <div className="pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full bg-brand-200/40 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-brand-100/40 blur-3xl" />
+
+      <div className="relative w-full max-w-md px-6">
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <BrandLogo />
+          <p className="text-center text-sm text-surface-600">
+            Anmelden, um Ihre OSim-Modelle zu bearbeiten.
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4"
-          data-testid="login-form"
-        >
-          <div className="space-y-1">
-            <label htmlFor="email" className="text-sm font-medium text-gray-700">
-              E-Mail
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              disabled={isSubmitting}
-              className="block w-full rounded border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label
-              htmlFor="password"
-              className="text-sm font-medium text-gray-700"
-            >
-              Passwort
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete={
-                mode === "login" ? "current-password" : "new-password"
-              }
-              disabled={isSubmitting}
-              className="block w-full rounded border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            />
-          </div>
-
-          {error && (
-            <p
-              className="text-sm text-red-700"
-              data-testid="login-error"
-              role="alert"
-            >
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded bg-blue-700 px-3 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-50"
+        <div className="rounded-2xl border border-border bg-card p-7 shadow-xl shadow-brand-900/5">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-4"
+            data-testid="login-form"
           >
-            {isSubmitting
-              ? "..."
-              : mode === "login"
-                ? "Anmelden"
-                : "Konto anlegen"}
-          </button>
-        </form>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="email"
+                className="text-xs font-medium uppercase tracking-wider text-surface-500"
+              >
+                E-Mail
+              </label>
+              <div className="relative">
+                <MailIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-400" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@firma.de"
+                  required
+                  autoComplete="email"
+                  disabled={isSubmitting}
+                  className="h-10 pl-10"
+                />
+              </div>
+            </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setMode(mode === "login" ? "signup" : "login");
-            setError(null);
-          }}
-          className="block w-full text-center text-xs text-gray-500 hover:text-gray-700"
-        >
-          {mode === "login"
-            ? "Noch kein Konto? Jetzt registrieren."
-            : "Bereits registriert? Anmelden."}
-        </button>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="password"
+                className="text-xs font-medium uppercase tracking-wider text-surface-500"
+              >
+                Passwort
+              </label>
+              <div className="relative">
+                <LockIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-400" />
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  disabled={isSubmitting}
+                  className="h-10 pl-10"
+                />
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              className="h-10 w-full"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Anmelden…" : "Anmelden"}
+            </Button>
+          </form>
+        </div>
+
+        <p className="mt-6 text-center text-xs text-surface-400">
+          Dev-Mode · Firebase-Emulator unter <code>localhost:19099</code>
+        </p>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+# Phase 1 — sync psycopg3 + uv-source für engine + Test-Marker (D-18, RESEARCH §Assumption A8)
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -10,11 +11,16 @@ authors = [{name = "Jörg Werner Fischer"}]
 requires-python = ">=3.13"
 readme = "README.md"
 
+# Korrektur D-18 (2026-05-21): 3fls-Stack-Parität → sync psycopg3 statt async asyncpg.
+# google-cloud-storage / google-cloud-pubsub / websockets sind in Phase 1 nicht nötig
+# (Live-Viz kommt erst in Phase 4, GCS-Storage in Phase 5). boto3 reicht für Minio über S3-API.
+# python-multipart ist Pflicht für FastAPI UploadFile (Plan 04).
+# osim-engine wird als editable-install via [tool.uv.sources] (siehe unten) eingezogen.
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
     "sqlalchemy[asyncio]>=2.0",
-    "asyncpg>=0.30",
+    "psycopg[binary]>=3.2",
     "alembic>=1.14",
     "pydantic>=2.6",
     "pydantic-settings>=2.6",
@@ -23,17 +29,13 @@ dependencies = [
     "httpx>=0.28",
     "structlog>=25.0",
     "firebase-admin>=7.2",
-    "google-cloud-storage>=3.0",
-    "google-cloud-pubsub>=2.0",
-    "websockets>=14.0",
-    # Multipart-Body-Parser für FastAPI-File-Uploads (UploadFile).
-    "python-multipart>=0.0.9",
-    # Async S3-kompatibler Storage-Client (für Minio in Dev, GCS-S3-API in Prod).
-    "aioboto3>=13.0",
-    # osim-engine als editable-install aus dem Monorepo-Subfolder.
-    # Wird über [tool.uv.sources] aufgelöst.
+    "boto3>=1.42.69",
+    "python-multipart>=0.0.20",
     "osim-engine",
 ]
+
+[tool.uv.sources]
+osim-engine = { path = "../osim-engine/engine", editable = true }
 
 [dependency-groups]
 dev = [
@@ -42,12 +44,8 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.8",
     "mypy>=1.13",
-    "httpx>=0.28",  # für TestClient / AsyncClient
-    "aiosqlite>=0.20",  # für Alembic-Smoke-Tests auf SQLite
+    "httpx>=0.28",  # für TestClient
 ]
-
-[tool.uv.sources]
-osim-engine = { path = "../engine", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
@@ -55,9 +53,16 @@ packages = ["app"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers"]
+filterwarnings = [
+    "error::pytest.PytestUnknownMarkWarning",
+]
 markers = [
-    "integration: marks tests that require the Firebase emulator or live services",
-    "requires_db: marks tests that need a reachable Postgres test database",
+    "requires_postgres: Test benötigt Postgres @ localhost:5432",
+    "requires_firebase_emulator: Test benötigt Firebase Auth Emulator @ localhost:9099",
+    "requires_minio: Test benötigt Minio @ localhost:9000",
+    "requires_engine: Test benötigt importierbare osim_engine-Installation",
+    "integration: Integration-Test mit echter DB",
 ]
 
 [tool.ruff]
@@ -67,15 +72,6 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC"]
 ignore = []
-
-[tool.ruff.lint.per-file-ignores]
-"db/migrations/versions/*" = ["E501"]
-# B008 (Depends-as-default), E501 (long doc-strings), E702 (mock-Setup) sind in Tests OK.
-"tests/*" = ["B008", "E501", "E702"]
-# B008: FastAPI nutzt Depends() als Default-Argument bewusst.
-"app/api/**/*.py" = ["B008"]
-"app/api/v1/health.py" = ["B008"]
-"app/auth/dependencies.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.13"

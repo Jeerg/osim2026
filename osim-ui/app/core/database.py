@@ -1,136 +1,102 @@
-"""Async SQLAlchemy-Engine + tenant-scoped Sessions.
+"""DB-Engine + ``get_db``-Dependency mit Schema-per-Tenant.
 
-Pattern aus tbx_stzrim/app/core/database.py auf async + asyncpg portiert.
+3fls-Pattern-Parität (siehe ``tbx_stzrim/app/core/database.py``):
+    * Sync SQLAlchemy + psycopg3 (D-18, korrigiert 2026-05-21 — NICHT async).
+    * QueuePool mit ``pool_reset_on_return="rollback"`` für psycopg3-INTRANS.
+    * Phase-19-final-Fix: ``connect_args.options=-c search_path="public"``
+      pinnt den Default-search_path AM CONNECTION-STARTUP. Überlebt
+      Commit/Rollback/Reset-Zyklen.
+    * Per-Request ``SET search_path TO "tenant_<id>", public`` in ``get_db``
+      mit Whitelist-Regex-Validierung (RESEARCH §Common Pitfalls #1).
 
-Bereitstellt:
-- ``engine`` -- async SQLAlchemy-Engine (asyncpg-Dialekt, Pool 20+10)
-- ``AsyncSessionLocal`` -- async_sessionmaker
-- ``Base`` -- DeclarativeBase für SQLAlchemy 2 typed Models
-- ``get_db`` -- Dependency, setzt search_path={tenant_id},public pro Request
-- ``get_db_unscoped`` -- Dependency ohne search_path-Switch (für /auth/me-Bootstrap,
-  wenn Tenant noch nicht existiert; arbeitet nur in public)
-
-Sicherheit:
-- ``tenant_id`` ist auf ``[a-z0-9_]{1,63}`` whitelisted (siehe SCHEMA_PATTERN).
-  Verhindert SQL-Injection in dem unvermeidlichen f-String-SET-Statement
-  (Schema-Namen sind in PostgreSQL nicht parametrisierbar).
+NO async-Variante. NO async ``get_db``. NO ``SET LOCAL`` (siehe PATTERNS.md
+§Stack-Drift und §``app/core/database.py`` für die Konflikt-Auflösung).
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import AsyncGenerator
+from collections.abc import Iterator
 
-from fastapi import HTTPException, Request
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import AsyncAdaptedQueuePool, NullPool
-from sqlalchemy.sql import text
+import structlog
+from fastapi import Request
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
 
-# Schema-Namen müssen alphanumerisch + underscore sein.
-# Wird in ensure_tenant_bootstrap *und* in get_db verifiziert.
-SCHEMA_PATTERN = re.compile(r"^[a-z0-9_]{1,63}$")
+log = structlog.get_logger(__name__)
 
-
-class Base(DeclarativeBase):
-    """Basis-Klasse für alle ORM-Models."""
-
-
-# Pool-Strategie:
-# - In TEST-Umgebung: NullPool -- jede Connection wird fresh geoeffnet und
-#   sofort geschlossen. Verhindert cross-loop-Probleme auf Windows.
-# - In Prod/Dev: AsyncAdaptedQueuePool mit 20+10 fuer 50-User-Concurrency
-#   (siehe 3fls D-CC08). Kein pool_pre_ping (Bug auf Win/ProactorEventLoop),
-#   stattdessen pool_recycle=1800 fuer stale-Connection-Vermeidung.
-_IS_TEST = settings.environment == "test"
-
-if _IS_TEST:
-    engine: AsyncEngine = create_async_engine(
-        settings.database_url,
-        poolclass=NullPool,
-        future=True,
-    )
-else:
-    engine = create_async_engine(
-        settings.database_url,
-        poolclass=AsyncAdaptedQueuePool,
-        pool_size=20,
-        max_overflow=10,
-        pool_pre_ping=False,
-        pool_recycle=1800,
-        future=True,
-    )
-
-AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
-    bind=engine,
-    expire_on_commit=False,
-    autoflush=False,
-    autocommit=False,
+# Engine — sync, psycopg3, QueuePool mit Phase-19-final-Fix.
+engine = create_engine(
+    settings.database_url,
+    poolclass=QueuePool,
+    pool_size=20,
+    max_overflow=10,
+    pool_pre_ping=True,
+    pool_reset_on_return="rollback",
+    pool_timeout=10,
+    # Phase 19-final fix (3fls 2026-05-16, übernommen für osim-ui 2026-05-21):
+    # search_path-Default beim Connection-Startup pinnen — überlebt commit/
+    # rollback/reset-Zyklen, die ein per-Session SET verlieren würden.
+    # osim-ui-spezifisch: nur "public" als Default; tenant_<id> wird per Request
+    # in get_db gesetzt.
+    connect_args={
+        "options": '-c search_path="public"',
+    },
 )
 
+# Session-Factory für ORM-Use-Cases (Plan 04+ Service-Layer mit ORM-Queries).
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-def _validate_schema_name(name: str) -> None:
-    """Whitelist-Check für PostgreSQL-Schema-Namen.
 
-    Schema-Identifier können NICHT parametrisiert werden -- daher diese
-    strenge Validierung an jeder Stelle, wo der Name in SQL landet.
+# Whitelist-Regex für Schema-Namen: alphanumerisch + Underscore.
+# Firebase-UIDs sind 28 Zeichen, alphanumerisch — passt in dieses Pattern.
+# Bindestrich bewusst NICHT erlaubt (Postgres-Identifier-Quote-Edge-Case);
+# falls Firebase-UIDs mit Bindestrich auftreten, muss bootstrap_tenant_if_missing
+# sie vorher normalisieren.
+_SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9_]+$")
+
+
+def get_db(request: Request) -> Iterator[Connection]:
+    """FastAPI-Dependency: yield eine DB-Connection mit ``search_path`` auf
+    das Tenant-Schema gesetzt.
+
+    Liest ``tenant_id`` aus ``request.state`` (gesetzt von
+    ``TenantAuthMiddleware``). Validiert den Slug gegen ``_SLUG_PATTERN`` um
+    SQL-Injection zu verhindern (Schema-Namen können nicht parametrisiert
+    werden — ``SET search_path`` akzeptiert nur Identifier, keine Parameter).
+
+    Defense-in-Depth gegen search_path-Leak (RESEARCH §Pitfall #1):
+        1. Startup-Pin via ``connect_args.options`` (s.o.) → Default = public.
+        2. Per-Request ``SET search_path TO "tenant_<id>", public`` → Tenant-
+           Isolation.
+        3. ``finally``-Block setzt zurück auf ``public`` → defensiv für den
+           Fall, dass ``pool_reset_on_return`` mal nicht greift.
     """
-    if not SCHEMA_PATTERN.match(name):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid tenant_id format: {name!r}",
-        )
-
-
-async def get_db(request: Request) -> AsyncGenerator[AsyncSession]:
-    """FastAPI-Dependency: tenant-scoped Session mit gesetztem search_path.
-
-    Liest ``tenant_id`` aus ``request.state`` (gesetzt von TenantAuthMiddleware).
-    Endpoints in der Middleware-Whitelist (z.B. /health) haben keinen tenant_id
-    -- diese dürfen ``get_db`` NICHT verwenden; nutze stattdessen
-    ``get_db_unscoped``.
-    """
-    tenant_id: str | None = getattr(request.state, "tenant_id", None)
+    tenant_id = getattr(request.state, "tenant_id", None)
     if not tenant_id:
-        # Kein tenant_id im State -- entweder Whitelist-Endpoint nutzt
-        # versehentlich get_db, oder /auth/me-Bootstrap-Pfad. Letzteres
-        # MUSS get_db_unscoped nutzen.
-        raise HTTPException(status_code=401, detail="No tenant context")
+        raise ValueError("No tenant_id in request state")
 
-    _validate_schema_name(tenant_id)
+    if not _SLUG_PATTERN.match(tenant_id):
+        raise ValueError(f"Invalid tenant slug: {tenant_id!r}")
 
-    async with AsyncSessionLocal() as session:
-        # search_path setzen -- die quote_ident-Variante via f-string ist
-        # safe, weil tenant_id durch SCHEMA_PATTERN validiert ist.
-        await session.execute(text(f'SET search_path TO "{tenant_id}", public'))
+    schema_name = f"tenant_{tenant_id}"
+
+    with engine.connect() as conn:
+        conn.execute(text(f'SET search_path TO "{schema_name}", public'))
         try:
-            yield session
+            yield conn
         finally:
-            await session.close()
+            reset_search_path_default(conn)
 
 
-async def get_db_unscoped(request: Request) -> AsyncGenerator[AsyncSession]:
-    """FastAPI-Dependency ohne tenant-search_path-Switch.
+def reset_search_path_default(conn: Connection) -> None:
+    """Explizit ``search_path`` auf ``public`` zurücksetzen.
 
-    Verwendung:
-    - /api/v1/auth/me (Tenant existiert noch nicht beim ersten Call)
-    - /readiness (Health-Check ohne Tenant-Kontext)
-    - Cross-Tenant-Admin-Endpoints (Phase 4+)
+    Named-Function statt inline-Statement für Klarheit + späteres Mocking in
+    Tests. Wird im ``finally``-Block von ``get_db`` aufgerufen.
     """
-    async with AsyncSessionLocal() as session:
-        # Default-search_path explizit setzen, falls eine ältere Connection
-        # noch einen Tenant-Pfad gesetzt hatte.
-        default_schema = settings.database_default_schema
-        _validate_schema_name(default_schema)
-        await session.execute(text(f'SET search_path TO "{default_schema}"'))
-        try:
-            yield session
-        finally:
-            await session.close()
+    conn.execute(text("SET search_path TO public"))

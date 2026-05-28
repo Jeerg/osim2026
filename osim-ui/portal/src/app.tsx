@@ -1,16 +1,18 @@
-// Plan 01-04 Task 1: App-Shell mit QueryClient + AuthProvider + Router.
-// Folgt dem 3fls-Muster (tbx_stzrim/portal/src/app.tsx), aber ohne i18n
-// (Phase 1 ist deutsch-only) und ohne shadcn-Toaster (Plan 05+ kann
-// nachziehen, wenn die Viewer-Konsumenten Toast-Feedback brauchen).
+// Side-Effect-Import: registriert alle 8 Phase-1-Viewer in der ViewerRegistry
+// und setzt PGObjBaseViewer als Fallback. MUSS vor dem Router-Setup laufen,
+// damit die Registry beim ersten Render eines Workspace-Routes gefüllt ist.
+import "@/viewers/setup";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { AuthProvider } from "@/auth/auth-provider";
 import { useAuth } from "@/auth/use-auth";
+import { Toaster } from "@/components/ui/sonner";
 import { routeTree } from "./routeTree.gen";
 
-// React-Query: 5-Minuten staleTime, 1 Retry. Reicht fuer Phase 1; in
-// spaeteren Phasen ggf. ueberdenken (Sim-Status braucht haeufigere Updates).
+// QueryClient mit sinnvollen Defaults für Phase 1 (1:1 aus tbx_stzrim/portal/src/app.tsx).
+//  - staleTime 5 min: Tenant-/Modell-Listen ändern sich selten ohne User-Aktion.
+//  - retry 1: bei transientem Backend-Hickup einmal nachfassen, danach UI-Error.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -20,7 +22,10 @@ const queryClient = new QueryClient({
   },
 });
 
-// Router-Instance. auth-Context wird zur Laufzeit von InnerApp injiziert.
+// Router-Instanz wird vor der React-Tree-Initialisierung gebaut, weil
+// TanStack-Router den routeTree für Type-Inferenz braucht. `context.auth` ist
+// hier ein `undefined as any`-Placeholder — der echte Wert wird in `InnerApp`
+// pro Render via `<RouterProvider context={{ auth }}>` injected.
 const router = createRouter({
   routeTree,
   context: {
@@ -29,22 +34,36 @@ const router = createRouter({
   },
 });
 
+// Type-Registration für `<Link to="..." />`-Autocomplete + beforeLoad-Context.
 declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
   }
 }
 
+/**
+ * Inner-Wrapper, der den Auth-Context konsumiert und an den Router weiterreicht.
+ * Muss INSIDE des AuthProvider mounten, damit `useAuth()` nicht wirft.
+ */
 function InnerApp() {
   const auth = useAuth();
   return <RouterProvider router={router} context={{ auth }} />;
 }
 
+/**
+ * App-Root. Provider-Reihenfolge (outermost → innermost):
+ *   QueryClientProvider → AuthProvider → InnerApp + Toaster.
+ *
+ * QueryClientProvider muss außen, damit AuthProvider ggf. useMutation/useQuery
+ * nutzen kann. Toaster ist Sibling von InnerApp (nicht im Router-Tree), damit
+ * Toasts auch außerhalb von Routes (z.B. globale Fetch-Errors) gemounted sind.
+ */
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <InnerApp />
+        <Toaster position="top-right" richColors />
       </AuthProvider>
     </QueryClientProvider>
   );

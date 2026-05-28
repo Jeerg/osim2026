@@ -4,19 +4,11 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 
-// Vite-Config fuer osim-ui-portal (Build + Dev-Server).
+// osim-ui Vite-Config (1:1-Subset aus tbx_stzrim/portal/vite.config.ts).
 //
-// Plan 01-04 Task 1: Foundation-Setup.
-// - Port 3000 (osim-ui-Konvention; 3fls nutzt 3003).
-// - Proxy /api -> http://localhost:8000 damit der Browser keine CORS-Konfig
-//   braucht und apiFetch einfach mit relativen Pfaden arbeiten kann
-//   (Phase-1-pragmatisch; voller CORS-Stack waere die Alternative).
-// - TanStack-Router-Plugin generiert routeTree.gen.ts automatisch aus
-//   src/routes/.
-// - Tailwind 4 als Vite-Plugin (kein PostCSS-Setup noetig).
-// - Vitest hat seine eigene Konfig in vitest.config.ts (vermeidet
-//   Type-Konflikte zwischen vitest's gebundle-ter vite-Version und der
-//   Projekt-vite-Version).
+// Plan 01-03 reaktiviert das TanStackRouterVite-Plugin — es generiert
+// `src/routeTree.gen.ts` automatisch aus den Files unter `src/routes/`.
+// Port 3002 (3fls liegt auf 3003, demo-Backend auf 8000).
 export default defineConfig({
   plugins: [
     TanStackRouterVite({ target: "react", autoCodeSplitting: true }),
@@ -26,16 +18,27 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Workspace-Pakete (Track C1 — Architektur-Audit 2026-05-28 §5.4).
+      // Foundation-Files leben Stand 2026-05-28b noch unter src/graph/foundation/;
+      // diese Aliase definieren bereits den Package-Vertrag, sodass neue Code-
+      // Wellen "@osim/graphobject" als Import-Pfad nutzen können. Die
+      // tatsaechliche Dateiverschiebung kommt in einer Folge-Welle (mechanisch).
+      "@osim/graphobject": path.resolve(
+        __dirname,
+        "./packages/graphobject/src/index.ts",
+      ),
+      "@osim/graphobject-react-flow": path.resolve(
+        __dirname,
+        "./packages/graphobject-react-flow/src/index.ts",
+      ),
+      "@osim/graphobject-canvas": path.resolve(
+        __dirname,
+        "./packages/graphobject-canvas/src/index.ts",
+      ),
     },
   },
   server: {
-    port: 3000,
+    port: 3002,
     strictPort: true,
-    proxy: {
-      "/api": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-      },
-    },
   },
 });
