@@ -157,7 +157,7 @@ Plans:
 Plans:
 - [x] 01.3-01-PLAN.md - Welle 1: C++-Audit PAssozMenge*-Attrs + LinkStatusList-Analogie + Test-Fixture-Vorschlag (AUDIT.md)
 - [x] 01.3-02-PLAN.md - Welle 2: Engine otx_loader.py - 5 Handler (PAssozMenge + 4 Subklassen) + Unit-Tests
-- [ ] 01.3-03-PLAN.md - Welle 2: Engine otx_writer.py - 5 Writer + Unit-Tests
+- [x] 01.3-03-PLAN.md - Welle 2: Engine otx_writer.py - 5 Writer + Unit-Tests
 - [ ] 01.3-04-PLAN.md - Welle 3: Engine Round-Trip-Tests (>=8) + Demo-OTX-Fixture passozmenge_minimal.otx
 - [ ] 01.3-05-PLAN.md - Welle 3: Schema-Patch schemas.json + API-Container-Sync
 - [ ] 01.3-06-PLAN.md - Welle 4: UI PRessMengeMatrixViewer-Rewrite auf @osim/graphobject MatrixGrid + matrix-common.tsx loeschen + Toolbar
