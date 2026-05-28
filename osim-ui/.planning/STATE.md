@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 current_phase: 01.3
-current_plan: 6
+current_plan: 7
 status: in-progress
-stopped_at: "Phase 01.3 Welle 3 Plan 04 (Engine-Roundtrip-Tests + PRessMenge-Handler + In-Memory-Tree-Iter) abgeschlossen. 3 Commits: 98e37a7 fix (PRessMenge Loader+Writer + Tree-Iter-Erweiterung Top-Level-Knoten + Knoten-Assoz, Rule 2 Auto-Fix), a228462 feat (passozmenge_minimal.otx Demo-Fixture + Builder + Generator-Skript), 89b3961 test (11 Roundtrip-Tests fuer PAssozMenge-Familie). SC-4 (Roundtrip-Tests) und SC-5 (alle Engine-Tests gruen minus 3 pre-existing) erfuellt. Verifikation: 11/11 Roundtrip-Tests gruen, volle Engine-Suite ohne pre-existing = 535 passed / 35 xfailed, pre-existing 3 Failures unveraendert (test_azeitsim_runner x2, test_python_vs_cpp x1 — out-of-scope seit Plan 02). Bekannte Deferred-Issues dokumentiert in 01.3-04-SUMMARY: ASimulator-Container-Pointer-Synthese fuer in-memory-Sim ohne original_otx (D-01.3.04-01) und fehlender m_lAssozRess-Backref-Wire im Loader (D-01.3.04-02) — beide pre-existing Engine-Defekte, gehoeren in eigene Wellen. Plan 06 (UI MatrixGrid-Migration) kann auf stabilem Engine-Roundtrip-Vertrag aufsetzen."
-last_updated: "2026-05-28T18:30:00.000Z"
+stopped_at: "Phase 01.3 Welle 4 Plan 06 (PRessMengeMatrixViewer-Rewrite + matrix-common-Loeschung) abgeschlossen. 2 Commits: 7b0fd93 feat (PRessMengeMatrixToolbar mit PRESSMENGE_TYPES, 214 LOC), 2106300 feat (PRessMengeMatrixViewer 2D-Matrix 645 LOC + Loeschung Legacy 1D-Tabelle + matrix-common.tsx + Registry-Update). SC-7 (Migration auf MatrixGrid-Foundation) und SC-9 (UI-Cell-Edit funktioniert) Code-seitig erfuellt; Browser-UAT awaiting-human gemaess User-Direktive baller alles durch dann test. Verifikation: tsc 0 Fehler, vitest 379 passed / 2 skipped (1:1 Baseline-erhaltend), Lint 99 problems (76 errors, 23 warnings) IDENTISCH zur Baseline (verifiziert per git stash, alle pre-existing). Bekannte Deferred: D-01.3.06-01 pre-existing Lint-Errors (eigene Cleanup-Welle), D-01.3.06-02 Persistenz haengt am Welle 01.2-H Save/Lock-Stand, D-01.3.04-02 vererbt fehlender m_lAssozRess-Backref-Wire im Engine-Loader. Browser-UAT-Direktiven: Grafik-Viewer (Memory feedback-sim-grafik-viewer-immer) + Default-User jwfischer69@gmail.com/123456 + Link http://localhost:3002. Plan 07 (E2E) kann ab User-Approve starten."
+last_updated: "2026-05-28T19:00:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 35
-  completed_plans: 27
-  percent: 23
+  completed_plans: 28
+  percent: 24
 ---
 
 # Project State

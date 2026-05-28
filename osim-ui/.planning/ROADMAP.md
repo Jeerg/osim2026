@@ -160,7 +160,7 @@ Plans:
 - [x] 01.3-03-PLAN.md - Welle 2: Engine otx_writer.py - 5 Writer + Unit-Tests
 - [x] 01.3-04-PLAN.md - Welle 3: Engine Round-Trip-Tests (>=8) + Demo-OTX-Fixture passozmenge_minimal.otx
 - [x] 01.3-05-PLAN.md - Welle 3: Schema-Patch schemas.json + API-Container-Sync
-- [ ] 01.3-06-PLAN.md - Welle 4: UI PRessMengeMatrixViewer-Rewrite auf @osim/graphobject MatrixGrid + matrix-common.tsx loeschen + Toolbar
+- [x] 01.3-06-PLAN.md - Welle 4: UI PRessMengeMatrixViewer-Rewrite auf @osim/graphobject MatrixGrid + matrix-common.tsx loeschen + Toolbar
 - [ ] 01.3-07-PLAN.md - Welle 5: UI Vitest-Specs (>=8) + Clipboard-Spec + Playwright-E2E + Phase-Sign-Off
 
 ### Phase 2: Sim-Lauf + Trace
