@@ -40,3 +40,7 @@ engine/osim2004-trace/bin/
 engine/osim2004-trace/*.exe
 engine/osim2004-trace/*.obj
 engine/osim2004-trace/*.o
+
+# Graphify knowledge-graph output (regenerable; HTML/JSON/cache)
+graphify-out/
+
