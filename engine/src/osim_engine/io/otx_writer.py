@@ -946,6 +946,52 @@ register_writer("PAssozRessEnt")(_make_assoz_writer())
 register_writer("PAssozELogikEnt")(_make_assoz_writer())
 
 
+# Phase 01.3 Welle 2 — PAssozMenge-Familie (Material-Fluss-Assoziationen)
+#
+# C++-Vorlage: OSimPro/PAssozRessource.odh:579-898 (PAssozMenge + 4 Subklassen).
+# AUDIT-Bezug: .planning/phases/01.3-…/01.3-01-AUDIT.md
+#   - Sektion 2.7 (Konsolidiertes Attribut-Inventar)
+#   - Sektion 4.3 (KEIN LinkStatusList-Spezialfall in dieser Familie)
+#   - Sektion 4.4 (m_lMengRess MUSS expliziter Scalar-Pointer-Serializer sein,
+#     analog _PTagRessWriter.m_oRessBeleg — Klein-l-Präfix würde sonst falsch
+#     von der generischen m_l*-Container-Adoption behandelt).
+#
+# Pattern: Factory-Funktion (wie _make_assoz_writer), weil 5 Klassen mit
+# gleichem m_lMengRess-Pattern, aber unterschiedlichen Mengen-Skalaren.
+
+
+def _make_passozmenge_writer(extra_scalars: tuple[str, ...] = ()):
+    """Factory für PAssozMenge-Subklassen-Writer.
+
+    Schreibt:
+        - m_sName + ggf. zusätzliche Skalare (m_iMengeAus / m_iMengeEin /
+          m_iMengeAbfr) via _serialize_scalars.
+        - m_lMengRess als Scalar-OID-Pointer via writer.get_oid (None-Guard
+          analog _PTagRessWriter.m_oRessBeleg).
+
+    Kein LinkStatusList-Pass-Through nötig (siehe AUDIT.md Sektion 4.3 —
+    keine PAssozMenge-Subklasse hat ein m_L<Großbuchstabe>-Attribut).
+    """
+    scalars = ("m_sName",) + extra_scalars
+
+    class _H(WriterHandler):
+        def serialize(self, writer, py, oid):
+            props = _serialize_scalars(py, scalars)
+            ref = writer.get_oid(getattr(py, "m_lMengRess", None))
+            if ref is not None:
+                props["m_lMengRess"] = ref
+            return props, []
+
+    return _H
+
+
+register_writer("PAssozMenge")(_make_passozmenge_writer(()))
+register_writer("PAssozMengeErzgt")(_make_passozmenge_writer(("m_iMengeAus",)))
+register_writer("PAssozMengeVerbr")(_make_passozmenge_writer(("m_iMengeEin",)))
+register_writer("PAssozMengeVerbrZwischen")(_make_passozmenge_writer(("m_iMengeEin",)))
+register_writer("PAssozMengeAbfr")(_make_passozmenge_writer(("m_iMengeAbfr",)))
+
+
 # ----------------------------------------------------------------------
 # Entscheider-Datenstrukturen
 # ----------------------------------------------------------------------
