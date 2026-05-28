@@ -334,3 +334,217 @@ def test_dump_output_is_latin1_encodable() -> None:
     out = dump_simulator_to_otx(sim)
     # Wirft UnicodeEncodeError, falls Codepoint > U+00FF im Output.
     out.encode("latin-1")
+
+
+# ----------------------------------------------------------------------
+# Phase 01.3 Welle 2 — PAssozMenge-Familie Writer-Handler
+# (5 Klassen: abstract PAssozMenge + 4 konkrete Subklassen)
+# Schablone: _make_assoz_writer / _PTagRessWriter (Scalar-Pointer-Pattern).
+# AUDIT.md Sektion 4.4: m_lMengRess MUSS explizit als Scalar-Pointer
+# serialisiert werden (Klein-l-Präfix → würde von Container-Adoption falsch
+# behandelt). AUDIT.md Sektion 4.3: KEIN LinkStatusList-Spezialfall.
+# ----------------------------------------------------------------------
+
+
+def _passozmenge_writer_stub(oid_for: dict[int, int] | None = None):
+    """Mini-Stub für WriterHandler.serialize-Tests.
+
+    `oid_for` mappt `id(obj)` → OID; `get_oid(None)` und unbekannte Objekte
+    liefern None — analog zum Verhalten des echten `OtxWriter.get_oid`.
+    """
+    from types import SimpleNamespace
+
+    mapping = oid_for or {}
+
+    def _get_oid(obj):
+        if obj is None:
+            return None
+        return mapping.get(id(obj))
+
+    return SimpleNamespace(get_oid=_get_oid, _original_otx=None)
+
+
+def test_passozmenge_writers_registered() -> None:
+    """Alle 5 PAssozMenge-Klassen sind im _WRITERS-Mapping."""
+    from osim_engine.io import otx_writer
+
+    expected = (
+        "PAssozMenge",
+        "PAssozMengeErzgt",
+        "PAssozMengeVerbr",
+        "PAssozMengeVerbrZwischen",
+        "PAssozMengeAbfr",
+    )
+    for k in expected:
+        assert k in otx_writer._WRITERS, (
+            f"WriterHandler für {k!r} fehlt in _WRITERS"
+        )
+
+
+def test_passozmenge_erzgt_writer_serializes_m_iMengeAus() -> None:
+    """PAssozMengeErzgt-Writer: m_sName + m_iMengeAus + leere m_lMengRess.
+
+    AUDIT.md Sektion 2.3 / 2.7: SCALARS = ("m_sName", "m_iMengeAus").
+    """
+    from osim_engine.io import otx_writer
+    from osim_engine.pps.simulator import PSimulator
+    from osim_engine.resources.assoziation.menge import PAssozMengeErzgt
+
+    sim = PSimulator()
+    py = PAssozMengeErzgt(sim)
+    py.m_sName = "E1"
+    py.m_iMengeAus = 7
+
+    handler = otx_writer._WRITERS["PAssozMengeErzgt"]
+    props, sub_refs = handler.serialize(_passozmenge_writer_stub(), py, 42)
+
+    assert props["m_sName"] == "E1"
+    assert props["m_iMengeAus"] == 7
+    assert "m_lMengRess" not in props  # None → Key fehlt
+    assert sub_refs == []
+
+
+def test_passozmenge_verbr_writer_serializes_m_iMengeEin() -> None:
+    """PAssozMengeVerbr-Writer: m_sName + m_iMengeEin.
+
+    AUDIT.md Sektion 2.4 / 2.7: SCALARS = ("m_sName", "m_iMengeEin").
+    """
+    from osim_engine.io import otx_writer
+    from osim_engine.pps.simulator import PSimulator
+    from osim_engine.resources.assoziation.menge import PAssozMengeVerbr
+
+    sim = PSimulator()
+    py = PAssozMengeVerbr(sim)
+    py.m_sName = "V1"
+    py.m_iMengeEin = 3
+
+    handler = otx_writer._WRITERS["PAssozMengeVerbr"]
+    props, sub_refs = handler.serialize(_passozmenge_writer_stub(), py, 51)
+
+    assert props["m_sName"] == "V1"
+    assert props["m_iMengeEin"] == 3
+    assert "m_lMengRess" not in props
+    assert sub_refs == []
+
+
+def test_passozmenge_verbr_zwischen_writer_serializes_m_iMengeEin() -> None:
+    """PAssozMengeVerbrZwischen erbt m_iMengeEin von PAssozMengeVerbr.
+
+    AUDIT.md Sektion 2.5 / 2.7: keine eigenen persistierten Attrs;
+    SCALARS = ("m_sName", "m_iMengeEin") identisch zu Verbr.
+    """
+    from osim_engine.io import otx_writer
+    from osim_engine.pps.simulator import PSimulator
+    from osim_engine.resources.assoziation.menge import PAssozMengeVerbrZwischen
+
+    sim = PSimulator()
+    py = PAssozMengeVerbrZwischen(sim)
+    py.m_sName = "VZ1"
+    py.m_iMengeEin = 5
+
+    handler = otx_writer._WRITERS["PAssozMengeVerbrZwischen"]
+    props, sub_refs = handler.serialize(_passozmenge_writer_stub(), py, 60)
+
+    assert props["m_sName"] == "VZ1"
+    assert props["m_iMengeEin"] == 5
+    assert "m_lMengRess" not in props
+    assert sub_refs == []
+
+
+def test_passozmenge_abfr_writer_serializes_m_iMengeAbfr() -> None:
+    """PAssozMengeAbfr-Writer: m_sName + m_iMengeAbfr.
+
+    AUDIT.md Sektion 2.6 / 2.7: SCALARS = ("m_sName", "m_iMengeAbfr").
+    """
+    from osim_engine.io import otx_writer
+    from osim_engine.pps.simulator import PSimulator
+    from osim_engine.resources.assoziation.menge import PAssozMengeAbfr
+
+    sim = PSimulator()
+    py = PAssozMengeAbfr(sim)
+    py.m_sName = "A1"
+    py.m_iMengeAbfr = 2
+
+    handler = otx_writer._WRITERS["PAssozMengeAbfr"]
+    props, sub_refs = handler.serialize(_passozmenge_writer_stub(), py, 70)
+
+    assert props["m_sName"] == "A1"
+    assert props["m_iMengeAbfr"] == 2
+    assert "m_lMengRess" not in props
+    assert sub_refs == []
+
+
+def test_passozmenge_erzgt_writer_serializes_m_lMengRess_when_set() -> None:
+    """Wenn m_lMengRess auf ein Lager zeigt, schreibt der Writer dessen OID.
+
+    AUDIT.md Sektion 4.4: m_lMengRess ist Scalar-Pointer (kein LList-Container)
+    und muss EXPLIZIT über writer.get_oid serialisiert werden — analog zum
+    _PTagRessWriter-Pattern (m_oRessBeleg).
+    """
+    from osim_engine.io import otx_writer
+    from osim_engine.pps.simulator import PSimulator
+    from osim_engine.resources.assoziation.menge import PAssozMengeErzgt
+    from osim_engine.resources.menge import PRessMenge
+
+    sim = PSimulator()
+    lager = PRessMenge(sim)
+    lager.m_sName = "Lager-A"
+
+    py = PAssozMengeErzgt(sim)
+    py.m_sName = "E2"
+    py.m_iMengeAus = 4
+    py.m_lMengRess = lager
+
+    stub = _passozmenge_writer_stub({id(lager): 99})
+    handler = otx_writer._WRITERS["PAssozMengeErzgt"]
+    props, sub_refs = handler.serialize(stub, py, 42)
+
+    assert props["m_lMengRess"] == 99
+    assert props["m_iMengeAus"] == 4
+    assert props["m_sName"] == "E2"
+    assert sub_refs == []
+
+
+def test_passozmenge_verbr_writer_serializes_m_lMengRess_when_set() -> None:
+    """Auch Verbr-Subklasse muss m_lMengRess als Scalar-Pointer schreiben."""
+    from osim_engine.io import otx_writer
+    from osim_engine.pps.simulator import PSimulator
+    from osim_engine.resources.assoziation.menge import PAssozMengeVerbr
+    from osim_engine.resources.menge import PRessMenge
+
+    sim = PSimulator()
+    lager = PRessMenge(sim)
+    py = PAssozMengeVerbr(sim)
+    py.m_sName = "V2"
+    py.m_iMengeEin = 1
+    py.m_lMengRess = lager
+
+    stub = _passozmenge_writer_stub({id(lager): 77})
+    handler = otx_writer._WRITERS["PAssozMengeVerbr"]
+    props, _ = handler.serialize(stub, py, 55)
+
+    assert props["m_lMengRess"] == 77
+
+
+def test_passozmenge_abfr_writer_omits_m_lMengRess_when_unknown_to_writer() -> None:
+    """Wenn writer.get_oid den Lager-Pointer nicht kennt (oid_for-Lookup → None),
+    fehlt m_lMengRess im props-Dict — None-Guard analog _PTagRessWriter.
+    """
+    from osim_engine.io import otx_writer
+    from osim_engine.pps.simulator import PSimulator
+    from osim_engine.resources.assoziation.menge import PAssozMengeAbfr
+    from osim_engine.resources.menge import PRessMenge
+
+    sim = PSimulator()
+    lager = PRessMenge(sim)
+    py = PAssozMengeAbfr(sim)
+    py.m_sName = "A2"
+    py.m_iMengeAbfr = 9
+    py.m_lMengRess = lager  # gesetzt, aber writer kennt es nicht (leeres Mapping)
+
+    stub = _passozmenge_writer_stub({})  # get_oid liefert None für lager
+    handler = otx_writer._WRITERS["PAssozMengeAbfr"]
+    props, _ = handler.serialize(stub, py, 88)
+
+    assert "m_lMengRess" not in props
+    assert props["m_iMengeAbfr"] == 9
