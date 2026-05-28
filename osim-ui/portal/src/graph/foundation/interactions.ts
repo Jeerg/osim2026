@@ -13,16 +13,12 @@
 
 import type { Connection, Edge, Node } from "@xyflow/react";
 
-import { GObject } from "@/graph/foundation/GObject";
-import { GObjLink } from "@/graph/foundation/GObjLink";
-import { GObjSub } from "@/graph/foundation/GObjSub";
-import { GLink } from "@/graph/foundation/GLink";
-import { GOStateSub } from "@/graph/foundation/types";
-import type { OGraphGrid } from "@/graph/foundation/OGraphGrid";
+import { GObject, GObjLink, GObjSub, GLink, GOStateSub } from "@osim/graphobject";
+import type { OGraphGrid } from "@osim/graphobject";
 import type {
   OsimEdgeData,
   OsimNodeData,
-} from "@/graph/foundation/view-adapter";
+} from "./view-adapter";
 
 /**
  * Lookup: GObject finden anhand der Node-Id (= "oid:<ViewedObject>"-Konvention

@@ -18,7 +18,7 @@ import { Handle, Position } from "@xyflow/react";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { OsimNodeData } from "@/graph/foundation/view-adapter";
+import type { OsimNodeData } from "./view-adapter";
 
 interface OsimNodeProps {
   data: OsimNodeData;

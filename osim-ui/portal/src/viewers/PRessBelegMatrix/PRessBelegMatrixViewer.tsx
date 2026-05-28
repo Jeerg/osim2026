@@ -48,7 +48,7 @@ import {
   readFromDataTransfer,
   writeToDataTransfer,
   type MatrixClipboardPayload,
-} from "@/graph/foundation/matrix";
+} from "@osim/graphobject";
 
 import {
   PRessBelegMatrixToolbar,

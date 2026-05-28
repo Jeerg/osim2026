@@ -26,14 +26,14 @@ import {
 
 import "@xyflow/react/dist/style.css";
 
-import type { OGraphGrid } from "@/graph/foundation/OGraphGrid";
+import type { OGraphGrid } from "@osim/graphobject";
 import {
   ogGridToReactFlow,
   type OsimEdgeData,
   type OsimNodeData,
-} from "@/graph/foundation/view-adapter";
-import { osimNodeTypes } from "@/graph/foundation/OsimNode";
-import { GridBackground } from "@/graph/foundation/GridBackground";
+} from "./view-adapter";
+import { osimNodeTypes } from "./OsimNode";
+import { GridBackground } from "./GridBackground";
 
 export interface GraphFlowCanvasProps {
   /** Der OGraphGrid, der gerendert wird. */

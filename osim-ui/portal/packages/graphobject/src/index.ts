@@ -29,9 +29,9 @@
 // ============================================================
 // Pure Foundation — Basis-Typen + Konstanten
 // ============================================================
-export * from "@/graph/foundation/constants";
-export * from "@/graph/foundation/types";
-export { LNULL, isLNull } from "@/graph/foundation/LNULL";
+export * from "./constants";
+export * from "./types";
+export { LNULL, isLNull } from "./LNULL";
 
 // ============================================================
 // 4-Layer-Drawing-Vertrag
@@ -40,35 +40,35 @@ export {
   DrawLayer,
   NullDrawContext,
   RecordingDrawContext,
-} from "@/graph/foundation/DrawContext";
+} from "./DrawContext";
 export type {
   DrawContext,
   DrawStyle,
   DrawTextStyle,
   PolygonPoints,
-} from "@/graph/foundation/DrawContext";
+} from "./DrawContext";
 
 // ============================================================
 // Datenstrukturen + Position
 // ============================================================
-export { OGPositionGrid } from "@/graph/foundation/OGPositionGrid";
-export { GOGridCol } from "@/graph/foundation/GOGridCol";
-export { GOGridRow } from "@/graph/foundation/GOGridRow";
-export { OGPosition, OGPositionList } from "@/graph/foundation/OGPosition";
+export { OGPositionGrid } from "./OGPositionGrid";
+export { GOGridCol } from "./GOGridCol";
+export { GOGridRow } from "./GOGridRow";
+export { OGPosition, OGPositionList } from "./OGPosition";
 
 // ============================================================
 // Domain-Klassen (1:1 zum C++-Original)
 // ============================================================
-export { GObject } from "@/graph/foundation/GObject";
-export { GObjLink } from "@/graph/foundation/GObjLink";
-export { GObjSub } from "@/graph/foundation/GObjSub";
+export { GObject } from "./GObject";
+export { GObjLink } from "./GObjLink";
+export { GObjSub } from "./GObjSub";
 export {
   GObjElements,
   GElement,
   GElementLinkinList,
   GObjElementKlickAction,
-} from "@/graph/foundation/GObjElements";
-export { GObjCEdit, STD_ROUND_CORNER } from "@/graph/foundation/GObjCEdit";
+} from "./GObjElements";
+export { GObjCEdit, STD_ROUND_CORNER } from "./GObjCEdit";
 export {
   GObjOSimDlp,
   GObjSquare,
@@ -76,29 +76,29 @@ export {
   GObjType,
   GSqrType,
   STD_PEAK_WIDTH,
-} from "@/graph/foundation/GObjShapes";
+} from "./GObjShapes";
 
-export { GLink } from "@/graph/foundation/GLink";
+export { GLink } from "./GLink";
 export {
   GLinkPoint,
   LinkSetState,
   MAX_POINT_NUM,
   STD_LINK_EDIT_DISTANCE,
-} from "@/graph/foundation/GLinkPoint";
-export { GLinkSquare } from "@/graph/foundation/GLinkSquare";
+} from "./GLinkPoint";
+export { GLinkSquare } from "./GLinkSquare";
 
 // ============================================================
 // Container
 // ============================================================
-export { OGraphCollection } from "@/graph/foundation/OGraphCollection";
-export { OGraphList } from "@/graph/foundation/OGraphList";
-export { OGraphView } from "@/graph/foundation/OGraphView";
-export { OGraphGrid } from "@/graph/foundation/OGraphGrid";
-export type { GridSnapshot } from "@/graph/foundation/OGraphGrid";
+export { OGraphCollection } from "./OGraphCollection";
+export { OGraphList } from "./OGraphList";
+export { OGraphView } from "./OGraphView";
+export { OGraphGrid } from "./OGraphGrid";
+export type { GridSnapshot } from "./OGraphGrid";
 export {
   OGGridAlt,
   OGGRIDALT_DEFAULT_TEXT_SPACE,
-} from "@/graph/foundation/OGGridAlt";
+} from "./OGGridAlt";
 
 // ============================================================
 // Phantom-Preview-Modell
@@ -106,16 +106,16 @@ export {
 export {
   PhantomController,
   phantomController,
-} from "@/graph/foundation/PhantomController";
-export type { ActivePhantom } from "@/graph/foundation/PhantomController";
+} from "./PhantomController";
+export type { ActivePhantom } from "./PhantomController";
 
 // ============================================================
 // Matrix-Foundation
 // ============================================================
-export * from "@/graph/foundation/matrix";
+export * from "./matrix";
 
 // ============================================================
 // Wire-Bridge (osim-spezifisch — bleibt im Paket weil GObject-zentriert)
 // ============================================================
-export { wireToGrid } from "@/graph/foundation/wire-to-grid";
-export type { WireToGridResult } from "@/graph/foundation/wire-to-grid";
+export { wireToGrid } from "./wire-to-grid";
+export type { WireToGridResult } from "./wire-to-grid";

@@ -36,12 +36,8 @@
 import * as React from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 
-import {
-  GObjLink,
-  GLink,
-  OGraphGrid,
-  GraphFlowCanvas,
-} from "@/graph/foundation";
+import { GObjLink, GLink, OGraphGrid } from "@osim/graphobject";
+import { GraphFlowCanvas } from "@/graph/foundation";
 import { ChildDialog } from "@/viewers/core/ChildDialog";
 import type { OBaseObj, ViewerProps } from "@/viewers/core/types";
 

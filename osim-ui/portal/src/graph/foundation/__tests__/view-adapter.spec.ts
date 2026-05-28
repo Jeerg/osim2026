@@ -4,14 +4,16 @@
 
 import { describe, it, expect } from "vitest";
 
-import { GObjLink } from "@/graph/foundation/GObjLink";
-import { GObjSub } from "@/graph/foundation/GObjSub";
-import { GLink } from "@/graph/foundation/GLink";
-import { GLinkPoint } from "@/graph/foundation/GLinkPoint";
-import { GLinkSquare } from "@/graph/foundation/GLinkSquare";
-import { OGraphGrid } from "@/graph/foundation/OGraphGrid";
-import { GOStateSub } from "@/graph/foundation/types";
-import { ogGridToReactFlow } from "@/graph/foundation/view-adapter";
+import {
+  GObjLink,
+  GObjSub,
+  GLink,
+  GLinkPoint,
+  GLinkSquare,
+  OGraphGrid,
+  GOStateSub,
+} from "@osim/graphobject";
+import { ogGridToReactFlow } from "../view-adapter";
 
 function mkNode(id: string): GObjLink {
   const o = new GObjLink();

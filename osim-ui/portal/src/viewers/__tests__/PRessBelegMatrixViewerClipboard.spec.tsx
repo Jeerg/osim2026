@@ -85,7 +85,7 @@ vi.mock("@/stores/model-store", () => ({
 }));
 
 import { PRessBelegMatrixViewer } from "@/viewers/PRessBelegMatrix/PRessBelegMatrixViewer";
-import { MATRIX_CLIPBOARD_MIME } from "@/graph/foundation/matrix";
+import { MATRIX_CLIPBOARD_MIME } from "@osim/graphobject";
 import type { ClassSchema, OBaseObj } from "@/viewers/core/types";
 
 // ----------------------------------------------------------------------

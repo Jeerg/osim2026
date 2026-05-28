@@ -39,7 +39,7 @@
 import * as React from "react";
 import { ClockIcon, PlusIcon, Trash2Icon } from "lucide-react";
 
-import { MatrixGrid } from "@/graph/foundation/matrix/MatrixGrid";
+import { MatrixGrid } from "@osim/graphobject";
 import { useModelStore } from "@/stores/model-store";
 import { cn } from "@/lib/utils";
 import type { AttrValue, OBaseObj, ViewerProps } from "@/viewers/core/types";

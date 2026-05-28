@@ -39,9 +39,8 @@ import {
   onNodeDragStop as foundationOnNodeDragStop,
   onNodeDoubleClick as foundationOnNodeDoubleClick,
   onNodesDelete as foundationOnNodesDelete,
-  wireToGrid,
 } from "@/graph/foundation";
-import { GObjLink } from "@/graph/foundation/GObjLink";
+import { wireToGrid, GObjLink } from "@osim/graphobject";
 import { ReactFlowProvider, useReactFlow, ViewportPortal } from "@xyflow/react";
 import type { Connection, Edge, Node } from "@xyflow/react";
 import { useModelStore } from "@/stores/model-store";

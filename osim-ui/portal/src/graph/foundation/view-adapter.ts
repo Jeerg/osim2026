@@ -20,14 +20,17 @@
 
 import type { Edge, Node } from "@xyflow/react";
 
-import { GObject } from "@/graph/foundation/GObject";
-import { GObjLink } from "@/graph/foundation/GObjLink";
-import { GObjSub } from "@/graph/foundation/GObjSub";
-import { GLink } from "@/graph/foundation/GLink";
-import { GLinkPoint } from "@/graph/foundation/GLinkPoint";
-import { GLinkSquare } from "@/graph/foundation/GLinkSquare";
-import type { OGraphGrid } from "@/graph/foundation/OGraphGrid";
-import { GObjState, GOStateSub } from "@/graph/foundation/types";
+import {
+  GObject,
+  GObjLink,
+  GObjSub,
+  GLink,
+  GLinkPoint,
+  GLinkSquare,
+  GObjState,
+  GOStateSub,
+} from "@osim/graphobject";
+import type { OGraphGrid } from "@osim/graphobject";
 
 /**
  * Wählt den React-Flow-Edge-Type passend zur GLink-Subklasse.

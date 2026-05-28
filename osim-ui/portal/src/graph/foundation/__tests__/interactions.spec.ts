@@ -4,11 +4,13 @@
 
 import { describe, it, expect } from "vitest";
 
-import { GObjLink } from "@/graph/foundation/GObjLink";
-import { GObjSub } from "@/graph/foundation/GObjSub";
-import { GLink } from "@/graph/foundation/GLink";
-import { OGraphGrid } from "@/graph/foundation/OGraphGrid";
-import { GOStateSub } from "@/graph/foundation/types";
+import {
+  GObjLink,
+  GObjSub,
+  GLink,
+  OGraphGrid,
+  GOStateSub,
+} from "@osim/graphobject";
 import {
   findObjectByNodeId,
   onConnect,
@@ -16,7 +18,7 @@ import {
   onNodeDoubleClick,
   onNodeDragStop,
   onNodesDelete,
-} from "@/graph/foundation/interactions";
+} from "../interactions";
 
 function mkNode(id: string): GObjLink {
   const o = new GObjLink();

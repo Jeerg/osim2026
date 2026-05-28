@@ -26,7 +26,7 @@
 import * as React from "react";
 import { ViewportPortal } from "@xyflow/react";
 
-import type { OGraphGrid } from "@/graph/foundation/OGraphGrid";
+import type { OGraphGrid } from "@osim/graphobject";
 
 export interface GridBackgroundProps {
   /** Der OGraphGrid, dessen Spalten/Zeilen visualisiert werden. */

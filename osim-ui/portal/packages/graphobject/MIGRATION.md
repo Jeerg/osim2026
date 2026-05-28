@@ -1,6 +1,30 @@
 # Migration-Plan — Foundation-Kern in `@osim/graphobject`
 
-**Stand 2026-05-28b.** Dieser Plan ist die explizite Vorbereitung der
+**Status: ABGESCHLOSSEN 2026-05-28c.** Die mechanische Folge-Welle wurde
+ausgeführt: 24 Pur-Foundation-Dateien (Top-Level inklusive `wire-to-grid`),
+das `matrix/`-Unterverzeichnis und die 10 zugehörigen Pur-Tests leben
+jetzt physisch in `portal/packages/graphobject/src/`. Die 5 RF-Adapter-
+Dateien (`GraphFlowCanvas`, `GridBackground`, `OsimNode`, `view-adapter`,
+`interactions`) verbleiben unter `portal/src/graph/foundation/` und
+wandern in Track C3 in `@osim/graphobject-react-flow`.
+
+`portal/src/graph/foundation/index.ts` bleibt als RF-Adapter-Barrel
+**plus** Backwards-Compat-Re-Export von `@osim/graphobject` erhalten —
+existierende `import … from "@/graph/foundation"` brechen nicht. Die
+sechs direkten Konsumenten mit Pur-Subpath-Imports (PEinsatzViewer,
+PRessBelegMatrixViewer, PDurchlaufplanViewerDesign, PDlplConnKnotenViewer,
+PRessVerknuepfungViewer, PRessBelegMatrixViewerClipboard-Spec) wurden auf
+`@osim/graphobject` umgestellt.
+
+Verifiziert: tsc 0 errors, Vitest 379 passed / 2 skipped (Baseline gehalten).
+
+Der ursprüngliche Vorbereitungs-Plan bleibt unten als Audit-Trail.
+
+---
+
+# Original-Vorbereitungsplan (2026-05-28b)
+
+Dieser Plan war die explizite Vorbereitung der
 mechanischen Folge-Welle, die die 21 Pur-Foundation-Dateien aus
 `portal/src/graph/foundation/` nach `portal/packages/graphobject/src/`
 verschiebt und die 208 bestehenden `@/graph/foundation`-Imports auf

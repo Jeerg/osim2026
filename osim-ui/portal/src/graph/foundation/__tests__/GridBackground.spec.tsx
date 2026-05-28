@@ -19,9 +19,8 @@ vi.mock("@xyflow/react", () => ({
   ),
 }));
 
-import { GridBackground } from "@/graph/foundation/GridBackground";
-import { OGraphGrid } from "@/graph/foundation/OGraphGrid";
-import { GObjLink } from "@/graph/foundation/GObjLink";
+import { GridBackground } from "../GridBackground";
+import { OGraphGrid, GObjLink } from "@osim/graphobject";
 
 function mkNode(id: string): GObjLink {
   const o = new GObjLink();
