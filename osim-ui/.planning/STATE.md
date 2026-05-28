@@ -4,15 +4,15 @@ milestone: v0.1.0
 milestone_name: milestone
 current_phase: 01.3
 current_plan: 7
-status: in-progress
-stopped_at: "Phase 01.3 Welle 4 Plan 06 (PRessMengeMatrixViewer-Rewrite + matrix-common-Loeschung) abgeschlossen. 2 Commits: 7b0fd93 feat (PRessMengeMatrixToolbar mit PRESSMENGE_TYPES, 214 LOC), 2106300 feat (PRessMengeMatrixViewer 2D-Matrix 645 LOC + Loeschung Legacy 1D-Tabelle + matrix-common.tsx + Registry-Update). SC-7 (Migration auf MatrixGrid-Foundation) und SC-9 (UI-Cell-Edit funktioniert) Code-seitig erfuellt; Browser-UAT awaiting-human gemaess User-Direktive baller alles durch dann test. Verifikation: tsc 0 Fehler, vitest 379 passed / 2 skipped (1:1 Baseline-erhaltend), Lint 99 problems (76 errors, 23 warnings) IDENTISCH zur Baseline (verifiziert per git stash, alle pre-existing). Bekannte Deferred: D-01.3.06-01 pre-existing Lint-Errors (eigene Cleanup-Welle), D-01.3.06-02 Persistenz haengt am Welle 01.2-H Save/Lock-Stand, D-01.3.04-02 vererbt fehlender m_lAssozRess-Backref-Wire im Engine-Loader. Browser-UAT-Direktiven: Grafik-Viewer (Memory feedback-sim-grafik-viewer-immer) + Default-User jwfischer69@gmail.com/123456 + Link http://localhost:3002. Plan 07 (E2E) kann ab User-Approve starten."
-last_updated: "2026-05-28T19:00:00.000Z"
+status: awaiting-human-signoff
+stopped_at: "Phase 01.3 Welle 5 Plan 07 (Vitest + Clipboard + Playwright-E2E + Phase-Sign-Off) code-seitig abgeschlossen. 2 Commits: bb528ed test (11 Vitest-Specs PRessMengeMatrixViewer +446 LOC), b3ae98a test (5 Clipboard-Specs +317 LOC + 1 Playwright-Smoke + 2 test.fixme +232 LOC). Verifikation: tsc 0 Fehler, vitest 395 passed / 2 skipped (Baseline 379/2 + 16 neue Specs), Playwright 1 passed / 2 skipped (test.fixme). SC-Status: SC-1..SC-4 + SC-6..SC-8 + SC-10 = DONE; SC-5 CONDITIONAL DONE (3 pre-existing Phase-2-Fails in azeitsim+python-vs-cpp); SC-9 AWAITING-HUMAN (Browser-UAT). User-Direktive 'baller alles durch dann test': Sign-Off-Checkpoint mit voller UAT-Checkliste (Block A=Smoke, B=PRessBeleg-Cross-Check, C=PRessMenge-Fokus, D=Persistenz) als awaiting-human an User. Test-Daten-Lücke D-01.3.07-01 dokumentiert: keine OSim2004/Vorstellung04/*.otx mit aktiver PRessMenge → E2E-Block-Copy-Paste-Cycle als test.fixme; 16 Vitest-Specs decken Component+Listener vollständig ab. UAT-Direktiven: Grafik-Viewer (Memory feedback-sim-grafik-viewer-immer) + Default-User jwfischer69@gmail.com/123456 + Link http://localhost:3002. Siehe 01.3-07-SUMMARY.md + PHASE-SUMMARY.md."
+last_updated: "2026-05-28T19:30:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 35
-  completed_plans: 28
-  percent: 24
+  completed_plans: 29
+  percent: 25
 ---
 
 # Project State

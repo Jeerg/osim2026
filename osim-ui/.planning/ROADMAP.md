@@ -161,7 +161,7 @@ Plans:
 - [x] 01.3-04-PLAN.md - Welle 3: Engine Round-Trip-Tests (>=8) + Demo-OTX-Fixture passozmenge_minimal.otx
 - [x] 01.3-05-PLAN.md - Welle 3: Schema-Patch schemas.json + API-Container-Sync
 - [x] 01.3-06-PLAN.md - Welle 4: UI PRessMengeMatrixViewer-Rewrite auf @osim/graphobject MatrixGrid + matrix-common.tsx loeschen + Toolbar
-- [ ] 01.3-07-PLAN.md - Welle 5: UI Vitest-Specs (>=8) + Clipboard-Spec + Playwright-E2E + Phase-Sign-Off
+- [x] 01.3-07-PLAN.md - Welle 5: UI Vitest-Specs (>=8) + Clipboard-Spec + Playwright-E2E + Phase-Sign-Off (code-seitig DONE; SC-9-UAT awaiting-human gemaess User-Direktive)
 
 ### Phase 2: Sim-Lauf + Trace
 **Goal**: Aus dem in Phase 1 modellierten Modell heraus kann der User einen Sim-Lauf starten, den Status verfolgen und die JSONL-Trace herunterladen. Worker-Isolation (1 Worker = 1 OS-Prozess = 1 `s_verteil`-Singleton) ist strikt durchgesetzt.
