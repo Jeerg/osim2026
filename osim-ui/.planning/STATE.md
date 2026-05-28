@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-current_phase: 01.2
-current_plan: 9
+current_phase: 01.3
+current_plan: 3
 status: in-progress
-stopped_at: "Session 2026-05-28c (Monorepo-Resume): zwei Folge-Wellen durchgezogen. Welle 1 — phases/-Cleanup: 5 leere Phasen-Duplikate (02-json-editor, 03-live-viz, 04-cloud-parallel, 05-reports, 06-3fls-iframe) gelöscht — Altlast vom INSERT der Phasen 01.1+01.2. Welle 2 — Foundation-Move (mechanische Folge-Welle aus MIGRATION.md Track C2) committed als 1f3e915: 24 Pur-Files + matrix/-Subverzeichnis + 10 Pur-Tests physisch nach portal/packages/graphobject/src/ verschoben, interne Imports auf relative Pfade, externe Konsumenten (PEinsatz, PRessBelegMatrix, PDurchlaufplan, PDlplConnKnoten, PRessVerknuepfung, PRessBelegMatrixViewerClipboard-Spec) auf @osim/graphobject umgestellt. src/graph/foundation/index.ts bleibt als RF-Adapter-Barrel + Backwards-Compat-Re-Export von @osim/graphobject (verhindert Bruch existierender Imports). MIGRATION.md als ABGESCHLOSSEN markiert. Verifiziert: tsc 0 errors, Vitest 379/2 (= Baseline). Welle 3 (Plan 01.2-09 Welle H) ist bereits committed in 2026-05-25 (commits 65dc095/36ebde5/f1d08d0), Task 3 wartet auf User-Browser-UAT auf localhost:3002 mit jwfischer69@gmail.com — kann nicht autonom abgeschlossen werden. Welle 4 (Engine-A2 PAssozMenge-Wire-Roundtrip für PRessMengeMatrixViewer-Migration) ist eine eigene volle Welle (otx_loader-Handler für 4 PAssozMenge-Subklassen + otx_writer + C++-Attr-Audit + Test-OTX + Round-Trip-Tests, ~3-4h) — sollte als dedizierte Plan-Phase angelegt werden (/gsd:plan-phase im engine/-Subtree)."
-last_updated: "2026-05-28T13:42:00.000Z"
+stopped_at: "Phase 01.3 Welle 2 abgeschlossen (Plan 01.3-02): 5 PAssozMenge-Loader-Handler in engine/src/osim_engine/io/otx_loader.py registriert (PAssozMenge abstract + Erzgt/Verbr/VerbrZwischen/Abfr), 10 Unit-Tests in engine/tests/unit/io/test_otx_loader.py (10/10 grün). Mechanische Umsetzung der AUDIT-Tupel aus 01.3-01 Sektion 2.7. Commits: 398d83d (feat: Handler) + 97a3a22 (test: Unit-Tests). Loader-Integration-Tests grün (24/24 mit 1 plan-erwarteter Deselect). Volle Engine-Suite: 511 passed / 1 xfailed; 3 pre-existing Failures in test_azeitsim_runner + test_python_vs_cpp (m_dPtkEinsatzzeit-Drift) sind NICHT durch diese Welle verursacht (via git stash verifiziert). Plan-erwartete RED: test_writer_handles_all_known_loader_classes meldet die 5 neuen Loader-Klassen als 'Writer fehlt' — wird in Plan 03 grün gemacht (per Design). Nächster Schritt: Plan 01.3-03 ausführen (Writer-Handler für die 4 konkreten PAssozMenge-Subklassen)."
+last_updated: "2026-05-28T16:50:00.000Z"
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 1
-  total_plans: 28
-  completed_plans: 13
-  percent: 11
+  total_plans: 35
+  completed_plans: 15
+  percent: 12
 ---
 
 # Project State

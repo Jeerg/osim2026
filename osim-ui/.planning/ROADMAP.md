@@ -155,8 +155,8 @@ Plans:
   - .planning/STATE.md (Track-A-A2-Defer-Notiz vom 2026-05-28b)
 **Plans**: 7 plans in 5 Wellen
 Plans:
-- [ ] 01.3-01-PLAN.md - Welle 1: C++-Audit PAssozMenge*-Attrs + LinkStatusList-Analogie + Test-Fixture-Vorschlag (AUDIT.md)
-- [ ] 01.3-02-PLAN.md - Welle 2: Engine otx_loader.py - 5 Handler (PAssozMenge + 4 Subklassen) + Unit-Tests
+- [x] 01.3-01-PLAN.md - Welle 1: C++-Audit PAssozMenge*-Attrs + LinkStatusList-Analogie + Test-Fixture-Vorschlag (AUDIT.md)
+- [x] 01.3-02-PLAN.md - Welle 2: Engine otx_loader.py - 5 Handler (PAssozMenge + 4 Subklassen) + Unit-Tests
 - [ ] 01.3-03-PLAN.md - Welle 2: Engine otx_writer.py - 5 Writer + Unit-Tests
 - [ ] 01.3-04-PLAN.md - Welle 3: Engine Round-Trip-Tests (>=8) + Demo-OTX-Fixture passozmenge_minimal.otx
 - [ ] 01.3-05-PLAN.md - Welle 3: Schema-Patch schemas.json + API-Container-Sync
