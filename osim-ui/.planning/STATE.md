@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 current_phase: 01.3
-current_plan: 4
+current_plan: 6
 status: in-progress
-stopped_at: "Phase 01.3 Welle 3 (Plan 05) abgeschlossen: schemas.json um 5 PAssozMenge-Klassen erweitert (PAssozMenge abstract + Erzgt/Verbr/VerbrZwischen/Abfr), PRessMenge-description_de mit Phase-3-Re-Sync-Hinweis ergänzt. Commit b86eb29 (feat: +55 LOC -1 LOC). API-Container-Sync via docker compose cp + restart api durchgezogen — Container-Datei + _SCHEMAS_CACHE im laufenden FastAPI-Prozess beide verifiziert (alle 5 Klassen vorhanden). Schema-Checkpoint best-effort PASSED (HTTP-Endpoint auth-geschützt, in-process-Verifikation per docker compose exec api python -c verbindlich). User-Direktive 'baller alles durch dann test' eingehalten. Plan 06 (UI-Migration PRessMengeMatrixViewer auf @osim/graphobject MatrixGrid) kann jetzt die Subklassen-Liste + Mengen-Attrs aus dem Schema lesen. Memory feedback-sim-grafik-viewer-immer in Plan-05-SUMMARY für Folgepläne (06/07 Sim-Tests) notiert."
-last_updated: "2026-05-28T17:30:00.000Z"
+stopped_at: "Phase 01.3 Welle 3 Plan 04 (Engine-Roundtrip-Tests + PRessMenge-Handler + In-Memory-Tree-Iter) abgeschlossen. 3 Commits: 98e37a7 fix (PRessMenge Loader+Writer + Tree-Iter-Erweiterung Top-Level-Knoten + Knoten-Assoz, Rule 2 Auto-Fix), a228462 feat (passozmenge_minimal.otx Demo-Fixture + Builder + Generator-Skript), 89b3961 test (11 Roundtrip-Tests fuer PAssozMenge-Familie). SC-4 (Roundtrip-Tests) und SC-5 (alle Engine-Tests gruen minus 3 pre-existing) erfuellt. Verifikation: 11/11 Roundtrip-Tests gruen, volle Engine-Suite ohne pre-existing = 535 passed / 35 xfailed, pre-existing 3 Failures unveraendert (test_azeitsim_runner x2, test_python_vs_cpp x1 — out-of-scope seit Plan 02). Bekannte Deferred-Issues dokumentiert in 01.3-04-SUMMARY: ASimulator-Container-Pointer-Synthese fuer in-memory-Sim ohne original_otx (D-01.3.04-01) und fehlender m_lAssozRess-Backref-Wire im Loader (D-01.3.04-02) — beide pre-existing Engine-Defekte, gehoeren in eigene Wellen. Plan 06 (UI MatrixGrid-Migration) kann auf stabilem Engine-Roundtrip-Vertrag aufsetzen."
+last_updated: "2026-05-28T18:30:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 35
-  completed_plans: 26
-  percent: 21
+  completed_plans: 27
+  percent: 23
 ---
 
 # Project State
