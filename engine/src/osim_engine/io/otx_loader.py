@@ -800,6 +800,95 @@ register_skip("PAssozBelegLinkInfo")
 
 
 # ----------------------------------------------------------------------
+# Phase-1.3 W2: PAssozMenge-Familie (Material-Fluss-Assoziationen)
+# (PAssozRessource.{odh:579-898,cpp}). 1 abstract + 4 konkrete Subklassen.
+#
+# Pattern-Quelle: _PAssozBelegHandler (oben). Wichtige Abweichung:
+# `m_lMengRess` ist trotz `m_l`-Präfix ein SCALAR-POINTER auf eine
+# einzelne PRessMenge (keine LList-Container) — daher `resolve_ref`
+# (analog _PTagRessHandler.m_oRessBeleg), nicht `resolve_list`.
+#
+# Audit-Quelle: .planning/phases/01.3-.../01.3-01-AUDIT.md Sektionen 2.2-2.7.
+# ----------------------------------------------------------------------
+
+
+@register_handler("PAssozMenge")
+class _PAssozMengeHandler(ClassHandler):
+    """Abstract-Basis-Handler. Im Regelfall kommen nur Subklassen im OTX vor,
+    aber der Handler ist da, falls eine Datei `PAssozMenge` direkt nennt.
+    """
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.assoziation.menge import PAssozMenge
+        a = PAssozMenge(loader.simulator)
+        copy_scalars(a, obj, ("m_sName",))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        py.m_lMengRess = resolve_ref(loader, obj, "m_lMengRess")
+
+
+@register_handler("PAssozMengeErzgt")
+class _PAssozMengeErzgtHandler(ClassHandler):
+    """Erzeuger: am Prozess-Ende wird `m_iMengeAus` zugebucht."""
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.assoziation.menge import PAssozMengeErzgt
+        a = PAssozMengeErzgt(loader.simulator)
+        copy_scalars(a, obj, ("m_sName", "m_iMengeAus"))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        py.m_lMengRess = resolve_ref(loader, obj, "m_lMengRess")
+
+
+@register_handler("PAssozMengeVerbr")
+class _PAssozMengeVerbrHandler(ClassHandler):
+    """Verbraucher: am Prozess-Beginn wird `m_iMengeEin` abgebucht."""
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.assoziation.menge import PAssozMengeVerbr
+        a = PAssozMengeVerbr(loader.simulator)
+        copy_scalars(a, obj, ("m_sName", "m_iMengeEin"))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        py.m_lMengRess = resolve_ref(loader, obj, "m_lMengRess")
+
+
+@register_handler("PAssozMengeVerbrZwischen")
+class _PAssozMengeVerbrZwischenHandler(ClassHandler):
+    """Zwischenstand-Verbrauch. Sim-Semantik identisch zu Verbr,
+    aber eigener OTX-Klassenname → eigener Handler. Geerbtes Attr
+    `m_iMengeEin` wird explizit per copy_scalars gesetzt, sonst bleibt
+    der Default 1.
+    """
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.assoziation.menge import PAssozMengeVerbrZwischen
+        a = PAssozMengeVerbrZwischen(loader.simulator)
+        copy_scalars(a, obj, ("m_sName", "m_iMengeEin"))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        py.m_lMengRess = resolve_ref(loader, obj, "m_lMengRess")
+
+
+@register_handler("PAssozMengeAbfr")
+class _PAssozMengeAbfrHandler(ClassHandler):
+    """Abfrage: nur prüfen ob genug da, NICHT abbuchen."""
+
+    def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
+        from osim_engine.resources.assoziation.menge import PAssozMengeAbfr
+        a = PAssozMengeAbfr(loader.simulator)
+        copy_scalars(a, obj, ("m_sName", "m_iMengeAbfr"))
+        return a
+
+    def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        py.m_lMengRess = resolve_ref(loader, obj, "m_lMengRess")
+
+
+# ----------------------------------------------------------------------
 # Phase-5-A: Entscheider-Datenstrukturen
 # (EPEntscheidung.{odh,cpp} + EPStrategie.odh)
 # ----------------------------------------------------------------------
