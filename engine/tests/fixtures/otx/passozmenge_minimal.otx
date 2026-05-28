@@ -1,0 +1,16 @@
+OIDArray|15!
+#ASimulator|m_periodLen;86400|m_periodNum;0|m_periodBegin;0|m_iProduktionBezugsPeriode;86400|m_iProduktionEnde;-1|m_bIsProduktionEnde;FALSE|m_keim;1776496601.0|m_aktKeim;0.0|m_sStartDate;01.12.2003|m_sEndDate;31.12.2003|m_name;Simulationsmodell|m_dwObjID;MS_OID(ASimulator);0|$!
+#PAslEinzel|m_sName;asl_KE|m_iBeginTermin;10|m_iPlanZeit;0|m_iRealeAuftragsdauer;0|m_lDlpl;5|m_dwObjID;MS_OID(PAslEinzel);1|$!
+#PAslEinzel|m_sName;asl_KV|m_iBeginTermin;20|m_iPlanZeit;0|m_iRealeAuftragsdauer;0|m_lDlpl;7|m_dwObjID;MS_OID(PAslEinzel);2|$!
+#PAslEinzel|m_sName;asl_KZ|m_iBeginTermin;30|m_iPlanZeit;0|m_iRealeAuftragsdauer;0|m_lDlpl;9|m_dwObjID;MS_OID(PAslEinzel);3|$!
+#PAslEinzel|m_sName;asl_KA|m_iBeginTermin;40|m_iPlanZeit;0|m_iRealeAuftragsdauer;0|m_lDlpl;11|m_dwObjID;MS_OID(PAslEinzel);4|$!
+#PDpKnKonstant|m_sName;KE|m_iDurchfuehrungszeit;10|m_dwObjID;MS_OID(PDpKnKonstant);5|$!
+#PAssozMengeErzgt|m_sName;e_KE_L1|m_iMengeAus;2|m_lMengRess;13|m_dwObjID;MS_OID(PAssozMengeErzgt);6|$!
+#PDpKnKonstant|m_sName;KV|m_iDurchfuehrungszeit;20|m_dwObjID;MS_OID(PDpKnKonstant);7|$!
+#PAssozMengeVerbr|m_sName;v_KV_L1|m_iMengeEin;3|m_lMengRess;13|m_dwObjID;MS_OID(PAssozMengeVerbr);8|$!
+#PDpKnKonstant|m_sName;KZ|m_iDurchfuehrungszeit;30|m_dwObjID;MS_OID(PDpKnKonstant);9|$!
+#PAssozMengeVerbrZwischen|m_sName;z_KZ_L2|m_iMengeEin;1|m_lMengRess;14|m_dwObjID;MS_OID(PAssozMengeVerbrZwischen);10|$!
+#PDpKnKonstant|m_sName;KA|m_iDurchfuehrungszeit;40|m_dwObjID;MS_OID(PDpKnKonstant);11|$!
+#PAssozMengeAbfr|m_sName;a_KA_L2|m_iMengeAbfr;4|m_lMengRess;14|m_dwObjID;MS_OID(PAssozMengeAbfr);12|$!
+#PRessMenge|m_sName;L1|m_iBestandAnfang;10|m_iBestandMax;-1|m_fAnfangswert;0.0|m_fKostenZusatz;0.0|m_dwObjID;MS_OID(PRessMenge);13|$!
+#PRessMenge|m_sName;L2|m_iBestandAnfang;10|m_iBestandMax;-1|m_fAnfangswert;0.0|m_fKostenZusatz;0.0|m_dwObjID;MS_OID(PRessMenge);14|$!
