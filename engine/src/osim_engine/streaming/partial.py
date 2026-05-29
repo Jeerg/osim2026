@@ -105,17 +105,21 @@ def build_streams_status() -> dict[str, dict[str, Any]]:
         "gantt_schicht": _entry(
             "partial", ["P5-M"],
             "Schicht-/Arbeitszeit-Modell (azeit/-Slice) ist heute Skelett "
-            "(P5-M). Period-Aggregat schreibt minimale partial-Frames mit "
-            "Soll-/Iststunden=0.",
+            "(P5-M). Period-Aggregat schreibt minimale partial-Frames mit den "
+            "echten ISimulatorViewerSchicht-Spalten (person/schichten/"
+            "ueberstunden/einheiten) als null + missing_slice=P5-M.",
         ),
         "kpi_auswertung": _entry(
             "partial",
             ["P5-D", "P5-M"],
-            "Stream-Vertrag mit allen 11 kinds vollständig (01-03), aber "
-            "best_auftrag/pers/schicht/kalkulation/wschlange/nbearbeit/kauf "
-            "stehen auf Null-Default; ebenso ruest_/stillstand-Anteile von "
-            "betr und das verspaetet-Flag der Auftrags-kinds. Auflösung: "
-            "P5-D (verspaetet/Auftrag-Status) + P5-M (pers/schicht) + Kosten-Slice.",
+            "Stream-Vertrag mit allen 11 kinds vollständig und 1:1 gegen die "
+            "ISimulatorViewerAusw*.cpp gepinnt (01-11). NOW-BUILDABLE "
+            "(prod_auftrag/nbearbeit/wschlange) liefern echte records aus dem "
+            "Engine-State; SLICE-GATED (best_auftrag/pers/betr/kauf/eigen/"
+            "kalkulation/gesamt/schicht) tragen die echten OSim-Feldnamen mit "
+            "null + missing_slice. Auflösung: P5-M (pers/schicht) + Bestell-/"
+            "Kosten-/Bestands-/Sales-Slice (best_auftrag/betr/kauf/eigen/"
+            "kalkulation/gesamt).",
         ),
         "reporting_record": _entry(
             "partial", ["P5-D"],

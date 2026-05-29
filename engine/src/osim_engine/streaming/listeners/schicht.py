@@ -1,16 +1,21 @@
 """SchichtListener — Schicht-Plan als ``gantt_schicht``-Stream (SPEC §6.3).
 
-Period-end-Aggregat (Q-2 / §6.3): emittiert bei ``on_period_end`` je
-Person×Schicht einen ``gantt_schicht``-Frame (``person_id``/``schicht``/``von``/
-``bis``/``sollstunden``/``iststunden``).
+GAP-CLOSURE 01-11 — **OSim2004-Feldtreue**: emittiert bei ``on_period_end``
+je Person einen ``gantt_schicht``-Frame mit den ECHTEN Schicht-Viewer-Spalten
+aus ``ISimulatorViewerSchicht.cpp`` (FillList):
+
+    person · schichten (m_schichten) · ueberstunden (m_ueberst) ·
+    einheiten (m_einheiten)
+
+Das ERSETZT die zuvor erfundenen soll-/iststunden-Felder.
 
 Die Quelle — das Arbeitszeit-Modell ``azeit/`` — ist heute komplett Skelett
 (P5-M, alle 6 Klassen, siehe ``docs/skeleton-inventory.md``). Solange
 ``partial.is_slice_skeleton("P5-M")`` True ist, schreibt der Listener bei
-period-end **einen minimalen partial-Frame** (Soll-/Iststunden = 0, keine
-Person-Daten), damit die Coverage-Lücke als „leere" Golden-Record sichtbar ist
-(D-2.1/D-2.4) — und nicht als fehlender Stream. Der Stream gilt in
-``meta.json`` als ``partial``.
+period-end **einen minimalen partial-Frame** mit den echten Feldnamen, aber
+Wert null + ``missing_slice="P5-M"`` (KEINE erfundenen Zahlen) — damit die
+Coverage-Lücke als „leere" Golden-Record sichtbar ist (D-2.1/D-2.4) und nicht
+als fehlender Stream. Der Stream gilt in ``meta.json`` als ``partial``.
 
 Self-Registrierung via ``register_listener`` beim Import — KEIN ``attach.py``-
 Edit (Registry-Pattern aus 01-01).
@@ -62,30 +67,30 @@ class SchichtListener(OListenerSimulator):
         period_num = self._period_num()
 
         if self._partial:
-            # P5-M Skelett: keine echte Person×Schicht-Quelle → ein minimaler
-            # partial-Frame, damit die Coverage-Lücke sichtbar ist (D-2.4).
+            # P5-M Skelett: keine echte Person/Schicht-Quelle → ein minimaler
+            # partial-Frame mit den echten OSim-Feldnamen + null + missing_slice
+            # (KEINE erfundenen Zahlen), damit die Coverage-Lücke sichtbar ist.
             self._emit(t, {
                 "period_num": period_num,
-                "person_id": None,
-                "schicht": None,
-                "von": None,
-                "bis": None,
-                "sollstunden": 0.0,
-                "iststunden": 0.0,
+                "person": None,
+                "schichten": None,
+                "ueberstunden": None,
+                "einheiten": None,
+                "missing_slice": "P5-M",
                 "partial": True,
             })
             return
 
-        # full-Pfad (P5-M geschlossen): je Person×Schicht ein Aggregat-Frame.
-        for person in getattr(sim, "m_oPersonen", []) or []:
+        # full-Pfad (P5-M geschlossen): je Person ein Schicht-Frame mit den
+        # echten ISimulatorViewerSchicht-Spalten (m_schichten/m_ueberst/
+        # m_einheiten).
+        for person in getattr(sim, "m_lPersonen", None) or getattr(sim, "m_oPersonen", []) or []:
             self._emit(t, {
                 "period_num": period_num,
-                "person_id": getattr(person, "m_sName", None),
-                "schicht": getattr(person, "m_sSchicht", None),
-                "von": getattr(person, "m_iSchichtVon", None),
-                "bis": getattr(person, "m_iSchichtBis", None),
-                "sollstunden": getattr(person, "m_dSollstunden", 0.0),
-                "iststunden": getattr(person, "m_dIststunden", 0.0),
+                "person": getattr(person, "m_sName", None),
+                "schichten": getattr(person, "m_iSchichten", None),
+                "ueberstunden": getattr(person, "m_iUeberstunden", None),
+                "einheiten": getattr(person, "m_iEinheiten", None),
             })
 
     def on_period_break(self, time_end: int) -> None:

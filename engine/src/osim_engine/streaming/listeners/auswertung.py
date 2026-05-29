@@ -1,28 +1,38 @@
 """AuswertungListener — Period-KPIs als ``kpi_auswertung``-Stream (SPEC §6.3).
 
-Bündelt alle 11 ``ISimulatorViewerAusw*``-Varianten (D-3.3) in EINEM Stream
-über einen ``kind``-Diskriminator. Der Listener hält je kind einen
-Insights-Aggregator (aus ``insights/classes.py``, P5-N/D-3.2) und arbeitet
-**incremental** (D-3.1 / SPEC §7.3):
+GAP-CLOSURE 01-11 — **OSim2004-Feldtreue**: bündelt die 11
+``ISimulatorViewerAusw*``-Varianten (D-3.3) in EINEM Stream über einen
+``kind``-Diskriminator, mit den EXAKTEN OSim-Feldsätzen je Analyse (1:1 gegen
+die ``.cpp`` gepinnt, keine erfundene Generik mehr).
 
-    - ``on_sim_ereig`` zieht je Event O(1)-Counter-Updates der betroffenen
-      Aggregatoren (best-effort read-only, kein Kernel-Eingriff, SPEC §5).
-    - ``on_period_end`` emittiert für JEDE der 11 kinds genau einen Frame
-      ``stream="kpi_auswertung"`` mit ``v={"kind", "period_num", **snapshot}``,
-      ruft danach ``reset_period()`` auf allen Aggregatoren (period-only, D-3.4)
-      und ``writer.flush()``.
+Honest-slice-Schnitt (User-Hartregel: nichts erfinden):
+
+NOW-BUILDABLE (echte Werte aus dem laufenden Engine-State, read-only):
+    - ``prod_auftrag`` — je Auslöser (= Fertigungsauftrag im headless-Port) eine
+      Zeile (Teil/Menge/Soll-Beginn-Tag/Beschreibung).
+    - ``nbearbeit`` — Auslöser-Aufträge, deren Prozess noch nicht abgearbeitet
+      ist (Filter analog fsEinlast: kein PT_ENDE).
+    - ``wschlange`` — je wartendem Prozess in ``sim.m_oWarteSchl`` eine Zeile
+      (Betriebsmittel/Teil/Restmenge/Wartestatus).
+
+GATED (echte OSim-Feldnamen + null + missing_slice — KEINE erfundenen Zahlen):
+    - ``best_auftrag`` — der headless-Port hat KEIN Bestellauftrags-/Lager-
+      Modell (m_bestell). Statt zu erfinden: leere records + missing_slice.
+    - ``pers``/``betr``/``kauf``/``eigen``/``kalkulation``/``gesamt`` — Kosten-/
+      Bestands-/Sales-/Arbeitszeit-Slices (P5-D/P5-M + Kosten-Slice) heute
+      Skelett → die snapshot()-Felder tragen null + missing_slice (Task 1).
+
+``on_period_end`` baut die now-buildable Records read-only aus dem sim-State,
+emittiert für JEDE der 11 kinds genau einen Frame ``stream="kpi_auswertung"``
+mit ``v={"kind", "period_num", **snapshot}``, ruft ``reset_period()`` (period-
+only, D-3.4) und ``writer.flush()``.
 
 ``period_num``: der Engine-Kern hat bei ``listener.on_period_end`` bereits
-``m_periodNum`` hochgezählt (``simulator.py`` Z. 129/140). Die GERADE beendete
-Periode ist daher ``m_periodNum - 1`` — die erste period-end-Flush trägt 0.
-
-Die 11 kinds, deren Quell-Slice heute Skelett ist (pers/schicht/kalkulation/
-wschlange/nbearbeit u.a.), liefern partial-Snapshots mit Null-Defaults; der
-Stream wird in ``meta.json`` (01-04) entsprechend als ``partial`` markiert.
-Der Frame-Vertrag steht ab sofort vollständig.
+``m_periodNum`` hochgezählt — die GERADE beendete Periode ist ``m_periodNum-1``.
 
 Self-Registrierung via ``register_listener`` beim Import — KEINE Änderung an
 ``attach.py`` oder ``listeners/__init__.py`` (Registry-Pattern aus 01-01).
+KEIN Eingriff in ``core/simulator.py`` (SPEC §5, HEILIG).
 """
 
 from __future__ import annotations
@@ -36,6 +46,9 @@ from osim_engine.insights import (
     IBetriebsmittel,
     IFertigungsauftrag,
     IGonzo,
+    ILagerEigen,
+    ILagerKauf,
+    INBearbeit,
     IPerson,
     IProzess,
     ISimulator,
@@ -48,7 +61,13 @@ if TYPE_CHECKING:
     from osim_engine.streaming.seq import SeqCounter
 
 _BEARBEIT_ENDE = "EvtBearbeitEnde"
-_PT_BEARB = 1  # PtStatus.PT_BEARB (pps/prozess/base.py)
+_PT_BEARB = 1  # PtStatus.PT_BEARB
+_PT_ENDE = 2  # PtStatus.PT_ENDE
+_PT_WART = 3  # PtStatus.PT_WART
+_PT_UNT = 4  # PtStatus.PT_UNT
+
+# best_auftrag ist im headless-Port quellenlos (kein m_bestell-Modell).
+_BEST_AUFTRAG_MISSING_SLICE = "Bestell-/Lager-Slice"
 
 
 class AuswertungListener(OListenerSimulator):
@@ -59,18 +78,17 @@ class AuswertungListener(OListenerSimulator):
         self._seq = seq_counter
         self._writer = writer
 
-        # Je kind ein Insights-Aggregator (D-3.2). kauf/eigen sind Subkinds der
-        # Auftrags-Sicht (IAuftrag-Mechanik), gesamt ist der ISimulator-Roll-up.
+        # Je kind ein Insights-Aggregator (D-3.2) mit echtem OSim-Feldsatz.
         self._prod_auftrag = IFertigungsauftrag()
-        self._best_auftrag = IBestellauftrag()
-        self._kauf = IBestellauftrag()
-        self._eigen = IFertigungsauftrag()
+        self._best_auftrag = IBestellauftrag()  # gated (kein Port-Quell-Modell)
+        self._nbearbeit = INBearbeit()
+        self._wschlange = IProzess()
         self._betr = IBetriebsmittel()
         self._pers = IPerson()
         self._schicht = IArbeitszeit()
         self._kalkulation = IGonzo()
-        self._wschlange = IProzess()
-        self._nbearbeit = IProzess()
+        self._kauf = ILagerKauf()
+        self._eigen = ILagerEigen()
         self._gesamt = ISimulator()
 
         # Geordnete kind → Aggregator-Map (feste Reihenfolge = Frame-Reihenfolge).
@@ -88,27 +106,16 @@ class AuswertungListener(OListenerSimulator):
             ("gesamt", self._gesamt),
         )
 
-        # Prozesse, deren Start bereits gezählt wurde (Identität über id(),
-        # kein Status-Mutieren — analog GanttListener).
+        # Durchsatz-Tracking für den gesamt-Roll-up (now-buildable Zusatz).
         self._started: set[int] = set()
-        self._start_time: dict[int, int] = {}
-        self._period_len_set = False
 
     # ------------------------------------------------------------------
-    # Incremental Counter-Updates pro Event (D-3.1, O(1))
+    # Incremental Durchsatz-Counter pro Event (D-3.1, O(1), gesamt-Zusatz)
     # ------------------------------------------------------------------
 
     def on_sim_ereig(self) -> None:
         assert self.m_sim is not None
         sim = self.m_sim
-
-        # Periodenlänge einmalig an die zeitanteils-basierten Aggregatoren
-        # durchreichen (für auslastung_pct = teil / period_len * 100).
-        if not self._period_len_set:
-            plen = getattr(sim, "m_periodLen", 0)
-            self._betr.set_period_len(plen)
-            self._pers.set_period_len(plen)
-            self._period_len_set = True
 
         pool = getattr(sim, "_evt_pool", None)
         if pool is None or not pool.curr_exists():
@@ -120,31 +127,91 @@ class AuswertungListener(OListenerSimulator):
         proz = event.m_obj
         meta = event.m_meta
         meta_name = getattr(meta, "m_name", "")
-        t = sim.evt_curr_time()
 
         status = getattr(proz, "m_eStatus", None)
         is_bearb = getattr(status, "value", status) == _PT_BEARB
 
-        # start: neuer Prozess in Bearbeitung → Auftrags-/Gesamt-Durchsatz.
         if proz is not None and is_bearb and id(proz) not in self._started:
             self._started.add(id(proz))
-            start_time = getattr(proz, "m_iBearbeitBeginn", t)
-            self._start_time[id(proz)] = start_time
-            self._prod_auftrag.update_auftrag_start()
-            self._eigen.update_auftrag_start()
             self._gesamt.update_auftrag_gesamt()
 
-        # ende: Bearbeitungs-Ende → Durchlaufzeit + Betriebsmittel-Belegung.
         if meta_name == _BEARBEIT_ENDE and proz is not None:
-            start_time = self._start_time.get(id(proz))
-            dauer = (t - start_time) if start_time is not None else 0
-            # P5-D Skelett: konkreter verspaetet-Status noch nicht ableitbar →
-            # konservativ False (partial; geschärft mit P5-D-Slice-Closure).
-            self._prod_auftrag.update_auftrag_ende(durchlaufzeit=dauer, verspaetet=False)
-            self._eigen.update_auftrag_ende(durchlaufzeit=dauer, verspaetet=False)
             self._gesamt.update_auftrag_fertig()
-            if dauer > 0:
-                self._betr.update_bearbeitung(dauer)
+
+    # ------------------------------------------------------------------
+    # Read-only Sammler für die now-buildable Records (SPEC §5)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _name(obj, default=None):  # noqa: ANN001, ANN205
+        return getattr(obj, "m_sName", default)
+
+    def _collect_prod_und_nbearbeit(self) -> None:
+        """prod_auftrag + nbearbeit aus den Auslösern (= Fertigungsaufträge im
+        headless-Port) read-only sammeln. Quelle: ``sim.m_lAusl`` (analog C++
+        m_fauftr je IInfo). nbearbeit = Aufträge, deren Prozess noch nicht
+        abgearbeitet ist (kein PT_ENDE — analog fsEinlast)."""
+        sim = self.m_sim
+        for ausl in getattr(sim, "m_lAusl", []) or []:
+            teil = self._name(ausl)
+            if teil is None:  # leere Einträge überspringen (m_durch==NULL)
+                continue
+            soll_beginn = getattr(ausl, "m_iBeginTermin", 0) or 0
+            # Menge: Anzahl ausgelöster Entitäten (best-effort über m_lEntitaet).
+            entitaeten = getattr(ausl, "m_lEntitaet", None)
+            menge = len(entitaeten) if entitaeten is not None else 1
+            knoten = getattr(ausl, "m_lDlpl", None)
+            beschreibung = self._name(knoten, "") or ""
+
+            self._prod_auftrag.add_prod_auftrag(
+                teil=teil,
+                menge=int(menge),
+                soll_beginn_tag=int(soll_beginn),
+                beschreibung=beschreibung,
+            )
+
+            # nbearbeit: nicht abgearbeitet (kein abgeschlossener Counter).
+            abge = getattr(ausl, "m_iAbgeCounter", 0) or 0
+            ausgeloest = getattr(ausl, "m_iTrigCounter", 0) or 0
+            if ausgeloest == 0 or abge < ausgeloest:
+                self._nbearbeit.add_nbearbeit(
+                    teil=teil, menge=int(menge), beginntermin=int(soll_beginn)
+                )
+
+    def _collect_wschlange(self) -> None:
+        """wschlange aus der zentralen Prozess-Warteschlange read-only sammeln.
+        Quelle: ``sim.m_oWarteSchl`` (PProzessDLL; analog C++
+        m_betr->m_wart_schl je Betriebsmittel)."""
+        sim = self.m_sim
+        wschl = getattr(sim, "m_oWarteSchl", None)
+        if wschl is None:
+            return
+        try:
+            prozesse = list(wschl)
+        except TypeError:
+            return
+        for proz in prozesse:
+            knoten = getattr(proz, "m_oKnoten", None)
+            bm_name = self._name(knoten, "") or ""
+            # zu produz. Teil: über Trigger/Auslöser (best-effort).
+            trigger = getattr(proz, "m_oTrigger", None)
+            ausl = getattr(trigger, "m_oAusloeser", None) if trigger is not None else None
+            teil = self._name(ausl, "") or self._name(knoten, "") or ""
+            restmenge = getattr(proz, "m_iRestMenge", None)
+            if restmenge is None:
+                restmenge = 0
+            status = getattr(proz, "m_eStatus", None)
+            status_val = getattr(status, "value", status)
+            if status_val == _PT_UNT:
+                wartestatus = IProzess.UNTERBROCHEN
+            else:
+                wartestatus = IProzess.WARTET_VOR_BM
+            self._wschlange.add_wschlange(
+                bm_name=bm_name,
+                teil=teil,
+                restmenge=int(restmenge),
+                wartestatus=wartestatus,
+            )
 
     # ------------------------------------------------------------------
     # Period-End-Flush aller 11 KPI-kinds (D-3.1 / D-3.3 / D-3.4)
@@ -153,28 +220,31 @@ class AuswertungListener(OListenerSimulator):
     def on_period_end(self, time_end: int) -> None:
         assert self.m_sim is not None
         sim = self.m_sim
-        # m_periodNum wurde im Kern bereits vorgerückt → beendete Periode == -1.
         period_num = max(0, getattr(sim, "m_periodNum", 1) - 1)
         t = sim.evt_curr_time()
+
+        # now-buildable Records read-only aus dem sim-State sammeln.
+        self._collect_prod_und_nbearbeit()
+        self._collect_wschlange()
 
         for kind, agg in self._kinds:
             v = {"kind": kind}
             v.update(agg.snapshot(period_num))  # enthält period_num
+            # best_auftrag ist quellenlos im Port → records bleiben leer, aber
+            # ein expliziter missing_slice-Marker statt erfundener Zahlen.
+            if kind == "best_auftrag":
+                v["missing_slice"] = _BEST_AUFTRAG_MISSING_SLICE
             self._writer.write(
                 Frame(t=t, stream="kpi_auswertung", seq=self._seq.next(), v=v)
             )
 
-        # period-only-Aggregation: Counter für die nächste Periode zurücksetzen.
+        # period-only-Aggregation: Record-Sammler/Counter zurücksetzen.
         for _kind, agg in self._kinds:
             agg.reset_period()
-        # Start-Tracking ist period-übergreifend (laufende Aufträge bleiben),
-        # aber abgeschlossene Prozesse müssen den Period-Boundary nicht erneut
-        # auslösen — das Set bleibt erhalten, weil id() pro Lauf eindeutig ist.
 
         self._writer.flush()
 
     def on_period_break(self, time_end: int) -> None:
-        # Bei Suspend ebenfalls einen partial-Period-Snapshot flushen.
         self.on_period_end(time_end)
 
 

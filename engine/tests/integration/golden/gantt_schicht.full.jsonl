@@ -1,1 +1,1 @@
-{"t":86400,"stream":"gantt_schicht","seq":290,"v":{"period_num":0,"person_id":"PERS-001","schicht":"S1","von":0,"bis":28800,"sollstunden":8.0,"iststunden":7.5}}
+{"t":86400,"stream":"gantt_schicht","seq":290,"v":{"period_num":0,"person":"PERS-001","schichten":2,"ueberstunden":12.5,"einheiten":16}}

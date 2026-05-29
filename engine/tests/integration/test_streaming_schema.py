@@ -122,14 +122,49 @@ def test_kpi_unknown_kind_is_rejected() -> None:
     assert list(validator.iter_errors(bad)), "unbekannter kind hätte fehlschlagen müssen"
 
 
-def test_kpi_auftrag_kind_missing_required_field_is_rejected() -> None:
-    """prod_auftrag ohne count_gesamt verletzt den if-then-Zweig (Pflichtfeld)."""
+def test_kpi_prod_auftrag_missing_records_is_rejected() -> None:
+    """prod_auftrag ohne records-Array verletzt den if-then-Zweig (Pflichtfeld,
+    GAP-CLOSURE 01-11: now-buildable kinds fuehren records statt Generik)."""
     validator = _validator("kpi_auswertung")
     bad = {
         "t": 86400, "stream": "kpi_auswertung", "seq": 1000,
         "v": {"kind": "prod_auftrag", "period_num": 0},
     }
     assert list(validator.iter_errors(bad))
+
+
+def test_kpi_prod_auftrag_record_missing_osim_field_is_rejected() -> None:
+    """Eine prod_auftrag-record-Zeile ohne soll_beginn_tag verletzt das Schema
+    (echte OSim-Feldnamen sind required, 1:1 gegen ISimulatorViewerAuswProdAuftr)."""
+    validator = _validator("kpi_auswertung")
+    bad = {
+        "t": 86400, "stream": "kpi_auswertung", "seq": 1001,
+        "v": {"kind": "prod_auftrag", "period_num": 0,
+              "records": [{"teil": "Welle", "menge": 12, "beschreibung": "x"}]},
+    }
+    assert list(validator.iter_errors(bad))
+
+
+def test_kpi_slice_gated_missing_slice_is_required() -> None:
+    """pers ohne missing_slice verletzt das Schema (gated = echte Feldnamen +
+    null + missing_slice, keine Erfindung — User-Direktive)."""
+    validator = _validator("kpi_auswertung")
+    bad = {
+        "t": 86400, "stream": "kpi_auswertung", "seq": 1002,
+        "v": {"kind": "pers", "period_num": 0, "name": None, "schichten": None,
+              "ueberstunden_pct": None, "kann_kap_pct": None, "auslastung_pct": None,
+              "kosten_pro_arbeitsstd": None, "kalk_stundensatz": None,
+              "gesamtkosten_periode": None},
+    }
+    assert list(validator.iter_errors(bad))
+
+
+def test_kpi_no_invented_generic_fields_in_schema() -> None:
+    """Regression-Pin (GAP-CLOSURE 01-11): das Schema fuehrt keine erfundene
+    Generik mehr (count_gesamt/durchlaufzeit_*/sollstunden)."""
+    raw = (_SCHEMA_DIR / "kpi_auswertung.json").read_text(encoding="utf-8")
+    for verboten in ("count_gesamt", "durchlaufzeit_avg", "sollstunden", "iststunden"):
+        assert verboten not in raw, f"erfundenes Generik-Feld {verboten} noch im Schema"
 
 
 # ======================================================================

@@ -55,3 +55,24 @@ auto-fix issues directly caused by the current task's changes).
 - **Fix-Vorschlag (eigener Housekeeping-Plan):** `[tool.uv.sources]`-Pfad auf
   `../engine` korrigieren + `uv sync` neu fahren (zieht psycopg + die Editable-
   Engine sauber ein). Danach laufen Endpoint- + test_database-Tests wieder.
+
+## 01-11: Pre-existing C++-Parity-/OTX-Roundtrip-Failures (2026-05-29)
+
+- **Befund:** Beim vollständigen `uv run pytest tests/integration/` (782s)
+  failen 3 Tests, ALLE außerhalb des 01-11-Scopes (insights/streaming):
+  - `test_python_vs_cpp.py::test_python_run_matches_cpp_run_on_embb` — 21
+    `m_dPtkEinsatzzeit`-CounterChange-Diffs (PBetriebsmittel/PDurchlaufplan),
+    Python weicht vom C++-Original ab. Engine-Kern-/Einsatzzeit-Arithmetik.
+  - `test_azeitsim_runner.py::test_roundtrip_runs_and_modifies_otx`
+  - `test_azeitsim_runner.py::test_roundtrip_produces_counter_changes`
+    (azeit-Sim-Runner / P5-M-Arbeitszeit-Slice + OTX-Roundtrip).
+- **Verifikation, dass NICHT durch 01-11 verursacht:** Die 01-11-Commits
+  berühren ausschließlich `insights/classes.py`, `insights/__init__.py`,
+  `streaming/listeners/{auswertung,schicht}.py`, `streaming/partial.py`,
+  die zwei JSON-Schemas + die Golden-/Test-Dateien. Kein Eingriff in
+  `core/`, `pps/`, `azeit/` (SACRED-Constraint des Plans). Die betroffenen
+  Tests exerzieren m_dPtkEinsatzzeit / OTX-Roundtrip — disjunkt zu den
+  geänderten Dateien. Die Streaming-/Insights-Suiten
+  (`test_streaming*`, `test_p5n_insights`) sind 65/65 grün.
+- **Status:** Out-of-scope (Scope-Boundary). Gehört in den P5-M-/C++-Parity-
+  Slice-Plan, nicht in 01-11.

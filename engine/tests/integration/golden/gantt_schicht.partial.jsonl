@@ -1,1 +1,1 @@
-{"t":86400,"stream":"gantt_schicht","seq":290,"v":{"period_num":0,"person_id":null,"schicht":null,"von":null,"bis":null,"sollstunden":0.0,"iststunden":0.0,"partial":true}}
+{"t":86400,"stream":"gantt_schicht","seq":290,"v":{"period_num":0,"person":null,"schichten":null,"ueberstunden":null,"einheiten":null,"missing_slice":"P5-M","partial":true}}

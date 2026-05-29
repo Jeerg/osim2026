@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "osim-engine:streaming/kpi_auswertung.json",
   "title": "kpi_auswertung frame",
-  "description": "Sub-Stream kpi_auswertung (SPEC 6.3): period-end-Aggregate fuer alle 11 ISimulatorViewerAusw*-Varianten, gebuendelt ueber den v.kind-Diskriminator (D-3.3). Pflichtfelder je kind aus 01-03-SUMMARY / insights/classes.py-Snapshots.",
+  "description": "Sub-Stream kpi_auswertung (SPEC 6.3): period-end-Aggregate fuer alle 11 ISimulatorViewerAusw*-Varianten, gebuendelt ueber den v.kind-Diskriminator (D-3.3). GAP-CLOSURE 01-11: die Feldsaetze sind 1:1 gegen die ../OSim2004 .cpp gepinnt (echte deutsche OSim-Spalten, keine erfundene Generik). NOW-BUILDABLE (prod_auftrag/nbearbeit/wschlange) fuehren ein records-Array mit den echten Zeilen-Feldern. SLICE-GATED (best_auftrag/pers/betr/kauf/eigen/kalkulation/gesamt/schicht) fuehren die echten OSim-Feldnamen als nullable + missing_slice.",
   "type": "object",
   "required": ["t", "stream", "seq", "v"],
   "properties": {
@@ -13,26 +13,9 @@
     "meta_event": { "type": "string" }
   },
   "$defs": {
-    "auftrag_fields": {
-      "required": [
-        "count_gesamt",
-        "count_abgeschlossen",
-        "count_laufend",
-        "count_verspaetet",
-        "durchlaufzeit_avg",
-        "durchlaufzeit_max",
-        "durchlaufzeit_min"
-      ],
-      "properties": {
-        "count_gesamt": { "type": "integer" },
-        "count_abgeschlossen": { "type": "integer" },
-        "count_laufend": { "type": "integer" },
-        "count_verspaetet": { "type": "integer" },
-        "durchlaufzeit_avg": { "type": "integer" },
-        "durchlaufzeit_max": { "type": "integer" },
-        "durchlaufzeit_min": { "type": "integer" }
-      }
-    }
+    "nullable_number": { "type": ["number", "null"] },
+    "nullable_integer": { "type": ["integer", "null"] },
+    "nullable_string": { "type": ["string", "null"] }
   },
   "allOf": [
     {
@@ -63,38 +46,104 @@
     },
     {
       "if": {
+        "properties": { "v": { "properties": { "kind": { "const": "prod_auftrag" } } } }
+      },
+      "then": {
         "properties": {
           "v": {
+            "required": ["records"],
             "properties": {
-              "kind": {
-                "enum": ["prod_auftrag", "best_auftrag", "kauf", "eigen"]
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["teil", "menge", "soll_beginn_tag", "beschreibung"],
+                  "properties": {
+                    "teil": { "type": "string" },
+                    "menge": { "type": "integer" },
+                    "soll_beginn_tag": { "type": "integer" },
+                    "beschreibung": { "type": "string" }
+                  }
+                }
               }
             }
           }
         }
-      },
-      "then": {
-        "properties": { "v": { "$ref": "#/$defs/auftrag_fields" } }
       }
     },
     {
       "if": {
-        "properties": { "v": { "properties": { "kind": { "const": "betr" } } } }
+        "properties": { "v": { "properties": { "kind": { "const": "nbearbeit" } } } }
       },
       "then": {
         "properties": {
           "v": {
-            "required": [
-              "auslastung_pct",
-              "ruest_pct",
-              "stillstand_pct",
-              "haupt_nutzungsart"
-            ],
+            "required": ["records"],
             "properties": {
-              "auslastung_pct": { "type": "number" },
-              "ruest_pct": { "type": "number" },
-              "stillstand_pct": { "type": "number" },
-              "haupt_nutzungsart": { "type": "string" }
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["teil", "menge", "beginntermin"],
+                  "properties": {
+                    "teil": { "type": "string" },
+                    "menge": { "type": "integer" },
+                    "beginntermin": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "v": { "properties": { "kind": { "const": "wschlange" } } } }
+      },
+      "then": {
+        "properties": {
+          "v": {
+            "required": ["records"],
+            "properties": {
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["bm_name", "teil", "restmenge", "wartestatus"],
+                  "properties": {
+                    "bm_name": { "type": "string" },
+                    "teil": { "type": "string" },
+                    "restmenge": { "type": "integer" },
+                    "wartestatus": {
+                      "enum": [
+                        "wartet_vor_bm",
+                        "unterbrochen",
+                        "wartet_material",
+                        "wartet_personal"
+                      ]
+                    },
+                    "op": { "type": "string" },
+                    "material": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "v": { "properties": { "kind": { "const": "best_auftrag" } } } }
+      },
+      "then": {
+        "properties": {
+          "v": {
+            "required": ["records", "missing_slice"],
+            "properties": {
+              "records": { "type": "array" },
+              "missing_slice": { "type": "string" }
             }
           }
         }
@@ -107,10 +156,27 @@
       "then": {
         "properties": {
           "v": {
-            "required": ["einsatz_zeit", "auslastung_pct"],
+            "required": [
+              "name",
+              "schichten",
+              "ueberstunden_pct",
+              "kann_kap_pct",
+              "auslastung_pct",
+              "kosten_pro_arbeitsstd",
+              "kalk_stundensatz",
+              "gesamtkosten_periode",
+              "missing_slice"
+            ],
             "properties": {
-              "einsatz_zeit": { "type": "integer" },
-              "auslastung_pct": { "type": "number" }
+              "name": { "$ref": "#/$defs/nullable_string" },
+              "schichten": { "$ref": "#/$defs/nullable_integer" },
+              "ueberstunden_pct": { "$ref": "#/$defs/nullable_number" },
+              "kann_kap_pct": { "$ref": "#/$defs/nullable_number" },
+              "auslastung_pct": { "$ref": "#/$defs/nullable_number" },
+              "kosten_pro_arbeitsstd": { "$ref": "#/$defs/nullable_number" },
+              "kalk_stundensatz": { "$ref": "#/$defs/nullable_number" },
+              "gesamtkosten_periode": { "$ref": "#/$defs/nullable_number" },
+              "missing_slice": { "type": "string" }
             }
           }
         }
@@ -118,15 +184,102 @@
     },
     {
       "if": {
-        "properties": { "v": { "properties": { "kind": { "const": "schicht" } } } }
+        "properties": { "v": { "properties": { "kind": { "const": "betr" } } } }
       },
       "then": {
         "properties": {
           "v": {
-            "required": ["sollstunden", "iststunden"],
+            "required": [
+              "name",
+              "fixkosten_pro_stunde",
+              "kosten_pro_arbeitsstd",
+              "kalk_stundensatz",
+              "gesamtkosten_periode",
+              "missing_slice"
+            ],
             "properties": {
-              "sollstunden": { "type": "number" },
-              "iststunden": { "type": "number" }
+              "name": { "$ref": "#/$defs/nullable_string" },
+              "fixkosten_pro_stunde": { "$ref": "#/$defs/nullable_number" },
+              "kosten_pro_arbeitsstd": { "$ref": "#/$defs/nullable_number" },
+              "kalk_stundensatz": { "$ref": "#/$defs/nullable_number" },
+              "gesamtkosten_periode": { "$ref": "#/$defs/nullable_number" },
+              "missing_slice": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "v": { "properties": { "kind": { "const": "kauf" } } } }
+      },
+      "then": {
+        "properties": {
+          "v": {
+            "required": [
+              "teil",
+              "aktueller_bestand",
+              "verbrauchte_teile",
+              "gelieferte_teile",
+              "vergebliche_anforderung",
+              "teilewert_gesamt",
+              "teilewert_neuteile",
+              "bestellkosten",
+              "lagerhaltungskosten",
+              "kapitalkosten",
+              "missing_slice"
+            ],
+            "properties": {
+              "teil": { "$ref": "#/$defs/nullable_string" },
+              "aktueller_bestand": { "$ref": "#/$defs/nullable_integer" },
+              "verbrauchte_teile": { "$ref": "#/$defs/nullable_integer" },
+              "gelieferte_teile": { "$ref": "#/$defs/nullable_integer" },
+              "vergebliche_anforderung": { "$ref": "#/$defs/nullable_integer" },
+              "teilewert_gesamt": { "$ref": "#/$defs/nullable_number" },
+              "teilewert_neuteile": { "$ref": "#/$defs/nullable_number" },
+              "bestellkosten": { "$ref": "#/$defs/nullable_number" },
+              "lagerhaltungskosten": { "$ref": "#/$defs/nullable_number" },
+              "kapitalkosten": { "$ref": "#/$defs/nullable_number" },
+              "missing_slice": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "v": { "properties": { "kind": { "const": "eigen" } } } }
+      },
+      "then": {
+        "properties": {
+          "v": {
+            "required": [
+              "teil",
+              "aktueller_bestand",
+              "prod_menge",
+              "verbr_menge",
+              "teilewert_gesamt",
+              "teilewert_neuteile",
+              "eingehend_teile",
+              "betrm_kosten",
+              "personalkosten",
+              "lagerhaltungskosten",
+              "kapitalkosten",
+              "missing_slice"
+            ],
+            "properties": {
+              "teil": { "$ref": "#/$defs/nullable_string" },
+              "aktueller_bestand": { "$ref": "#/$defs/nullable_integer" },
+              "prod_menge": { "$ref": "#/$defs/nullable_integer" },
+              "verbr_menge": { "$ref": "#/$defs/nullable_integer" },
+              "teilewert_gesamt": { "$ref": "#/$defs/nullable_number" },
+              "teilewert_neuteile": { "$ref": "#/$defs/nullable_number" },
+              "eingehend_teile": { "$ref": "#/$defs/nullable_number" },
+              "betrm_kosten": { "$ref": "#/$defs/nullable_number" },
+              "personalkosten": { "$ref": "#/$defs/nullable_number" },
+              "lagerhaltungskosten": { "$ref": "#/$defs/nullable_number" },
+              "kapitalkosten": { "$ref": "#/$defs/nullable_number" },
+              "missing_slice": { "type": "string" }
             }
           }
         }
@@ -139,26 +292,80 @@
       "then": {
         "properties": {
           "v": {
-            "required": ["kosten_sum"],
-            "properties": { "kosten_sum": { "type": "number" } }
+            "required": [
+              "last_lgw",
+              "betr_kost",
+              "pers_kost",
+              "lager_kost",
+              "kapit_kost",
+              "besch_kost",
+              "teile_kost",
+              "lagerwertabgang_p1",
+              "lagerwertabgang_p2",
+              "lagerwertabgang_p3",
+              "berechneter_lagerwert",
+              "last_lgw_k",
+              "last_lgw_e",
+              "last_lgw_p",
+              "lga_k_teile",
+              "lga_e_teile",
+              "lga_p_teile",
+              "lgz_k_teile",
+              "lgz_e_teile",
+              "lgz_p_teile",
+              "lgw_k_teile",
+              "lgw_e_teile",
+              "lgw_p_teile",
+              "lgw_fertig",
+              "lgw_aktuell",
+              "missing_slice"
+            ],
+            "properties": {
+              "last_lgw": { "$ref": "#/$defs/nullable_number" },
+              "betr_kost": { "$ref": "#/$defs/nullable_number" },
+              "pers_kost": { "$ref": "#/$defs/nullable_number" },
+              "lager_kost": { "$ref": "#/$defs/nullable_number" },
+              "kapit_kost": { "$ref": "#/$defs/nullable_number" },
+              "besch_kost": { "$ref": "#/$defs/nullable_number" },
+              "teile_kost": { "$ref": "#/$defs/nullable_number" },
+              "lagerwertabgang_p1": { "$ref": "#/$defs/nullable_number" },
+              "lagerwertabgang_p2": { "$ref": "#/$defs/nullable_number" },
+              "lagerwertabgang_p3": { "$ref": "#/$defs/nullable_number" },
+              "berechneter_lagerwert": { "$ref": "#/$defs/nullable_number" },
+              "last_lgw_k": { "$ref": "#/$defs/nullable_number" },
+              "last_lgw_e": { "$ref": "#/$defs/nullable_number" },
+              "last_lgw_p": { "$ref": "#/$defs/nullable_number" },
+              "lga_k_teile": { "$ref": "#/$defs/nullable_number" },
+              "lga_e_teile": { "$ref": "#/$defs/nullable_number" },
+              "lga_p_teile": { "$ref": "#/$defs/nullable_number" },
+              "lgz_k_teile": { "$ref": "#/$defs/nullable_number" },
+              "lgz_e_teile": { "$ref": "#/$defs/nullable_number" },
+              "lgz_p_teile": { "$ref": "#/$defs/nullable_number" },
+              "lgw_k_teile": { "$ref": "#/$defs/nullable_number" },
+              "lgw_e_teile": { "$ref": "#/$defs/nullable_number" },
+              "lgw_p_teile": { "$ref": "#/$defs/nullable_number" },
+              "lgw_fertig": { "$ref": "#/$defs/nullable_number" },
+              "lgw_aktuell": { "$ref": "#/$defs/nullable_number" },
+              "missing_slice": { "type": "string" }
+            }
           }
         }
       }
     },
     {
       "if": {
-        "properties": {
-          "v": { "properties": { "kind": { "enum": ["wschlange", "nbearbeit"] } } }
-        }
+        "properties": { "v": { "properties": { "kind": { "const": "schicht" } } } }
       },
       "then": {
         "properties": {
           "v": {
-            "required": ["warte_aktuell", "warte_max", "nbearbeit_zeit"],
+            "required": ["person", "schichten", "ueberstunden", "einheiten", "missing_slice"],
             "properties": {
-              "warte_aktuell": { "type": "integer" },
-              "warte_max": { "type": "integer" },
-              "nbearbeit_zeit": { "type": "integer" }
+              "person": { "$ref": "#/$defs/nullable_string" },
+              "schichten": { "$ref": "#/$defs/nullable_integer" },
+              "ueberstunden": { "$ref": "#/$defs/nullable_number" },
+              "einheiten": { "$ref": "#/$defs/nullable_integer" },
+              "missing_slice": { "type": "string" }
             }
           }
         }
@@ -172,11 +379,41 @@
         "properties": {
           "v": {
             "required": [
+              "verkaufserloes",
+              "verkaufsergebnisse",
+              "verf_kapazitaet_pct",
+              "auslastung_pct",
+              "lieferfaehigkeit_pct",
+              "mittl_herstellkosten",
+              "mittlerer_lagerwert",
+              "missing_slice",
               "count_auftraege_gesamt",
               "count_auftraege_fertig",
               "count_auftraege_offen"
             ],
             "properties": {
+              "verkaufserloes": { "$ref": "#/$defs/nullable_number" },
+              "verkaufsergebnisse": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["produkt", "vertriebswunsch", "absatz", "herstellkosten", "verkaufspreis", "erloes"],
+                  "properties": {
+                    "produkt": { "type": "integer" },
+                    "vertriebswunsch": { "$ref": "#/$defs/nullable_integer" },
+                    "absatz": { "$ref": "#/$defs/nullable_integer" },
+                    "herstellkosten": { "$ref": "#/$defs/nullable_number" },
+                    "verkaufspreis": { "$ref": "#/$defs/nullable_number" },
+                    "erloes": { "$ref": "#/$defs/nullable_number" }
+                  }
+                }
+              },
+              "verf_kapazitaet_pct": { "$ref": "#/$defs/nullable_number" },
+              "auslastung_pct": { "$ref": "#/$defs/nullable_number" },
+              "lieferfaehigkeit_pct": { "$ref": "#/$defs/nullable_number" },
+              "mittl_herstellkosten": { "$ref": "#/$defs/nullable_number" },
+              "mittlerer_lagerwert": { "$ref": "#/$defs/nullable_number" },
+              "missing_slice": { "type": "string" },
               "count_auftraege_gesamt": { "type": "integer" },
               "count_auftraege_fertig": { "type": "integer" },
               "count_auftraege_offen": { "type": "integer" }
