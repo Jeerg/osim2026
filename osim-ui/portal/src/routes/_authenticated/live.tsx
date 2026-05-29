@@ -18,12 +18,21 @@
 
 import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { toast } from "sonner";
 import {
   Tabs,
   TabsList,
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { apiErrorMessage } from "@/api/error-message";
+import { useModels } from "@/api/models";
+import {
+  buildStreamReadFn,
+  fetchRunMeta,
+  startRun,
+} from "@/api/runs";
 import {
   createTailReader,
   type ReadFn,
@@ -63,22 +72,80 @@ export const Route = createFileRoute("/_authenticated/live")({
 const noopRead: ReadFn = async () => ({ text: "", nextOffset: 0 });
 
 interface LivePageProps {
-  /** Injizierbar für Tests/Backend-Wire. Default: no-op (kein Run). */
+  /**
+   * Injizierbar für Tests/Backend-Wire. Wenn gesetzt, überschreibt diese ReadFn
+   * den intern aus dem gestarteten Run abgeleiteten Pfad (Test-Override). Im
+   * Normalbetrieb bleibt sie undefined und die Route baut die HTTP-ReadFn selbst
+   * aus der gestarteten run_id.
+   */
   read?: ReadFn;
   /**
-   * Optionaler meta.json-Snapshot des aktiven Runs. Wird, falls gesetzt, beim
+   * Optionaler meta.json-Snapshot (Test-Override). Wird, falls gesetzt, beim
    * Mount in den Store gespiegelt (Schema-Mismatch-Banner + partial-Status,
-   * D-2.2 / D-OP-4 / AC-7). Default: kein Meta (Walking-Skeleton ohne Run).
+   * D-2.2 / D-OP-4 / AC-7). Im Normalbetrieb lädt die Route die meta.json nach
+   * dem Run-Start selbst.
    */
   meta?: MetaJson;
 }
 
-function LivePage({ read = noopRead, meta }: LivePageProps): React.ReactElement {
+function LivePage({
+  read: readOverride,
+  meta: metaOverride,
+}: LivePageProps): React.ReactElement {
   const activeStream = useLiveStreamStore((s) => s.activeStream);
   const setActiveStream = useLiveStreamStore((s) => s.setActiveStream);
   const ingest = useLiveStreamStore((s) => s.ingest);
   const setMeta = useLiveStreamStore((s) => s.setMeta);
   const hasGap = useLiveStreamStore((s) => s.hasGap);
+
+  const { data: models, isLoading: modelsLoading } = useModels();
+
+  // Run-Setup-State: ausgewähltes Modell, aktive run_id, geladene meta + die
+  // coverage_ratio des Starts (partielles Modell surfacen, D-2.2).
+  const [modelId, setModelId] = React.useState<string>("");
+  const [runId, setRunId] = React.useState<string | null>(null);
+  const [meta, setRunMeta] = React.useState<MetaJson | undefined>(metaOverride);
+  const [coverageRatio, setCoverageRatio] = React.useState<number | null>(null);
+  const [starting, setStarting] = React.useState(false);
+
+  // read-Prop-Ableitung: ein expliziter Test-Override gewinnt; sonst solange
+  // kein Run gestartet ist → noopRead (run-loser Default), und sobald runId
+  // gesetzt ist → echte HTTP-ReadFn gegen GET /runs/{id}/stream. useMemo, damit
+  // der Tail-Tick-useEffect (read in Dependency-Liste) nur bei Run-Wechsel
+  // re-initialisiert, nicht bei jedem Render.
+  const read = React.useMemo<ReadFn>(() => {
+    if (readOverride) return readOverride;
+    if (runId === null) return noopRead;
+    return buildStreamReadFn(runId);
+  }, [readOverride, runId]);
+
+  async function handleStartRun(): Promise<void> {
+    if (!modelId || starting) return;
+    setStarting(true);
+    // Bei Run-(Re-)Start den Store leeren, damit Frames eines vorigen Laufs
+    // nicht mit dem neuen vermischt werden (T-LIVE-FE-03, Reproduzierbarkeit).
+    useLiveStreamStore.getState().reset();
+    setActiveStream("gantt_durchlauf");
+    setRunMeta(undefined);
+    setCoverageRatio(null);
+    try {
+      const resp = await startRun(modelId);
+      setCoverageRatio(resp.coverage_ratio);
+      setRunId(resp.run_id);
+      // meta.json nachladen — speist den partial-/Schema-Mismatch-Banner-Pfad.
+      try {
+        const loaded = await fetchRunMeta(resp.run_id);
+        setRunMeta(loaded);
+      } catch (metaErr) {
+        // meta-Read ist best-effort: der Stream läuft auch ohne meta weiter.
+        console.warn("[live] meta.json konnte nicht geladen werden:", metaErr);
+      }
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Lauf konnte nicht gestartet werden"));
+    } finally {
+      setStarting(false);
+    }
+  }
 
   // Default-Tab beim ersten Mount setzen.
   React.useEffect(() => {
@@ -130,8 +197,76 @@ function LivePage({ read = noopRead, meta }: LivePageProps): React.ReactElement 
         <h2 className="text-2xl font-semibold text-foreground">Live-Sicht</h2>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           Echtzeit-Darstellung eines laufenden Simulationslaufs aus dem
-          JSONL-Stream. Wählen Sie eine Stream-Kategorie.
+          JSONL-Stream. Modell wählen, Lauf starten und live zusehen.
         </p>
+
+        {/* Run-Setup: Modell-Picker + „Lauf starten". E2E-Modelle (Prefix
+            „E2E-") werden hier NICHT herausgefiltert — der 01-10-E2E braucht
+            sein eigenes Modell (anders als models/index.tsx). */}
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="live-model-select"
+              className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+            >
+              Modell
+            </label>
+            <select
+              id="live-model-select"
+              data-testid="live-model-select"
+              value={modelId}
+              onChange={(e) => setModelId(e.target.value)}
+              disabled={modelsLoading || starting}
+              className="h-9 min-w-[16rem] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="" disabled>
+                {modelsLoading ? "Lade Modelle…" : "Modell auswählen…"}
+              </option>
+              {(models ?? []).map((m) => (
+                <option
+                  key={m.id}
+                  value={m.id}
+                  data-testid={`live-model-option-${m.id}`}
+                >
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Button
+            type="button"
+            data-testid="live-start-run"
+            onClick={() => void handleStartRun()}
+            disabled={!modelId || starting}
+          >
+            {starting ? "Lauf startet…" : "Lauf starten"}
+          </Button>
+
+          {runId && (
+            <span
+              data-testid="live-active-run-id"
+              className="inline-flex items-center gap-2 rounded-md bg-muted px-3 py-1.5 font-mono text-xs text-muted-foreground"
+            >
+              <span className="font-sans font-medium not-italic text-foreground">
+                Aktiver Lauf
+              </span>
+              {runId}
+            </span>
+          )}
+        </div>
+
+        {coverageRatio !== null && coverageRatio < 1 && (
+          <p
+            role="status"
+            className="mt-2 inline-flex items-center gap-2 rounded-md bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700 ring-1 ring-inset ring-amber-200"
+            data-testid="live-coverage-hint"
+          >
+            Partielles Modell: nur {Math.round(coverageRatio * 100)} % der
+            Objekte geladen — einige Streams können unvollständig sein.
+          </p>
+        )}
+
         {hasGap && (
           <p
             role="status"
