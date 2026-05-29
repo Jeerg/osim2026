@@ -172,7 +172,8 @@ describe("GrafikfensterControls", () => {
       />,
     );
 
-    expect(screen.getByTestId("grafik-btn-start")).toBeInTheDocument();
+    // data-testid="live-start-run" (E2E + Unit kompatibel)
+    expect(screen.getByTestId("live-start-run")).toBeInTheDocument();
     expect(screen.getByTestId("grafik-btn-abbruch")).toBeInTheDocument();
     expect(screen.getByTestId("grafik-btn-zurueck")).toBeInTheDocument();
     expect(screen.getByTestId("grafik-modus-select")).toBeInTheDocument();

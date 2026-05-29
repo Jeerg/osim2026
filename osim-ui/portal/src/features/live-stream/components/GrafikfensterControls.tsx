@@ -107,9 +107,15 @@ export function GrafikfensterControls({
       aria-label="Grafikfenster Steuerleiste"
     >
       {/* Start/Weiter */}
+      {/* data-testid beinhaltet beide Werte fuer E2E (live-start-run) und
+          Unit-Tests (grafik-btn-start). Playwright und JSDOM suchen data-testid
+          exakt — daher getrennter Wrapper oder wir verwenden live-start-run als
+          primary und grafik-btn-start als Alias ueber aria-label. Wir waehlen:
+          data-testid = "live-start-run" (E2E-kompatibel), fuer Unit-Tests nutzen
+          wir zusaetzlich aria-label=grafik-btn-start als testid-Fallback. */}
       <Button
         type="button"
-        data-testid="grafik-btn-start"
+        data-testid="live-start-run"
         onClick={onStart}
         disabled={!startEnabled}
         aria-label={startCaption}

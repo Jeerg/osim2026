@@ -70,6 +70,7 @@ function ViewerPanel({
     case "gantt_schicht":
       return <SchichtTable frames={frames} />;
     case "gantt_einsatz":
+    case "gantt_wartequeue":
     case "lifecycle":
     case "reporting_record":
       return <StatusList tag={tab.source} frames={frames} />;
