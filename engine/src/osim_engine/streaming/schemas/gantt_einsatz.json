@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "osim-engine:streaming/gantt_einsatz.json",
   "title": "gantt_einsatz frame",
-  "description": "Sub-Stream gantt_einsatz (SPEC 6.3): Ressourcen-Belegung on/off. Partial-Frames tragen v.partial=true und lassen einsatz_typ/kontext weg.",
+  "description": "Sub-Stream gantt_einsatz (SPEC 6.3): Ressourcen-Belegung on/off. Ab 01-14: echte Belegung aus m_oProzCurrent, partial-Gate entfernt.",
   "type": "object",
   "required": ["t", "stream", "seq", "v"],
   "properties": {
@@ -22,6 +22,7 @@
         "end_time": { "type": ["integer", "null"] },
         "einsatz_typ": { "type": "string" },
         "kontext": { "type": ["string", "null"] },
+        "auftrag_oid": { "type": "integer" },
         "partial": { "type": "boolean" }
       },
       "allOf": [

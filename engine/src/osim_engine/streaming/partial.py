@@ -76,13 +76,20 @@ def build_streams_status() -> dict[str, dict[str, Any]]:
     ``partial`` = mindestens eine Quell-Slice ist noch Skelett, der Stream
     schreibt minimale partial-Frames (D-2.1).
 
-    Klassifikation (Stand nach 01-01/01-03):
+    Klassifikation (Stand nach 01-14):
         - ``lifecycle``        → full (keine Skelett-Abhängigkeit)
-        - ``gantt_durchlauf``  → full-Vertrag; Frame-Status partial via P5-D
+        - ``gantt_durchlauf``  → full-Vertrag; Frame-Status vollständig
         - ``kpi_auswertung``   → partial (viele KPI-Sub-kinds Null-Default, 01-03)
-        - ``gantt_einsatz``    → partial (P5-D/P5-L Ressourcen-Belegung)
+        - ``gantt_einsatz``    → full (01-14: Belegung aus m_oProzCurrent real)
+        - ``gantt_wartequeue`` → full (01-14: Count-Modus vollständig)
         - ``gantt_schicht``    → partial (P5-M Arbeitszeit-Modell)
         - ``reporting_record`` → partial (P5-D Auftrag-Status-State-Machine)
+
+    Hinweis: gantt_einsatz war vor 01-14 als partial markiert (P5-D/P5-L);
+    die Belegung (m_oProzCurrent) ist korrekt gefüllt unabhängig vom
+    P5-D-Skelett-Marker in decisions.aufgabe — der Marker betrifft die
+    Entscheider-Strategien, NICHT die Belegungslogik (01-14 Befund).
+    qcContent/Umlage + Quali-Stream bleiben deferred (out of scope).
     """
     return {
         "lifecycle": _entry(
@@ -91,16 +98,22 @@ def build_streams_status() -> dict[str, dict[str, Any]]:
         ),
         "gantt_durchlauf": _entry(
             "full", [],
-            "Frame-Vertrag vollständig (01-01); der konkrete End-Status "
-            "(v.status) bleibt 'unbekannt', bis P5-D die Aufgabe-Status-"
-            "State-Machine schließt.",
+            "Frame-Vertrag vollständig (01-14): echten End-Status "
+            "('abgeschlossen' bei PT_ENDE), betriebsmittel_id aus belegter "
+            "Ressource, auftrag_oid für Farbschlüssel. Verspätungsvergleich "
+            "(soll_ende vs. ist_ende) optional/deferred — Soll-Daten fehlen "
+            "auf Frame-Ebene ohne vollständige P5-D-Entscheider-Strategien.",
         ),
         "gantt_einsatz": _entry(
-            "partial", ["P5-D", "P5-L"],
-            "Ressourcen-Belegungs-Balken nur best-effort aus dem Bearbeitungs-"
-            "Event abgeleitet; volle Einsatz-/Rüst-/Stillstand-Differenzierung "
-            "hängt an P5-D (Einsatz-Dauer-Arithmetik) und P5-L (Generator-"
-            "/Auftrags-Eingang). Frames sind minimal-partial.",
+            "full", [],
+            "Ressourcen-Belegung aus sim.m_lRessBeleg[*].m_oProzCurrent "
+            "(GRAFIKFENSTER-SPEC §4.1, 01-14). on/off-Frames mit "
+            "ressource_id=PRessBeleg.m_sName, auftrag_oid, einsatz_typ, "
+            "kontext. Partial-Gate entfernt: Belegung ist real (unabhängig "
+            "vom P5-D-Skelett-Marker in decisions.aufgabe, der die "
+            "Entscheider-Strategien betrifft, NICHT den Belegungspfad). "
+            "qcContent/Umlage (GetKnzArbeitsinhalt) und Einsatz-/Rüst-/"
+            "Stillstand-Differenzierung bleiben deferred.",
         ),
         "gantt_schicht": _entry(
             "partial", ["P5-M"],

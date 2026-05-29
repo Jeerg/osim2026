@@ -444,6 +444,21 @@ class _PDlplKanteHandler(ClassHandler):
                 py.m_lVorgaenger.append(vor)
 
 
+def _wire_knoten_assoz_ress(loader: "OtxLoader", py: Any, obj: OtxObject) -> None:
+    """Verdrahtet m_lAssozRess eines Knotens aus der OTX-PAssozRessourceLList.
+
+    In C++ enthält der Knoten (PDlplKnoten.odh) eine `m_lAssozRess`-Liste.
+    Im OTX steht sie als `m_lAssozRess;<LList-OID>;#PAssozRessourceLList|...$N;id1;...`.
+    Der Handler muss die Sub-Refs über resolve_list lesen und in py.m_lAssozRess eintragen.
+
+    Bug-Fix (Rule 2 — fehlendes Wiring): ohne diese Verdrahtung ist m_lAssozRess
+    immer leer → ress_belegen/ress_verfuegbar werden nie aufgerufen → gantt_einsatz leer.
+    """
+    for assoz in resolve_list(loader, obj, "m_lAssozRess"):
+        if hasattr(py, "m_lAssozRess") and assoz not in py.m_lAssozRess:
+            py.m_lAssozRess.append(assoz)
+
+
 def _make_knoten_handler(import_path: str, py_class: str, scalars: tuple[str, ...]):
     """Erstellt einen Handler für eine PDlplKnoten-Variante."""
 
@@ -466,6 +481,8 @@ def _make_knoten_handler(import_path: str, py_class: str, scalars: tuple[str, ..
                 py.m_lKanteAus = aus
             if ober is not None:
                 py.m_lKnotenOber = ober
+            # Ressourcen-Assoziationen verdrahten (P5D-SCOPE §2.1, Rule 2).
+            _wire_knoten_assoz_ress(loader, py, obj)
 
     return _H
 
@@ -518,6 +535,7 @@ class _PDpKnVerteilungHandler(ClassHandler):
             py.m_lKnotenOber = ober
         if verteil is not None:
             py.m_lVerteil = verteil
+        _wire_knoten_assoz_ress(loader, py, obj)
 
 
 @register_handler("PDpKaVerteilung")
@@ -636,6 +654,7 @@ class _PDpKnRueckKonstantHandler(ClassHandler):
         sub = resolve_ref(loader, obj, "m_lDlpl")
         if sub is not None:
             py.set_sub_plan(sub)
+        _wire_knoten_assoz_ress(loader, py, obj)
 
 
 # ----------------------------------------------------------------------
@@ -663,6 +682,7 @@ class _PDpKnAlternativVerteilungHandler(ClassHandler):
             py.m_lKnotenOber = ober
         for alt in resolve_list(loader, obj, "m_lAlternativen"):
             py.add_alternative(alt)
+        _wire_knoten_assoz_ress(loader, py, obj)
 
 
 @register_handler("PAlternativeVerteilung")
@@ -817,8 +837,16 @@ class _PAssozBelegHandler(ClassHandler):
         return a
 
     def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
-        # Liste der zugeordneten Ressourcen-Belegungen
-        for ress in resolve_list(loader, obj, "m_lRessBeleg"):
+        # Liste der zugeordneten Ressourcen-Belegungen.
+        # OTX-Attribut: m_lRessourcen (PRessBelegLList).
+        # Bug-Fix (Rule 1): Loader wired bisher "m_lRessBeleg" (falsche OTX-Attr),
+        # aber ress_verfuegbar/ress_anwesend iterieren py.m_lRessourcen.
+        # In OTX heißt das Attribut "m_lRessourcen" (nicht "m_lRessBeleg").
+        for ress in resolve_list(loader, obj, "m_lRessourcen"):
+            if hasattr(py, "m_lRessourcen") and ress not in py.m_lRessourcen:
+                py.m_lRessourcen.append(ress)
+        # Kompatibilitäts-Alias m_lRessBeleg auch befüllen (für OtxWriter + ältere Referenzen)
+        for ress in py.m_lRessourcen:
             if hasattr(py, "m_lRessBeleg") and isinstance(py.m_lRessBeleg, list):
                 if ress not in py.m_lRessBeleg:
                     py.m_lRessBeleg.append(ress)
@@ -1309,6 +1337,8 @@ def _make_aufgabe_knoten_handler(py_class_name: str, scalars: tuple[str, ...] = 
                 for kn in resolve_list(loader, obj, "m_lDlplKnoten"):
                     if kn not in py.m_lDlplKnoten:
                         py.m_lDlplKnoten.append(kn)
+            # Ressourcen-Assoziationen (Rule 2 fix: m_lAssozRess fehlt sonst)
+            _wire_knoten_assoz_ress(loader, py, obj)
 
     return _H
 

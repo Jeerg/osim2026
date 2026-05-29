@@ -1,7 +1,7 @@
 """GanttListener — Durchlaufplan-Prozesse als ``gantt_durchlauf``-Stream (SPEC §6.3).
 
-Read-Side-Listener (D-1.2 / SPEC §5): hookt ``on_sim_ereig`` (Aufruf nach jedem
-Event-Pop) und liest das aktuell ausgeführte Event read-only über
+Read-Side-Listener (D-1.2 / SPEC §5.1): hookt ``on_sim_ereig`` (Aufruf nach
+jedem Event-Pop) und liest das aktuell ausgeführte Event read-only über
 ``sim._evt_pool.get_curr()``. Kein Eingriff in den Engine-Kern.
 
 Erkennungs-Strategie (best-effort, R-1/P5-D):
@@ -11,9 +11,14 @@ Erkennungs-Strategie (best-effort, R-1/P5-D):
       Da ``bearbeit_beginnen`` synchron (ohne eigenes Event) läuft, wird der
       Start beim nächsten Event-Pop nachgezogen.
 
-Der konkrete Prozess-Status (abgeschlossen/verspätet/...) ist heute Skelett
-(P5-D); solange er fehlt, trägt ``v.status`` den Wert ``"unbekannt"`` und der
-Stream gilt in ``meta.json`` als ``partial`` (D-2.1).
+Ab 01-14:
+    - ``v.status`` ist ``"abgeschlossen"`` bei PT_ENDE statt ``"unbekannt"``
+      (P5D-SCOPE §5.1). Verspätungsvergleich bleibt optional/out of scope
+      (Soll-Daten fehlen auf Frame-Ebene; ehrlich als TODO markiert).
+    - ``betriebsmittel_id`` aus belegter Ressource via proz.m_oRelationen →
+      PtRelationBeleg.m_oRessBeleg.m_sName statt Knoten-Name.
+    - ``auftrag_oid`` (int) = proz.get_ausloeser().oid für Farbschlüssel.
+    - PtStatus-Import statt Literal ``1`` für PT_BEARB.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from osim_engine.core.listener import OListenerSimulator
+from osim_engine.pps.prozess.base import PtStatus
 from osim_engine.streaming.frame import Frame
 from osim_engine.streaming.registry import register_listener
 
@@ -29,6 +35,8 @@ if TYPE_CHECKING:
     from osim_engine.streaming.seq import SeqCounter
 
 _BEARBEIT_ENDE = "EvtBearbeitEnde"
+_PT_BEARB = PtStatus.PT_BEARB
+_PT_ENDE = PtStatus.PT_ENDE
 
 
 class GanttListener(OListenerSimulator):
@@ -59,11 +67,36 @@ class GanttListener(OListenerSimulator):
         return None
 
     @staticmethod
+    def _auftrag_oid(proz) -> int:  # noqa: ANN001
+        """Stabile Auftrag-OID für Farbschlüssel (P5D-SCOPE §4.2)."""
+        try:
+            ausl = proz.get_ausloeser()
+        except Exception:
+            return -1
+        if ausl is None:
+            return -1
+        return getattr(ausl, "oid", -1)
+
+    @staticmethod
     def _prozess_id(proz) -> str | None:  # noqa: ANN001
         return getattr(proz, "m_sName", None)
 
     @staticmethod
     def _betriebsmittel_id(proz) -> str | None:  # noqa: ANN001
+        """Belegte Ressource aus PtRelationBeleg (SPEC §5.1).
+
+        Iteriert proz.m_oRelationen und gibt den Namen der ersten
+        PtRelationBeleg.m_oRessBeleg zurück. Fallback: Knoten-Name.
+        """
+        from osim_engine.resources.relation import PtRelationBeleg
+        for rel in getattr(proz, "m_oRelationen", ()):
+            if isinstance(rel, PtRelationBeleg):
+                ress = getattr(rel, "m_oRessBeleg", None)
+                if ress is not None:
+                    name = getattr(ress, "m_sName", None)
+                    if name:
+                        return name
+        # Fallback: Knoten-Name (keine Relation vorhanden, z. B. kein ress_belegen)
         knoten = getattr(proz, "m_oKnoten", None)
         return getattr(knoten, "m_sName", None) if knoten is not None else None
 
@@ -94,10 +127,9 @@ class GanttListener(OListenerSimulator):
         meta_name = getattr(meta, "m_name", "")
         t = sim.evt_curr_time()
 
-        # PtStatus.PT_BEARB == 1 (pps/prozess/base.py) — read-only-Check ohne
-        # harten Import-Zwang auf die PPS-Schicht.
+        # PtStatus-Import statt Literal 1 (P5D-SCOPE §5, T8)
         status = getattr(proz, "m_eStatus", None)
-        is_bearb = getattr(status, "value", status) == 1
+        is_bearb = getattr(status, "value", status) == _PT_BEARB
 
         # start: ein neuer, in Bearbeitung befindlicher Prozess.
         if proz is not None and is_bearb and id(proz) not in self._started:
@@ -113,6 +145,7 @@ class GanttListener(OListenerSimulator):
                     "start_time": start_time,
                     "betriebsmittel_id": self._betriebsmittel_id(proz),
                     "dauer_geplant": getattr(proz, "m_iZeitinhaltGesamt", None),
+                    "auftrag_oid": self._auftrag_oid(proz),
                 },
             )
 
@@ -120,6 +153,11 @@ class GanttListener(OListenerSimulator):
         if meta_name == _BEARBEIT_ENDE and proz is not None:
             start_time = self._start_time.get(id(proz))
             dauer_ist = (t - start_time) if start_time is not None else None
+            # Echter End-Status: PT_ENDE → "abgeschlossen" (P5D-SCOPE §5.1).
+            # Verspätungsvergleich (soll_ende vs. ist_ende) bleibt optional/out of scope
+            # — Soll-Daten (geplanter Abschluss-Zeitpunkt) sind auf Frame-Ebene nicht
+            # ohne zusätzliche Auslöser-Felder ableitbar (TODO für Phase 5-D vollständig).
+            end_status = "abgeschlossen"
             self._emit(
                 t,
                 {
@@ -129,8 +167,8 @@ class GanttListener(OListenerSimulator):
                     "start_time": start_time,
                     "end_time": t,
                     "dauer_ist": dauer_ist,
-                    # P5-D Skelett: konkreter End-Status noch nicht abbildbar.
-                    "status": "unbekannt",
+                    "status": end_status,
+                    "auftrag_oid": self._auftrag_oid(proz),
                 },
                 meta_event=meta_name,
             )
