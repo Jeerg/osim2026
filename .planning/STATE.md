@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-29T06:32:36.000Z"
+last_updated: "2026-05-29T08:46:00.000Z"
 current_phase: 01-live-viewer-bridge
-current_plan: "01-05"
+current_plan: "01-06"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 7
-  completed_plans: 4
-  percent: 57
+  completed_plans: 5
+  percent: 71
 decisions:
   - "01-01: Frame als @dataclass(slots=True) statt Pydantic (D-1.4)"
   - "01-01: geteilter SeqCounter-Objekt (streaming/seq.py) für globale monotone seq"
@@ -23,7 +23,9 @@ decisions:
   - "01-03: KPI period_num = m_periodNum-1 (Kern incrementet vor Listener-Fanout); kauf/eigen=IAuftrag-Subkinds, gesamt=ISimulator-Roll-up"
   - "01-04: alle 6 Sub-Streams abgebaut; gantt_einsatz/gantt_schicht/reporting_record + kpi_auswertung partial in meta.json (missing_slices P5-D/L/M)"
   - "01-04: meta.json-Finalize via MetaFinalizeListener im Registry (idempotent), attach.py/__init__.py/core/simulator.py unangetastet (SPEC §5)"
+  - "01-05: UI-Render-Schicht komplett — KpiTile (N/N-1-Trend, Symbol+Text A11y) + RecordTable (@tanstack/react-table, Sort/Filter, Windowing-Cap) + StreamRouter (Tag-Multiplex, AC-4) + PartialBanner"
+  - "01-05: schema_version-Major-Mismatch = best-effort schemaMismatch-Flag im Store + gelbes Warn-Banner, KEIN Hard-Block/Crash (D-OP-4, AC-7)"
 last_session:
-  stopped_at: "Completed 01-04-remaining-streams-partial-PLAN.md"
+  stopped_at: "Completed 01-05-ui-kpi-record-banners-PLAN.md"
   resume_file: "None"
 ---
