@@ -1,0 +1,5 @@
+{"t":0,"stream":"lifecycle","seq":1,"v":{"kind":"sim_begin","period_num":0,"period_begin":0,"period_len":86400}}
+{"t":86400,"stream":"lifecycle","seq":287,"v":{"kind":"period_end","period_num":1,"period_begin":86400,"period_len":86400,"end_time":86400}}
+{"t":86400,"stream":"lifecycle","seq":288,"v":{"kind":"period_begin","period_num":1,"period_begin":86400,"period_len":86400,"end_time":172800}}
+{"t":172800,"stream":"lifecycle","seq":501,"v":{"kind":"period_break","period_num":2,"period_begin":172800,"period_len":86400,"end_time":172800}}
+{"t":0,"stream":"lifecycle","seq":600,"v":{"kind":"sim_reset","period_num":0,"period_begin":0,"period_len":86400}}

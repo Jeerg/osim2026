@@ -1,0 +1,1 @@
+{"t":86400,"stream":"reporting_record","seq":293,"v":{"kind":"auftrag","period_num":0,"auftrag_id":"FA-001","art":"fertigung","menge":100,"start":3600,"ende_ist":10800,"ende_soll":7200,"verspaetung":3600,"prozesse":[{"id":"P1.OP10","betr":"BM-Drehe-01","dauer":7200}]}}

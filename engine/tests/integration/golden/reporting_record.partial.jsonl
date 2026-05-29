@@ -1,0 +1,2 @@
+{"t":86400,"stream":"reporting_record","seq":293,"v":{"kind":"auftrag","period_num":0,"auftrag_id":"Erzeugnis-1","art":"fertigung","start":100,"partial":true}}
+{"t":86400,"stream":"reporting_record","seq":294,"v":{"kind":"auftrag","period_num":0,"auftrag_id":null,"partial":true}}

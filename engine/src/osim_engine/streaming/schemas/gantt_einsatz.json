@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "osim-engine:streaming/gantt_einsatz.json",
+  "title": "gantt_einsatz frame",
+  "description": "Sub-Stream gantt_einsatz (SPEC 6.3): Ressourcen-Belegung on/off. Partial-Frames tragen v.partial=true und lassen einsatz_typ/kontext weg.",
+  "type": "object",
+  "required": ["t", "stream", "seq", "v"],
+  "properties": {
+    "t": { "type": "integer" },
+    "stream": { "const": "gantt_einsatz" },
+    "seq": { "type": "integer" },
+    "wall_t": { "type": "string" },
+    "meta_event": { "type": "string" },
+    "v": {
+      "type": "object",
+      "required": ["kind", "ressource_id", "start_time"],
+      "properties": {
+        "kind": { "enum": ["on", "off"] },
+        "ressource_id": { "type": ["string", "null"] },
+        "ressource_typ": { "enum": ["betriebsmittel", "person"] },
+        "start_time": { "type": ["integer", "null"] },
+        "end_time": { "type": ["integer", "null"] },
+        "einsatz_typ": { "type": "string" },
+        "kontext": { "type": ["string", "null"] },
+        "partial": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "on" } } },
+          "then": { "required": ["ressource_typ"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "off" } } },
+          "then": { "required": ["end_time"] }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "osim-engine:streaming/gantt_schicht.json",
+  "title": "gantt_schicht frame",
+  "description": "Sub-Stream gantt_schicht (SPEC 6.3): period-aggregiertes Schicht-Plan-Frame je Person x Schicht. Partial-Frame: person_id/schicht/von/bis=null, sollstunden/iststunden=0.0, v.partial=true.",
+  "type": "object",
+  "required": ["t", "stream", "seq", "v"],
+  "properties": {
+    "t": { "type": "integer" },
+    "stream": { "const": "gantt_schicht" },
+    "seq": { "type": "integer" },
+    "wall_t": { "type": "string" },
+    "meta_event": { "type": "string" },
+    "v": {
+      "type": "object",
+      "required": ["period_num", "sollstunden", "iststunden"],
+      "properties": {
+        "period_num": { "type": "integer" },
+        "person_id": { "type": ["string", "null"] },
+        "schicht": { "type": ["string", "null"] },
+        "von": { "type": ["integer", "null"] },
+        "bis": { "type": ["integer", "null"] },
+        "sollstunden": { "type": "number" },
+        "iststunden": { "type": "number" },
+        "partial": { "type": "boolean" }
+      }
+    }
+  }
+}

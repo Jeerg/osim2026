@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "osim-engine:streaming/kpi_auswertung.json",
+  "title": "kpi_auswertung frame",
+  "description": "Sub-Stream kpi_auswertung (SPEC 6.3): period-end-Aggregate fuer alle 11 ISimulatorViewerAusw*-Varianten, gebuendelt ueber den v.kind-Diskriminator (D-3.3). Pflichtfelder je kind aus 01-03-SUMMARY / insights/classes.py-Snapshots.",
+  "type": "object",
+  "required": ["t", "stream", "seq", "v"],
+  "properties": {
+    "t": { "type": "integer" },
+    "stream": { "const": "kpi_auswertung" },
+    "seq": { "type": "integer" },
+    "wall_t": { "type": "string" },
+    "meta_event": { "type": "string" }
+  },
+  "$defs": {
+    "auftrag_fields": {
+      "required": [
+        "count_gesamt",
+        "count_abgeschlossen",
+        "count_laufend",
+        "count_verspaetet",
+        "durchlaufzeit_avg",
+        "durchlaufzeit_max",
+        "durchlaufzeit_min"
+      ],
+      "properties": {
+        "count_gesamt": { "type": "integer" },
+        "count_abgeschlossen": { "type": "integer" },
+        "count_laufend": { "type": "integer" },
+        "count_verspaetet": { "type": "integer" },
+        "durchlaufzeit_avg": { "type": "integer" },
+        "durchlaufzeit_max": { "type": "integer" },
+        "durchlaufzeit_min": { "type": "integer" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "v": {
+          "type": "object",
+          "required": ["kind", "period_num"],
+          "properties": {
+            "kind": {
+              "enum": [
+                "prod_auftrag",
+                "best_auftrag",
+                "betr",
+                "pers",
+                "schicht",
+                "kalkulation",
+                "wschlange",
+                "nbearbeit",
+                "kauf",
+                "eigen",
+                "gesamt"
+              ]
+            },
+            "period_num": { "type": "integer" }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "v": {
+            "properties": {
+              "kind": {
+                "enum": ["prod_auftrag", "best_auftrag", "kauf", "eigen"]
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": { "v": { "$ref": "#/$defs/auftrag_fields" } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "v": { "properties": { "kind": { "const": "betr" } } } }
+      },
+      "then": {
+        "properties": {
+          "v": {
+            "required": [
+              "auslastung_pct",
+              "ruest_pct",
+              "stillstand_pct",
+              "haupt_nutzungsart"
+            ],
+            "properties": {
+              "auslastung_pct": { "type": "number" },
+              "ruest_pct": { "type": "number" },
+              "stillstand_pct": { "type": "number" },
+              "haupt_nutzungsart": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "v": { "properties": { "kind": { "const": "pers" } } } }
+      },
+      "then": {
+        "properties": {
+          "v": {
+            "required": ["einsatz_zeit", "auslastung_pct"],
+            "properties": {
+              "einsatz_zeit": { "type": "integer" },
+              "auslastung_pct": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "v": { "properties": { "kind": { "const": "schicht" } } } }
+      },
+      "then": {
+        "properties": {
+          "v": {
+            "required": ["sollstunden", "iststunden"],
+            "properties": {
+              "sollstunden": { "type": "number" },
+              "iststunden": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "v": { "properties": { "kind": { "const": "kalkulation" } } } }
+      },
+      "then": {
+        "properties": {
+          "v": {
+            "required": ["kosten_sum"],
+            "properties": { "kosten_sum": { "type": "number" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "v": { "properties": { "kind": { "enum": ["wschlange", "nbearbeit"] } } }
+        }
+      },
+      "then": {
+        "properties": {
+          "v": {
+            "required": ["warte_aktuell", "warte_max", "nbearbeit_zeit"],
+            "properties": {
+              "warte_aktuell": { "type": "integer" },
+              "warte_max": { "type": "integer" },
+              "nbearbeit_zeit": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "v": { "properties": { "kind": { "const": "gesamt" } } } }
+      },
+      "then": {
+        "properties": {
+          "v": {
+            "required": [
+              "count_auftraege_gesamt",
+              "count_auftraege_fertig",
+              "count_auftraege_offen"
+            ],
+            "properties": {
+              "count_auftraege_gesamt": { "type": "integer" },
+              "count_auftraege_fertig": { "type": "integer" },
+              "count_auftraege_offen": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

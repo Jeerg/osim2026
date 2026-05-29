@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "osim-engine:streaming/lifecycle.json",
+  "title": "lifecycle frame",
+  "description": "Sub-Stream lifecycle (SPEC 6.3): sim/period begin/end/break/reset.",
+  "type": "object",
+  "required": ["t", "stream", "seq", "v"],
+  "properties": {
+    "t": { "type": "integer" },
+    "stream": { "const": "lifecycle" },
+    "seq": { "type": "integer" },
+    "wall_t": { "type": "string" },
+    "meta_event": { "type": "string" },
+    "v": {
+      "type": "object",
+      "required": ["kind", "period_num", "period_begin", "period_len"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "sim_begin",
+            "period_begin",
+            "period_end",
+            "period_break",
+            "sim_reset"
+          ]
+        },
+        "period_num": { "type": "integer" },
+        "period_begin": { "type": "integer" },
+        "period_len": { "type": "integer" },
+        "end_time": { "type": "integer" }
+      }
+    }
+  }
+}

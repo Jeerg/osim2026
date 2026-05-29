@@ -1,0 +1,11 @@
+{"t":0,"stream":"kpi_auswertung","seq":11,"v":{"kind":"prod_auftrag","period_num":0,"count_gesamt":0,"count_abgeschlossen":0,"count_laufend":0,"count_verspaetet":0,"durchlaufzeit_avg":0,"durchlaufzeit_max":0,"durchlaufzeit_min":0}}
+{"t":0,"stream":"kpi_auswertung","seq":12,"v":{"kind":"best_auftrag","period_num":0,"count_gesamt":0,"count_abgeschlossen":0,"count_laufend":0,"count_verspaetet":0,"durchlaufzeit_avg":0,"durchlaufzeit_max":0,"durchlaufzeit_min":0}}
+{"t":0,"stream":"kpi_auswertung","seq":13,"v":{"kind":"betr","period_num":0,"auslastung_pct":0.0,"ruest_pct":0.0,"stillstand_pct":0.0,"haupt_nutzungsart":"stillstand"}}
+{"t":0,"stream":"kpi_auswertung","seq":14,"v":{"kind":"pers","period_num":0,"einsatz_zeit":0,"auslastung_pct":0.0}}
+{"t":0,"stream":"kpi_auswertung","seq":15,"v":{"kind":"schicht","period_num":0,"sollstunden":0.0,"iststunden":0.0}}
+{"t":0,"stream":"kpi_auswertung","seq":16,"v":{"kind":"kalkulation","period_num":0,"kosten_sum":0.0}}
+{"t":0,"stream":"kpi_auswertung","seq":17,"v":{"kind":"wschlange","period_num":0,"warte_aktuell":0,"warte_max":0,"nbearbeit_zeit":0}}
+{"t":0,"stream":"kpi_auswertung","seq":18,"v":{"kind":"nbearbeit","period_num":0,"warte_aktuell":0,"warte_max":0,"nbearbeit_zeit":0}}
+{"t":0,"stream":"kpi_auswertung","seq":19,"v":{"kind":"kauf","period_num":0,"count_gesamt":0,"count_abgeschlossen":0,"count_laufend":0,"count_verspaetet":0,"durchlaufzeit_avg":0,"durchlaufzeit_max":0,"durchlaufzeit_min":0}}
+{"t":0,"stream":"kpi_auswertung","seq":20,"v":{"kind":"eigen","period_num":0,"count_gesamt":0,"count_abgeschlossen":0,"count_laufend":0,"count_verspaetet":0,"durchlaufzeit_avg":0,"durchlaufzeit_max":0,"durchlaufzeit_min":0}}
+{"t":0,"stream":"kpi_auswertung","seq":21,"v":{"kind":"gesamt","period_num":0,"count_auftraege_gesamt":0,"count_auftraege_fertig":0,"count_auftraege_offen":0}}

@@ -1,0 +1,2 @@
+{"t":3600,"stream":"gantt_durchlauf","seq":42,"v":{"kind":"start","auftrag_id":null,"prozess_id":"P1.OP10","start_time":3600,"betriebsmittel_id":"BM-Drehe-01","dauer_geplant":null}}
+{"t":10800,"stream":"gantt_durchlauf","seq":78,"meta_event":"EvtBearbeitEnde","v":{"kind":"ende","auftrag_id":null,"prozess_id":"P1.OP10","start_time":3600,"end_time":10800,"dauer_ist":7200,"status":"unbekannt"}}

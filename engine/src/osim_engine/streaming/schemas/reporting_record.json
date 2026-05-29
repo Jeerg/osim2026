@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "osim-engine:streaming/reporting_record.json",
+  "title": "reporting_record frame",
+  "description": "Sub-Stream reporting_record (SPEC 6.3): period-end Detail-Record je Auftrag. Partial-Frame: nur kind/period_num/auftrag_id/art/start + v.partial=true (ende_ist/ende_soll/verspaetung/menge/prozesse fehlen bis P5-D).",
+  "type": "object",
+  "required": ["t", "stream", "seq", "v"],
+  "properties": {
+    "t": { "type": "integer" },
+    "stream": { "const": "reporting_record" },
+    "seq": { "type": "integer" },
+    "wall_t": { "type": "string" },
+    "meta_event": { "type": "string" },
+    "v": {
+      "type": "object",
+      "required": ["kind", "period_num", "auftrag_id"],
+      "properties": {
+        "kind": { "const": "auftrag" },
+        "period_num": { "type": "integer" },
+        "auftrag_id": { "type": ["string", "null"] },
+        "art": { "type": "string" },
+        "menge": { "type": ["integer", "null"] },
+        "start": { "type": ["integer", "null"] },
+        "ende_ist": { "type": ["integer", "null"] },
+        "ende_soll": { "type": ["integer", "null"] },
+        "verspaetung": { "type": ["integer", "null"] },
+        "prozesse": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "betr": { "type": "string" },
+              "dauer": { "type": "integer" }
+            }
+          }
+        },
+        "partial": { "type": "boolean" }
+      }
+    }
+  }
+}
