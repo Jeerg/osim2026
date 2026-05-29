@@ -30,6 +30,9 @@ result.json
 *.events.jsonl
 *.result.json
 
+# OSim run output
+runs/
+
 # Engine — lokale Fixtures + Experiment-Verzeichnis
 engine/tests/fixtures/large/
 engine/experiments/
