@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-29T09:10:00.000Z"
+last_updated: "2026-05-29T10:25:00.000Z"
 current_phase: 01-live-viewer-bridge
 current_plan: "01-07"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 7
-  completed_plans: 6
-  percent: 86
+  completed_plans: 7
+  percent: 100
 decisions:
   - "01-01: Frame als @dataclass(slots=True) statt Pydantic (D-1.4)"
   - "01-01: geteilter SeqCounter-Objekt (streaming/seq.py) für globale monotone seq"
@@ -28,7 +28,9 @@ decisions:
   - "01-06: 6 JSON-Schemas (Draft 2020-12) + Golden-Record-Tests (full+partial+Negativ-Pin) via jsonschema; schema_version=1.0 (O-5, AC-1)"
   - "01-06: AC-2 Latenz p95=2.5ms (<50ms); AC-8 als Option 2 (honestly-relaxed) — Write-Path-Overhead 15.3% (<20% best-of-11) statt literaler <5% full-vs-no-streaming (User-Entscheid, Deviation)"
   - "01-06: batch_n-Default 100 unveraendert (Option 1 = Bump auf 200 verworfen); literales AC-8 verlangte Background-Thread, von DISCUSSION-LOG Q1.3 fuer Phase 01 verworfen -> deferred"
+  - "01-07: Demo-Lauf verifiziert 2017 Frames (0 Schema-Fehler, gantt+kpi vorhanden, seq monoton); /live->StreamRouter verdrahtet (01-05-Stub geschlossen)"
+  - "01-07: E2E live-stream.spec.ts test.fixme (ehrlich pending) bis Backend-Stream-Read-Endpoint (M2/SPEC §4); Human-Verify-Checkpoint (Browser-UAT/AC-9-Parity) offen — NICHT gefaelscht"
 last_session:
-  stopped_at: "Completed 01-06-schema-golden-bench-PLAN.md"
-  resume_file: "None"
+  stopped_at: "Completed 01-07-e2e-demo-uat-PLAN.md (autonome Anteile); Human-Verify-Checkpoint offen"
+  resume_file: ".planning/phases/01-live-viewer-bridge/UAT.md"
 ---
