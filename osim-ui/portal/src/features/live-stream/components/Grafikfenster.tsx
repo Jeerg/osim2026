@@ -331,15 +331,21 @@ function ZeitachsBar({
   );
 }
 
+/** Leeres Array als stabile Referenz für nicht vorhandene Streams. */
+const EMPTY_FRAMES: Frame[] = [];
+
 export function Grafikfenster({
   modus,
   widthPx,
   periodBegin,
   periodEnd,
 }: GrafikfensterProps): React.ReactElement {
-  const byStream = useLiveStreamStore((s) => s.byStream);
-  const einsatzFrames = byStream["gantt_einsatz"] ?? [];
-  const queueFrames = byStream["gantt_wartequeue"] ?? [];
+  const einsatzFrames = useLiveStreamStore(
+    (s) => s.byStream["gantt_einsatz"] ?? EMPTY_FRAMES,
+  );
+  const queueFrames = useLiveStreamStore(
+    (s) => s.byStream["gantt_wartequeue"] ?? EMPTY_FRAMES,
+  );
 
   const ressourcen = React.useMemo(
     () => extractRessourcen(einsatzFrames, queueFrames),

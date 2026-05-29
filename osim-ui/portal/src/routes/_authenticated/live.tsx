@@ -1,14 +1,15 @@
 /**
- * /live — Live-Viewer-Route (Plan 01-02 Task 3 → GAP-CLOSURE 01-12 Task 2).
+ * /live — Live-Viewer-Route (Plan 01-02 Task 3 → GAP-CLOSURE 01-12 Task 2
+ * → GAP-CLOSURE 01-15 Task 3).
  *
  * Eigene Top-Level-Seite („jetzt schau ich der Sim zu"). Die Tab-Leiste trägt
  * die ECHTEN OSim2004-Viewer-Namen aus der viewer-config (Durchlaufplan,
  * Einsatzzeit, Schicht + die Auswertungen Gesamt/Produktionsaufträge/… ) — NICHT
  * mehr die rohen Stream-Tags. Der Durchlaufplan ist der PRIMÄRE Grafik-Viewer
  * (FSimulatorViewerGfx-treu) und der Default-Tab: von ihm aus wird der Lauf
- * gesteuert (Start/Pause/Reset-Controls leben IN diesem Grafik-Viewer, über dem
- * Live-Render-Canvas) und live über die GanttRow/GObject-(Design)-Pipeline
- * gerendert — keine generische „Standard"-Fläche.
+ * gesteuert (GrafikfensterControls leben IN diesem Grafik-Viewer, über dem
+ * Grafikfenster-Canvas) und live über das faithful Grafikfenster (3 Modi,
+ * OID-Belegung, Warteschlangen-Gebirge, gated Qualifikation) gerendert.
  *
  * Ein 200ms-Polling-Tick treibt den Tail-Reader (D-4.4, AC-3-Basis);
  * Re-Renders werden auf max ~30 Hz gethrottled (Frame-Coalescing, T-01-05). Die
@@ -26,7 +27,6 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { apiErrorMessage } from "@/api/error-message";
 import { useModels } from "@/api/models";
 import {
@@ -48,6 +48,9 @@ import type {
   Frame,
   MetaJson,
 } from "@/features/live-stream/types";
+import { Grafikfenster } from "@/features/live-stream/components/Grafikfenster";
+import type { GrafikModus } from "@/features/live-stream/components/Grafikfenster";
+import { GrafikfensterControls } from "@/features/live-stream/components/GrafikfensterControls";
 
 /** Polling-Intervall des Tail-Readers (D-4.4). */
 const POLL_INTERVAL_MS = 200;
@@ -93,6 +96,9 @@ function LivePage({
   const [activeTabId, setActiveTabId] = React.useState<string>(
     DEFAULT_VIEWER_TAB_ID,
   );
+
+  // Grafikfenster-Modus (Belegung / Warteschlangen / Qualifikation).
+  const [grafikModus, setGrafikModus] = React.useState<GrafikModus>("belegung");
 
   // Run-Setup-State.
   const [modelId, setModelId] = React.useState<string>("");
@@ -272,19 +278,29 @@ function LivePage({
 
         {VIEWER_TABS.map((tab) => (
           <TabsContent key={tab.id} value={tab.id} className="flex-1">
-            {/* Der Durchlaufplan ist der primäre Grafik-Viewer: über dem
-                Live-Render-Canvas liegen die Start/Pause/Reset-Controls
-                (FSimulatorViewerGfx-treu). Die übrigen Viewer rendern direkt
-                ihren Stream (Isolation, AC-4). */}
+            {/* Der Durchlaufplan ist der primäre Grafik-Viewer (01-15):
+                GrafikfensterControls + das faithful OSim-Grafikfenster
+                (3 Modi: Belegung/Warteschlangen/Qualifikation).
+                Die übrigen Viewer rendern direkt ihren Stream (Isolation, AC-4). */}
             {tab.id === DEFAULT_VIEWER_TAB_ID ? (
               <div className="flex flex-col gap-3">
-                <GrafikViewerControls
+                <GrafikfensterControls
                   modelId={modelId}
+                  modus={grafikModus}
+                  onModusChange={(m) => setGrafikModus(m as GrafikModus)}
                   starting={starting}
                   hasRun={runId !== null}
                   onStart={() => void handleStartRun()}
+                  periodBegin={0}
+                  periodEnd={86400}
+                  simTime={0}
                 />
-                <StreamRouter tab={tab} />
+                <Grafikfenster
+                  modus={grafikModus}
+                  widthPx={800}
+                  periodBegin={0}
+                  periodEnd={86400}
+                />
               </div>
             ) : (
               <StreamRouter tab={tab} />
@@ -296,64 +312,4 @@ function LivePage({
   );
 }
 
-/**
- * Run-Steuerung INNERHALB des Durchlaufplan-Grafik-Viewers (FSimulatorViewerGfx-
- * treu: Start/Pause/Reset über dem Render-Canvas). Im headless-Port von Phase 01
- * existiert serverseitig nur der Start (subprocess.Popen); Pause/Reset sind
- * faithful sichtbar, aber als „noch nicht verfügbar" deaktiviert — KEINE
- * erfundene Funktionalität.
- */
-function GrafikViewerControls({
-  modelId,
-  starting,
-  hasRun,
-  onStart,
-}: {
-  modelId: string;
-  starting: boolean;
-  hasRun: boolean;
-  onStart: () => void;
-}): React.ReactElement {
-  return (
-    <div
-      className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 p-2"
-      data-testid="grafik-viewer-controls"
-      role="toolbar"
-      aria-label="Durchlaufplan-Grafik-Viewer: Lauf-Steuerung"
-    >
-      <Button
-        type="button"
-        data-testid="live-start-run"
-        onClick={onStart}
-        disabled={!modelId || starting}
-      >
-        {starting ? "Lauf startet…" : "Start"}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        data-testid="live-pause-run"
-        disabled
-        title="Pause ist im aktuellen Slice noch nicht verfügbar"
-      >
-        Pause
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        data-testid="live-reset-run"
-        disabled={!hasRun}
-        title={
-          hasRun
-            ? "Reset ist im aktuellen Slice noch nicht verfügbar"
-            : "Kein aktiver Lauf"
-        }
-      >
-        Reset
-      </Button>
-      <span className="ml-1 text-xs text-muted-foreground">
-        Durchlaufplan-Grafik-Viewer — Lauf hier starten und live zusehen.
-      </span>
-    </div>
-  );
-}
+// GrafikViewerControls ersetzt durch GrafikfensterControls (01-15 Task 3).
