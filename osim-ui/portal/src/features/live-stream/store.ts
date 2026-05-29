@@ -29,6 +29,21 @@ import { STREAM_TAGS } from "./types";
  */
 export const MAX_FRAMES_PER_STREAM = 10_000;
 
+/**
+ * Vom UI verstandene Schema-Major-Version (SPEC §6.4). Ein abweichender
+ * Major-Wert in `meta.json.schema_version` löst KEINEN Hard-Block aus, sondern
+ * setzt `schemaMismatch=true` → die UI rendert best-effort und zeigt ein gelbes
+ * Warn-Banner (D-OP-4 / AC-7).
+ */
+export const EXPECTED_SCHEMA_MAJOR = 1;
+
+/** Major-Bestandteil eines `schema_version`-Strings ("1.0" → 1). */
+function schemaMajor(version: string | undefined): number | null {
+  if (typeof version !== "string") return null;
+  const major = Number.parseInt(version.split(".")[0] ?? "", 10);
+  return Number.isFinite(major) ? major : null;
+}
+
 function emptyByStream(): Record<StreamTag, Frame[]> {
   return STREAM_TAGS.reduce(
     (acc, tag) => {
@@ -52,6 +67,11 @@ interface LiveStreamState {
   dropCount: number;
   /** Pro-Stream-Status aus meta.json (partial/full, D-2.2). */
   streamStatus: Partial<Record<StreamTag, StreamStatus>>;
+  /**
+   * meta.json.schema_version weicht im Major-Teil von {@link EXPECTED_SCHEMA_MAJOR}
+   * ab — best-effort-Render + gelbes Warn-Banner statt Hard-Block (D-OP-4, AC-7).
+   */
+  schemaMismatch: boolean;
 }
 
 interface LiveStreamActions {
@@ -74,6 +94,7 @@ const initialState: LiveStreamState = {
   lastSeq: 0,
   dropCount: 0,
   streamStatus: {},
+  schemaMismatch: false,
 };
 
 export const useLiveStreamStore = create<LiveStreamState & LiveStreamActions>(
@@ -122,11 +143,18 @@ export const useLiveStreamStore = create<LiveStreamState & LiveStreamActions>(
       return activeStream ? byStream[activeStream] : [];
     },
 
-    setMeta: (meta) =>
+    setMeta: (meta) => {
+      // Best-effort-Schema-Check (D-OP-4, AC-7): ein unbekannter Major-Wert
+      // (oder ein fehlendes/ungültiges schema_version) markiert nur einen
+      // Mismatch — KEIN Hard-Block, KEIN Throw. Die UI rendert weiter.
+      const major = schemaMajor(meta.schema_version);
+      const mismatch = major === null || major !== EXPECTED_SCHEMA_MAJOR;
       set({
         dropCount: meta.drop_count ?? 0,
         streamStatus: meta.streams ?? {},
-      }),
+        schemaMismatch: mismatch,
+      });
+    },
 
     reset: () =>
       set({
@@ -136,6 +164,7 @@ export const useLiveStreamStore = create<LiveStreamState & LiveStreamActions>(
         lastSeq: 0,
         dropCount: 0,
         streamStatus: {},
+        schemaMismatch: false,
       }),
   }),
 );
