@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 import { LogOutIcon } from "lucide-react";
 import { useAuth } from "@/auth/use-auth";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,35 @@ export function AuthenticatedLayout({ children }: { children: ReactNode }) {
               Simulation Studio
             </span>
           </div>
+
+          {/* MITTE: Topbar-Navigation. Neues, drittes Flex-Kind — durch das
+              `justify-between` des Headers rückt es automatisch zentriert
+              zwischen Wordmark (links) und die 3FLS-gelockte Rechts-Gruppe.
+              Aktiver Link via `activeProps`: font-semibold + Unterstrich (NICHT
+              nur Farbe — A11y). Weiße Schrift auf dem Gradient; Token-Focus-Ring
+              (gleiche Ring-Utility wie im Repo-Select). */}
+          <nav data-testid="topbar-nav" className="flex items-center gap-6">
+            <Link
+              to="/live"
+              data-testid="nav-link-live"
+              className="rounded-sm text-sm font-medium text-white/80 underline-offset-4 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+              activeProps={{
+                className: "font-semibold text-white underline",
+              }}
+            >
+              Live
+            </Link>
+            <Link
+              to="/models"
+              data-testid="nav-link-models"
+              className="rounded-sm text-sm font-medium text-white/80 underline-offset-4 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+              activeProps={{
+                className: "font-semibold text-white underline",
+              }}
+            >
+              Bibliothek
+            </Link>
+          </nav>
 
           {/* RECHTS: User-Pill + Logout + 3fls-Logo (ohne Backdrop) */}
           <div className="flex items-center gap-4">
