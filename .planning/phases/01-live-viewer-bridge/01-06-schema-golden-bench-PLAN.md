@@ -14,6 +14,7 @@ files_modified:
   - engine/tests/integration/test_streaming_schema.py
   - engine/tests/integration/golden/README.md
   - engine/tests/integration/test_streaming_bench.py
+  - engine/pyproject.toml
 autonomous: true
 requirements: [O-5, AC-1, AC-2, AC-8]
 must_haves:
@@ -107,15 +108,16 @@ Output: 6 Schema-Dateien, `test_streaming_schema.py`, golden/-Records, `test_str
 
 <task type="auto">
   <name>Task 2: Latenz- (AC-2) + Overhead-Benchmark (AC-8)</name>
-  <files>engine/tests/integration/test_streaming_bench.py</files>
+  <files>engine/tests/integration/test_streaming_bench.py, engine/pyproject.toml</files>
   <read_first>
+    - engine/pyproject.toml ([tool.pytest.ini_options] — bestehende Konfiguration; Marker müssen registriert werden, sonst PytestUnknownMarkWarning)
     - engine/src/osim_engine/streaming/jsonl_writer.py (Writer-Verhalten aus 01-01 — batch_n/flush)
     - engine/src/osim_engine/streaming/attach.py (attach_streaming_listeners)
     - .planning/phases/01-live-viewer-bridge/01-SPEC.md §9 AC-2 (Latenz Engine-Event→JSONL-Line < 50ms p95, Benchmark mit 100k Events), AC-8 (< 5% Overhead mit aktivem Streaming gegen Baseline), §7.4 (Backpressure)
     - .planning/phases/01-live-viewer-bridge/01-CONTEXT.md D-1.3 (Batched-Flush erreicht AC-2 bei kleinem N, AC-8 durch reduzierte syscalls), Discretion (exaktes N 50-200 via Benchmark)
   </read_first>
   <action>
-    `test_streaming_bench.py`: (a) **Latenz-Test (AC-2)** — fahre einen Sim/Synthetik-Lauf mit vielen Events (skalierbar; in CI ggf. reduziert via Marker, lokal bis 100k), miss pro emittiertem Frame die Spanne Event→Zeile-auf-Platte und prüfe p95 < 50ms. (b) **Overhead-Test (AC-8)** — miss die Sim-Laufzeit OHNE Streaming-Listener (Baseline) und MIT `attach_streaming_listeners`, assert Overhead < 5%. Beide Tests als pytest-Funktionen, mit `@pytest.mark.bench`/`slow`-Marker, damit die Schnell-Suite nicht ausgebremst wird. Falls der gewählte `batch_n`-Default (aus 01-01) AC-2/AC-8 verfehlt, justiere den Default im Writer im Rahmen der Discretion (N zwischen 50-200) und dokumentiere den gemessenen Wert im SUMMARY.
+    `test_streaming_bench.py`: (a) **Latenz-Test (AC-2)** — fahre einen Sim/Synthetik-Lauf mit vielen Events (skalierbar; in CI ggf. reduziert via Marker, lokal bis 100k), miss pro emittiertem Frame die Spanne Event→Zeile-auf-Platte und prüfe p95 < 50ms. (b) **Overhead-Test (AC-8)** — miss die Sim-Laufzeit OHNE Streaming-Listener (Baseline) und MIT `attach_streaming_listeners`, assert Overhead < 5%. Beide Tests als pytest-Funktionen, mit `@pytest.mark.bench`/`slow`-Marker, damit die Schnell-Suite nicht ausgebremst wird. **Registriere beide Marker** unter `[tool.pytest.ini_options]` in `engine/pyproject.toml` via `markers = ["bench: Latenz-/Overhead-Benchmarks (manuell/CI-opt-in)", "slow: lang laufende Tests"]`, sonst wirft pytest `PytestUnknownMarkWarning`. Falls der gewählte `batch_n`-Default (aus 01-01) AC-2/AC-8 verfehlt, justiere den Default im Writer im Rahmen der Discretion (N zwischen 50-200) und dokumentiere den gemessenen Wert im SUMMARY.
   </action>
   <verify>
     <automated>cd engine && uv run pytest tests/integration/test_streaming_bench.py -m bench -x -q</automated>
@@ -124,6 +126,7 @@ Output: 6 Schema-Dateien, `test_streaming_schema.py`, golden/-Records, `test_str
     - Latenz-Test misst p95 der Event→JSONL-Latenz und assertet < 50ms (AC-2).
     - Overhead-Test misst Baseline vs. mit-Streaming und assertet Overhead < 5% (AC-8).
     - Beide Tests tragen einen `bench`/`slow`-Marker (`grep -c "pytest.mark" test_streaming_bench.py` ≥ 2).
+    - `bench` und `slow` sind unter `[tool.pytest.ini_options] markers` in `engine/pyproject.toml` registriert; `cd engine && uv run pytest tests/integration/test_streaming_bench.py -m bench -x -q` läuft ohne `PytestUnknownMarkWarning`.
     - Der im Writer verwendete batch_n-Default ist im 01-06-SUMMARY mit dem gemessenen Latenz-/Overhead-Wert dokumentiert.
   </acceptance_criteria>
   <done>Latenz- + Overhead-Benchmark grün, batch_n-Default bestätigt/justiert.</done>

@@ -110,7 +110,7 @@ Output: KpiTile, RecordTable, stream-router, PartialBanner + Specs.
     - osim-ui/CLAUDE.md + docs/3FLS-EAM-STYLE-GUIDE.md (Tokens, A11y, gelbe Warnung über Token, nicht ad-hoc)
   </read_first>
   <action>
-    `RecordTable.tsx`: virtualisierte Tabelle über `@tanstack/react-table` (D-4.3) für reporting_record-Frames. Spalten aus den §6.3-Feldern (auftrag_id, art, menge, start, ende_ist, ende_soll, verspaetung). Spalten-Sortierung + Text-Filter. Falls `@tanstack/react-table` noch nicht in package.json ist, ergänze es (Package-Legitimacy: etablierte TanStack-Lib, bereits genutzt im Stack — siehe Threat-Model T-01-SC). Virtualisierung über die Tabellenhöhe (windowing) für große Record-Listen.
+    `RecordTable.tsx`: virtualisierte Tabelle über `@tanstack/react-table` (D-4.3) für reporting_record-Frames. Spalten aus den §6.3-Feldern (auftrag_id, art, menge, start, ende_ist, ende_soll, verspaetung). Spalten-Sortierung + Text-Filter. `@tanstack/react-table` ist bereits in `osim-ui/portal/package.json` dependencies — direkt importieren, kein Install-Schritt. Virtualisierung über die Tabellenhöhe (windowing) für große Record-Listen.
     `PartialBanner.tsx`: liest aus dem Store (a) `meta.streams[tag].status` → bei `partial` ein neutral-informatives Banner "Stream unvollständig (fehlende Slices: …, Grund: …)"; (b) einen schema_version-Mismatch-Zustand → gelbes Warn-Banner "einige Daten möglicherweise unvollständig" (D-OP-4, best-effort, KEIN Hard-Block/Crash, AC-7). Beide Banner über Tokens gestylt, Status nie nur über Farbe (Icon + Text).
   </action>
   <verify>
@@ -134,7 +134,6 @@ Output: KpiTile, RecordTable, stream-router, PartialBanner + Specs.
 | Boundary | Description |
 |----------|-------------|
 | meta.json (Engine) → UI Banner-Logik | schema_version/streams-Status steuern, ob die UI warnt oder rendert |
-| npm install (@tanstack/react-table) | Supply-Chain bei neuer Dependency |
 
 ## STRIDE Threat Register
 
@@ -142,7 +141,6 @@ Output: KpiTile, RecordTable, stream-router, PartialBanner + Specs.
 |-----------|----------|-----------|-------------|-----------------|
 | T-01-11 | Denial of Service | schema_version-Mismatch | mitigate | Best-effort-Rendering + gelbes Banner statt Hard-Block/Crash (D-OP-4, AC-7); UI rendert was sie versteht |
 | T-01-12 | Denial of Service | große reporting_record-Listen | mitigate | Virtualisierung/Windowing via @tanstack/react-table (D-4.3, §8.3) |
-| T-01-SC | Tampering | npm install @tanstack/react-table | accept | Etablierte, weit verbreitete TanStack-Lib (gleiche Org wie der bereits genutzte TanStack-Router); via npmjs.com/package/@tanstack/react-table verifizierbar. Kein [ASSUMED]/[SUS]-Risiko, das einen blockierenden Checkpoint erfordert. |
 </threat_model>
 
 <verification>
