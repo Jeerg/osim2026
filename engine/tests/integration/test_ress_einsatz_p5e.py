@@ -209,9 +209,14 @@ def test_link_status_default_abl_std() -> None:
 def test_link_status_not_in_list_abl_blocked() -> None:
     """Test 4b: Ressource NICHT in m_lRessourcen → get_link_status = ABL_BLOCKED.
 
-    1:1 zur C++-Logik: wenn beleg nicht in m_lRessourcen, ist Status undefined/blocked.
+    1:1 zur C++-Logik (PAssozRessource.cpp:735-741):
+    - Wenn IsEntFunktOn=True (m_bIsEntAktiv=True) und beleg nicht in m_lRessourcen:
+      ABL_BLOCKED (kein gültiger Link-Eintrag).
+    - Wenn IsEntFunktOn=False: ABL_STD (Fallback, unabhängig von der Ressource).
+    Daher braucht dieser Test m_bIsEntAktiv=True.
     """
     sim = PSimulator()
+    sim.m_bIsEntAktiv = True  # Entscheider-Funktion an, sonst immer ABL_STD
     assoz = PAssozBeleg(sim)
     ress_in = PBetriebsmittel(sim)
     ress_out = PBetriebsmittel(sim)

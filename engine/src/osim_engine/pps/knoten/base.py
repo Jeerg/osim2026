@@ -114,6 +114,21 @@ class PDlplKnoten(PSimObj):
     # Assoziations-Helper (V4)
     # ------------------------------------------------------------------
 
+    def get_assoz_mit(self, pobj: Any) -> "PAssozRessource | None":
+        """Findet die Assoziation, die `pobj` in ihrer Ressourcen-Liste führt.
+
+        C++: `PDlplKnoten::GetAssozMit` (PDlplKnoten.cpp:703-715).
+        Iteriert `m_lAssozRess`; gibt die erste Assoziation zurück, deren
+        `is_in_list(pobj)` True ist. Liefert None falls keine gefunden.
+
+        Wird von `EPEntStrKrzRessBase.get_link_status` (EPStrategie.cpp:134-145)
+        aufgerufen, um die `PAssozBeleg` zu einem `PRessBeleg` zu finden.
+        """
+        for assoz in self.m_lAssozRess:
+            if assoz.is_in_list(pobj):
+                return assoz
+        return None
+
     def add_assoziation(self, assoz: "PAssozRessource") -> None:
         """Hängt eine PAssozRessource (z. B. PAssozBeleg) an den Knoten.
 

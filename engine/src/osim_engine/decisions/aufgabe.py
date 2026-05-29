@@ -555,9 +555,25 @@ class EPEntKrzRessourcenEinsatz(EPEntAufgabeAltExtern):
     # ------------------------------------------------------------------
 
     def fill_shadow_list(self, knoten: Any) -> None:
-        """C++: cpp:1810-... — füllt `_shadow_list` aus den Assoz-Ressourcen
-        des Knotens. P5-D als Stub; echte Implementierung in P5-E."""
+        """C++: EPEntKrzRessourcenEinsatz::FillShadowList (cpp:1810-1829).
+
+        Füllt `_shadow_list` mit allen PRessBeleg-Einträgen aus allen
+        PAssozBeleg-Assoziationen des Knotens. Das ist eine flache Sammlung:
+        für jede PAssozBeleg in knoten.m_lAssozRess werden alle m_lRessourcen-
+        Einträge in die Shadow-List übernommen (C++ AddTail in der inneren Schleife).
+
+        Kein LinkStatus-Filtering hier — das ist Aufgabe der Aufrufer
+        (z. B. GetStatus/SetStatus, die dann einzelne Einträge prüfen).
+        """
+        from osim_engine.resources.assoziation.beleg import PAssozBeleg
+
         self._shadow_list.clear()
+        if knoten is None:
+            return
+        for assoz in getattr(knoten, "m_lAssozRess", []):
+            if not isinstance(assoz, PAssozBeleg):
+                continue
+            self._shadow_list.extend(assoz.m_lRessourcen)
 
     # ------------------------------------------------------------------
     # Status-API (in P5-E aktiv)
