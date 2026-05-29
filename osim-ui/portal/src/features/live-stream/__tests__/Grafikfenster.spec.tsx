@@ -107,9 +107,11 @@ describe("Grafikfenster", () => {
     const segments = screen.getAllByTestId(/grafik-seg-/);
     expect(segments.length).toBeGreaterThan(0);
     // Mindestens ein Segment mit der erwarteten oid-Farbe
-    const hasColor = segments.some(
-      (el) => el.style.backgroundColor === "rgb(0,64,0)",
-    );
+    // jsdom normalisiert rgb(0,64,0) → "rgb(0, 64, 0)" (mit Leerzeichen)
+    const hasColor = segments.some((el) => {
+      const bg = el.style.backgroundColor.replace(/\s/g, "");
+      return bg === "rgb(0,64,0)";
+    });
     expect(hasColor).toBe(true);
   });
 

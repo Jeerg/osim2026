@@ -6,11 +6,12 @@
  * zur Engine-Seite (engine/src/osim_engine/streaming/frame.py) passen.
  */
 
-/** Die 6 Sub-Stream-Tags (SPEC §6.2 / engine STREAM_TAGS). */
+/** Die 7 Sub-Stream-Tags (SPEC §6.2 / engine STREAM_TAGS). */
 export type StreamTag =
   | "lifecycle"
   | "gantt_durchlauf"
   | "gantt_einsatz"
+  | "gantt_wartequeue"
   | "gantt_schicht"
   | "kpi_auswertung"
   | "reporting_record";
@@ -20,6 +21,7 @@ export const STREAM_TAGS: readonly StreamTag[] = [
   "lifecycle",
   "gantt_durchlauf",
   "gantt_einsatz",
+  "gantt_wartequeue",
   "gantt_schicht",
   "kpi_auswertung",
   "reporting_record",
