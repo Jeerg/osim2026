@@ -305,18 +305,47 @@ class _ASimulatorHandler(ClassHandler):
 # ----------------------------------------------------------------------
 
 
+def _set_ausloeser_oid(loader: "OtxLoader", py_ausl: Any, obj: OtxObject) -> None:
+    """Setzt die stabile Auftrag-OID auf einem PAusloeser-Objekt.
+
+    Strategie (P5D-SCOPE §4.2):
+      1. Primär: obj.oid (= m_dwObjID aus der OTX-Datei) — stabil + eindeutig.
+      2. Fallback: deterministischer laufender Index über sim.m_lAusl-Reihenfolge
+         (wird NACH dem Eintragen durch register_ausloeser gesetzt → Index zum
+         Zeitpunkt des wire-Calls stabil, da Pass 2 erst nach Pass 1 läuft).
+    Annahme offengelegt: OTX-OID ist stabiler Farbschlüssel; Index-Fallback
+    liefert korrekte Segmente, aber Farben können von OSim2004 abweichen.
+    """
+    if isinstance(getattr(obj, "oid", None), int) and obj.oid is not None:
+        py_ausl.oid = obj.oid
+    elif py_ausl.oid == -1:
+        # Fallback: Index in m_lAusl zum Zeitpunkt des wire-Aufrufs.
+        # wire läuft in Pass 2 (nach register_ausloeser in _ASimulatorHandler.wire),
+        # daher len(m_lAusl) - 1 = stabiler Index des soeben registrierten Auslösers.
+        idx = len(loader.simulator.m_lAusl)
+        if idx > 0:
+            py_ausl.oid = idx - 1
+        else:
+            py_ausl.oid = 0
+
+
 @register_handler("PAslEinzel")
 class _PAslEinzelHandler(ClassHandler):
     def instantiate(self, loader: OtxLoader, obj: OtxObject) -> Any:
         from osim_engine.pps.ausloeser.einzel import PAslEinzel
         a = PAslEinzel(loader.simulator)
         copy_scalars(a, obj, ("m_sName", "m_iBeginTermin"))
+        # Stabile Auftrag-OID: die OTX-OID des Auslösers (P5D-SCOPE §4.2).
+        if isinstance(getattr(obj, "oid", None), int):
+            a.oid = obj.oid
         return a
 
     def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
         py.m_lDlpl = resolve_ref(loader, obj, "m_lDlpl")
         for p in resolve_list(loader, obj, "m_lParameter"):
             py.m_lParameter.append(p)
+        # Fallback: falls oid noch -1, Index-Fallback setzen.
+        _set_ausloeser_oid(loader, py, obj)
 
 
 def _make_parameter_handler(py_class_name: str, scalars: tuple[str, ...]):
@@ -1322,6 +1351,9 @@ class _ACOAntHandler(ClassHandler):
         copy_scalars(a, obj, (
             "m_sName", "m_iBeginTermin", "m_iPlanZeit", "m_iRealeAuftragsdauer",
         ))
+        # Stabile Auftrag-OID (P5D-SCOPE §4.2)
+        if isinstance(getattr(obj, "oid", None), int):
+            a.oid = obj.oid
         return a
 
     def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
@@ -1418,9 +1450,13 @@ class _EPAslEntAufExternHandler(ClassHandler):
             "m_sName", "m_iBeginTermin", "m_bTaeglichWiederholen",
             "m_iSollDauer", "m_iMaxWarteZeit",
         ))
+        # Stabile Auftrag-OID (P5D-SCOPE §4.2)
+        if isinstance(getattr(obj, "oid", None), int):
+            a.oid = obj.oid
         return a
 
     def wire(self, loader: OtxLoader, py: Any, obj: OtxObject) -> None:
+        _set_ausloeser_oid(loader, py, obj)  # Fallback falls instantiate kein oid hatte
         py.m_lDlpl = resolve_ref(loader, obj, "m_lDlpl")
         for p in resolve_list(loader, obj, "m_lParameter"):
             py.m_lParameter.append(p)

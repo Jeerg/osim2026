@@ -45,6 +45,11 @@ class PAusloeser(PSimObj):
         self.m_iMaxWarteZeit: int = 0
         self.m_iSollDauer: int = 0
 
+        # Stabile Auftrag-OID (P5D-SCOPE §4.2, GRAFIKFENSTER-SPEC §3.1).
+        # Wird vom OtxLoader auf die OTX-OID gesetzt; Default -1 = kein OID.
+        # Fallback: deterministischer Index über sim.m_lAusl-Ladereihenfolge.
+        self.oid: int = -1
+
         # Protokoll-Counter
         self.m_iPtkBegAusloesungCount: int = 0
         self.m_iPtkAusloesungCount: int = 0

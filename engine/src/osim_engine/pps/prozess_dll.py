@@ -43,14 +43,49 @@ class PProzessDLL:
         self._items.insert(0, proz)
 
     def add_tail(self, proz: "PtProzess") -> None:
+        """Hängt proz ans Ende der zentralen Warteschlange.
+
+        Zusatz (P5D-SCOPE §3.2): proz in m_lPtkWartschl aller zugeordneten
+        PRessBeleg-Ressourcen eintragen (Count-Modus, 1:1 C++
+        PtkUpDateProcessQueue add=TRUE, PRessBeleg.cpp:1571-1578).
+        Nur wenn proz einen Knoten mit m_lAssozRess hat; keine RNG-/
+        Event-Berührung (T-01-14-02).
+        """
         self._items.append(proz)
+        # Per-Ressource-Warteschlange füllen
+        knoten = getattr(proz, "m_oKnoten", None)
+        if knoten is None:
+            return
+        for assoz in getattr(knoten, "m_lAssozRess", ()):
+            for ress in getattr(assoz, "m_lRessourcen", ()):
+                wq = getattr(ress, "m_lPtkWartschl", None)
+                if wq is not None and proz not in wq:
+                    wq.append(proz)
 
     def remove(self, proz: "PtProzess") -> bool:
+        """Entfernt proz aus der zentralen Warteschlange.
+
+        Entfernt proz auch aus m_lPtkWartschl aller zugeordneten PRessBeleg-
+        Ressourcen (C++: PtkUpDateProcessQueue add=FALSE bei erfolgreicher
+        Bindung / proz_wart_ausloesen, PRessBeleg.cpp:1571-1578).
+        Das ress_belegen-seitige Austragen bleibt zusätzlich in PRessBeleg.
+        """
         try:
             self._items.remove(proz)
-            return True
         except ValueError:
             return False
+        # Per-Ressource-Warteschlange bereinigen
+        knoten = getattr(proz, "m_oKnoten", None)
+        if knoten is not None:
+            for assoz in getattr(knoten, "m_lAssozRess", ()):
+                for ress in getattr(assoz, "m_lRessourcen", ()):
+                    wq = getattr(ress, "m_lPtkWartschl", None)
+                    if wq is not None:
+                        try:
+                            wq.remove(proz)
+                        except ValueError:
+                            pass
+        return True
 
     def find(self, proz: "PtProzess") -> int:
         """Index des Prozesses, oder -1."""

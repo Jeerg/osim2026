@@ -153,6 +153,13 @@ class PRessBeleg(PRessource, PAktor):
         # Listener-Liste (analog KnotenListener)
         self._listeners: list[RessBelegListener] = []
 
+        # Per-Ressource-Warteschlange (C++: m_lPtkWartschl, PRessBeleg.odh:227).
+        # Count-Modus: list[PtProzess], len() == GetKnzProzAnzahl(FALSE).
+        # Befüllung: beim add_tail in zentrale WS tragen alle Assoz-Ressourcen
+        # den Proz ein; beim ress_belegen wird er wieder ausgetragen.
+        # qcContent/Umlage (GetKnzArbeitsinhalt) bleibt out of scope (P5D-SCOPE §3.2).
+        self.m_lPtkWartschl: list["PtProzess"] = []
+
     # ------------------------------------------------------------------
     # Lifecycle — C++ PRessBeleg::OnSimBegin / OnSimReset / OnRecInit
     # ------------------------------------------------------------------
@@ -161,6 +168,7 @@ class PRessBeleg(PRessource, PAktor):
         """PRessBeleg.cpp:415-431."""
         super().on_sim_begin(sim, deep=deep)
         self.m_oProzCurrent = None
+        self.m_lPtkWartschl = []
 
     def on_sim_reset(self, deep: bool = True) -> None:
         """PRessBeleg.cpp:433-446."""
@@ -181,6 +189,21 @@ class PRessBeleg(PRessource, PAktor):
         self.m_iPtkAnfrageErfuellt = 0
         self.m_iPtkBeiAnfrageAnwesend = 0
         self.set_status(RessStatus.RS_FREI)
+        self.m_lPtkWartschl = []
+
+    # ------------------------------------------------------------------
+    # Per-Ressource-Warteschlange (C++: GetZstWartProzesse, PRessBeleg.cpp:1807-1809)
+    # ------------------------------------------------------------------
+
+    def get_zst_wart_prozesse(self) -> int:
+        """Count-Modus: Anzahl wartender Prozesse vor dieser Ressource.
+
+        C++: GetZstWartProzesse() → m_lPtkWartschl.GetKnzProzAnzahl(FALSE)
+        (PRessBeleg.cpp:1807-1809). 1:1-Äquivalent: len(m_lPtkWartschl).
+
+        qcContent/Umlage (GetKnzArbeitsinhalt) bleibt out of scope.
+        """
+        return len(self.m_lPtkWartschl)
 
     # ------------------------------------------------------------------
     # Status-Setter
@@ -227,9 +250,20 @@ class PRessBeleg(PRessource, PAktor):
         return self.m_iAnwWahrsch >= zufallswert
 
     def ress_belegen(self, proz: "PtProzess") -> None:
-        """PRessBeleg.cpp:605-616. Setzt Status, merkt Prozess, notifiziert."""
+        """PRessBeleg.cpp:605-616. Setzt Status, merkt Prozess, notifiziert.
+
+        Zusatz (P5D-SCOPE §3.2): Proz aus m_lPtkWartschl entfernen, da er die
+        Ressource jetzt belegt (C++: PtkUpDateProcessQueue add=FALSE beim
+        erfolgreichen RessBelegen, PRessBeleg.cpp:1571-1578).
+        """
         self.set_status(RessStatus.RS_BELEGT)
         self.m_oProzCurrent = proz
+
+        # Per-Ressource-Queue: Proz ist nicht mehr wartend, sondern belegt.
+        try:
+            self.m_lPtkWartschl.remove(proz)
+        except ValueError:
+            pass  # War nicht in der Warteschlange dieser Ressource (kein Fehler)
 
         self.p_simulator.bus.emit(
             "ress.belegen",
