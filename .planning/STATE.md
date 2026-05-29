@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-29T11:23:00.000Z"
+last_updated: "2026-05-29T11:09:32.000Z"
 current_phase: 01-live-viewer-bridge
-current_plan: "01-08"
+current_plan: "01-09"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 10
-  completed_plans: 8
-  percent: 80
+  completed_plans: 9
+  percent: 90
 decisions:
   - "01-01: Frame als @dataclass(slots=True) statt Pydantic (D-1.4)"
   - "01-01: geteilter SeqCounter-Objekt (streaming/seq.py) für globale monotone seq"
@@ -35,7 +35,10 @@ decisions:
   - "01-08: run_otx gibt RUN_DIR= FRUEH aus (vor Pacing-Schleife, geflusht); RunService liest ohne blockierendes wait — paced Lauf laeuft live weiter"
   - "01-08: Run-Ownership via run_meta.json + tenant-praefixierter Pfad; KEINE DB-Tabelle/Migration; ReadFn-Vertrag {text,next_offset} fuer 01-09; periods-Cap 24"
   - "01-08: osim-ui-venv psycopg-Treiber fehlt + stale uv.sources -> 4 Endpoint-Tests ehrlich geskippt (needs_app_import), Logik gruen via Service-Pfad (deferred-items.md)"
+  - "01-09: Topbar-Nav als neues zentriertes <nav> (3. Flex-Kind) zwischen Wordmark + gelockter 3FLS-Rechts-Gruppe; Links Live/Bibliothek, aktiv via activeProps font-weight+Unterstrich (nicht nur Farbe), Token-Focus-Ring"
+  - "01-09: Modell-Picker als natives <select> (nicht Radix) fuer E2E-Robustheit; KEIN E2E--Filter im /live-Picker (anders als models/index); read via useMemo run-getrieben (noopRead nur run-loser Default)"
+  - "01-09: Store-Reset bei Run-(Re-)Start gegen Frame-Vermischung (T-LIVE-FE-03); fetchRunMeta best-effort, coverage_ratio<1 als Hinweis gesurfaced; data-testids fuer 01-10-E2E exponiert"
 last_session:
-  stopped_at: "Completed 01-08-PLAN.md (gap_closure: run+transport); engine 5/5 + osim-ui 10 service-tests gruen, 4 endpoint-tests host-env-geskippt"
-  resume_file: ".planning/phases/01-live-viewer-bridge/01-09-PLAN.md"
+  stopped_at: "Completed 01-09-PLAN.md (gap_closure: FE-Wiring+Nav); 34/34 live-stream-Tests gruen, 3 touched files lint+tsc-clean, nav-link-live + live-model-select/live-start-run/live-active-run-id fuer 01-10-E2E bereit"
+  resume_file: ".planning/phases/01-live-viewer-bridge/01-10-PLAN.md"
 ---
