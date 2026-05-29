@@ -1,8 +1,8 @@
 ---
 phase: 01-live-viewer-bridge
 verified: 2026-05-29T10:55:00Z
-status: gaps_found
-score: 9/9 original-scope must-have truth-groups verified; scope EXPANDED 2026-05-29 (user decision) — end-to-end run+transport+nav pulled into phase, see Scope Expansion gaps
+status: human_needed
+score: original scope verified; scope-expansion gaps GAP-1..GAP-5 closed in code (3 gap plans 01-08/09/10); final end-to-end proof is stack-gated UAT (dev-up.sh + browser)
 overrides_applied: 0
 human_verification:
   - test: "1000-Event-Demo live im Web-Portal (http://localhost:3002/live) anzeigen — Gantt + KPI, Latenz < 1s"
@@ -202,3 +202,25 @@ Damit werden O-4 / AC-3 / AC-6 von „nicht vorführbar" zu echt verifizierbar. 
 _Verified: 2026-05-29T10:55:00Z_
 _Verifier: Claude (gsd-verifier)_
 _Scope expansion recorded: 2026-05-29 (user decision — full end-to-end slice)_
+
+---
+
+## Gap-Closure Execution Result (2026-05-29)
+
+Die 3 Gap-Plans (01-08 Backend Run+Transport, 01-09 Frontend Nav+Wiring, 01-10 E2E) sind ausgeführt — alle 10 Phase-Pläne haben SUMMARY. Status der 5 Gaps **im Code geschlossen**:
+
+| Gap | Im Code geliefert | Host-verifiziert | Stack-gated (UAT) |
+|-----|-------------------|------------------|-------------------|
+| GAP-1 Nav „Live" | ✓ zentriertes `<nav>` in AuthenticatedLayout | ✓ vitest | — |
+| GAP-2 Backend-Run (Subprozess) | ✓ `run_otx` (paced, früh RUN_DIR) + `RunService` (Popen) | ✓ run_otx 5/5 (engine) + 10 Service-Tests | Endpoint-Integration |
+| GAP-3 Backend-Transport | ✓ `POST /runs`, `GET /runs/{id}/stream?offset=`, `GET /runs/{id}/meta` | teilw. (Service-Layer) | Endpoint-Tests brauchen Stack |
+| GAP-4 Frontend-Wiring | ✓ `/live` Modell-Picker→Lauf-Start→HTTP-ReadFn (noopRead ersetzt) | ✓ vitest 45 passed | Live-Render |
+| GAP-5 E2E entpinnt | ✓ paced-run-Flow, deterministische IDs, AC-3/4/5-Assertions | static gates (tsc/eslint) | Playwright-Lauf braucht Stack |
+
+**Host-Test-Stand:** Engine 68 passed +1 xpassed; Frontend 45 passed — keine Regression. Listener-only durchgehend gewahrt.
+
+**Infra-Befund (blockt Host-seitige Backend-/E2E-Verifikation):** Der osim-ui-Host-venv kann die FastAPI-App nicht importieren — fehlender `psycopg`-Treiber + stale `[tool.uv.sources]`-Pfad (`deferred-items.md`). Innerhalb des Dev-Stacks (Container via `bash scripts/dev-up.sh`) ist das nicht betroffen. → Endpoint-Tests (GAP-2/3) + Playwright-E2E (GAP-5) + Browser-UAT sind erst **mit laufendem Stack** verifizierbar.
+
+**Status human_needed:** Der End-to-End-Pfad ist code-vollständig (Transport existiert jetzt, anders als beim ersten Verifier-Lauf), aber der finale Beweis (AC-3/AC-5/AC-6 live + Endpoint-Integration + AC-9-Parity) ist stack-/browser-gebunden — siehe `UAT.md` + `01-HUMAN-UAT.md`.
+
+_Gap-closure executed: 2026-05-29 (Claude, execute-phase)_

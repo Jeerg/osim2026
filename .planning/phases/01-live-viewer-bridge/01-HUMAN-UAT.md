@@ -15,9 +15,9 @@ updated: "2026-05-29"
 ## Tests
 
 ### 1. AC-3 — UI Tail-Pickup < 1s
-expected: Neue Zeilen in stream.jsonl erscheinen in der `/live`-UI innerhalb < 1s.
+expected: Modell in `/live` wählen → „Lauf starten" → neue Gantt-Zeilen erscheinen < 1s.
 result: [pending]
-blocker: M1-Transport-Lücke — `/live` liest aktuell über `noopRead`; es gibt keine Datei-Read-Brücke Portal↔runs/<id>/stream.jsonl. HTTP/WS-Transport ist SPEC §4 explizit M2. Engine-Seite + UI-Komponenten sind isoliert bewiesen; das echte Live-Wiring braucht den M2-Transport oder einen lokalen File-Read-Shim.
+note: Transport-Lücke GESCHLOSSEN (Gap-Closure 2026-05-29) — `/live` pollt jetzt `GET /api/v1/runs/{id}/stream`, der Lauf läuft paced als Backend-Subprozess. Jetzt verifizierbar, sobald der Stack läuft (`bash scripts/dev-up.sh`). Der Playwright-E2E (`live-stream.spec.ts`) deckt AC-3/AC-4/AC-5 ab — gegen den Stack ausführen: `cd osim-ui/portal && npx playwright test tests/live-stream.spec.ts`.
 
 ### 2. AC-5 — Crash-Robustheit / Offset-Restart
 expected: UI mitten im Stream killen, neu starten → resumed vom Byte-Offset; Engine schreibt unterbrechungsfrei weiter.
