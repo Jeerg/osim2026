@@ -37,6 +37,9 @@ runs/
 engine/tests/fixtures/large/
 engine/experiments/
 experiments/
+# Diagnose-Sonden sind Teil des Planungs-Artefakts — explizit einschliessen
+!engine/experiments/diag_bosch2.py
+!engine/experiments/diag_ress_einsatz.py
 
 # Engine — osim2004-trace Build-Output
 engine/osim2004-trace/bin/
