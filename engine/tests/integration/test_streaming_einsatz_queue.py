@@ -133,11 +133,11 @@ def test_loader_sets_ausloeser_oid() -> None:
     from osim_engine.io.otx_loader import OtxLoader
     from osim_engine.io.otx_reader import parse_otx_file
 
-    bosch_path = _bosch2_otx_path()
-    if bosch_path is None:
+    otx_path = _embb_pre_run_path() or _bosch2_otx_path()
+    if otx_path is None:
         pytest.skip("OTX-Datei nicht gefunden")
 
-    otx = parse_otx_file(str(bosch_path))
+    otx = parse_otx_file(str(otx_path))
     loader = OtxLoader()
     result = loader.load(otx)
     sim = result.simulator
@@ -199,7 +199,6 @@ def test_get_zst_wart_prozesse_is_pure_count() -> None:
 def _bosch2_otx_path():
     """Gibt den Pfad zur Bosch2_wechseln-OTX-Datei zurück (oder None)."""
     from pathlib import Path
-    # Suche an bekannten Stellen
     candidates = [
         Path(__file__).resolve().parents[3] / "data" / "Bosch2_wechseln-azeitsim.otx",
         Path(__file__).resolve().parents[2] / "experiments" / ".work" / "Bosch2_wechseln-azeitsim.otx",
@@ -210,17 +209,34 @@ def _bosch2_otx_path():
     return None
 
 
-def _run_bosch2_streaming(tmp_path):
-    """Führt einen Bosch2_wechseln-Lauf aus und gibt (stream_lines, meta) zurück."""
-    import json
+def _embb_pre_run_path():
+    """Gibt den Pfad zur embb_pre_run.otx-Datei zurück (oder None).
+
+    Dieses Modell hat echte Ressourcen-Belegung (eaBelegen-Pfad) und ist
+    als Integrationstest-Fixture geeignet. Bosch2 hat 100% eaKeineBelegung
+    (01-13 Befund) und ist für gantt_einsatz-Tests ungeeignet.
+    """
     from pathlib import Path
+    p = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "otx" / "embb_pre_run.otx"
+    if p.exists():
+        return p
+    return None
+
+
+def _run_streaming(tmp_path, otx_path=None, periods: int = 3):
+    """Führt einen Lauf aus und gibt (stream_lines, meta) zurück.
+
+    Bevorzugt embb_pre_run.otx (hat echte Ressourcen-Belegung).
+    """
+    import json
     from osim_engine.streaming.run_otx import run_otx
 
-    bosch_path = _bosch2_otx_path()
-    if bosch_path is None:
+    if otx_path is None:
+        otx_path = _embb_pre_run_path()
+    if otx_path is None:
         return None, None
 
-    run_path = run_otx(str(bosch_path), str(tmp_path), periods=1)
+    run_path = run_otx(str(otx_path), str(tmp_path), periods=periods)
 
     stream_path = run_path / "stream.jsonl"
     meta_path = run_path / "meta.json"
@@ -235,6 +251,12 @@ def _run_bosch2_streaming(tmp_path):
     ]
     meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
     return lines, meta
+
+
+# Alias für Rückwärtskompatibilität der Test-Helpers
+def _run_bosch2_streaming(tmp_path):
+    """Wrapper — embb_pre_run.otx ist das geeignete Modell (Bosch2 = 100% eaKeineBelegung)."""
+    return _run_streaming(tmp_path)
 
 
 def test_gantt_einsatz_nonempty_with_auftrag_oid(tmp_path) -> None:

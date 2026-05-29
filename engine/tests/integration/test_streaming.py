@@ -52,11 +52,13 @@ def test_frame_serialize_includes_optionals_when_set() -> None:
     assert parsed["meta_event"] == "EvtBearbeitEnde"
 
 
-def test_stream_tags_are_the_six_locked_substreams() -> None:
-    assert STREAM_TAGS == (
-        "lifecycle", "gantt_durchlauf", "gantt_einsatz",
+def test_stream_tags_contain_all_required_substreams() -> None:
+    """STREAM_TAGS enthält alle Sub-Streams inkl. gantt_wartequeue (neu in 01-14)."""
+    required = (
+        "lifecycle", "gantt_durchlauf", "gantt_einsatz", "gantt_wartequeue",
         "gantt_schicht", "kpi_auswertung", "reporting_record",
     )
+    assert STREAM_TAGS == required
 
 
 # ======================================================================

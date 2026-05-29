@@ -1,0 +1,2 @@
+{"t":3600,"stream":"gantt_wartequeue","seq":5,"v":{"ressource_id":"BM-Drehe-01","wartende":1,"t":3600}}
+{"t":10800,"stream":"gantt_wartequeue","seq":80,"v":{"ressource_id":"BM-Drehe-01","wartende":0,"t":10800}}

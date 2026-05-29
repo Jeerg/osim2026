@@ -115,6 +115,14 @@ def build_streams_status() -> dict[str, dict[str, Any]]:
             "qcContent/Umlage (GetKnzArbeitsinhalt) und Einsatz-/Rüst-/"
             "Stillstand-Differenzierung bleiben deferred.",
         ),
+        "gantt_wartequeue": _entry(
+            "full", [],
+            "Per-Ressource Warteschlangen-Länge aus m_lPtkWartschl "
+            "(Count-Modus, GetZstWartProzesse, PRessBeleg.cpp:1807-1809, "
+            "01-14). Treppenfunktion-Sampling bei jeder Änderung (SPEC §1.6). "
+            "qcContent/Umlage (GetKnzArbeitsinhalt) und Quali-Stream bleiben "
+            "deferred (out of scope).",
+        ),
         "gantt_schicht": _entry(
             "partial", ["P5-M"],
             "Schicht-/Arbeitszeit-Modell (azeit/-Slice) ist heute Skelett "

@@ -17,7 +17,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Feste Reihenfolge der sechs Sub-Stream-Listener-Module (SPEC §7.1).
+# Feste Reihenfolge der Sub-Stream-Listener-Module (SPEC §7.1).
+# wartequeue (gantt_wartequeue) wurde in 01-14 hinzugefügt.
 _LISTENER_MODULES: tuple[str, ...] = (
     "lifecycle",
     "gantt",
@@ -25,6 +26,7 @@ _LISTENER_MODULES: tuple[str, ...] = (
     "einsatz",
     "schicht",
     "reporting",
+    "wartequeue",
 )
 
 

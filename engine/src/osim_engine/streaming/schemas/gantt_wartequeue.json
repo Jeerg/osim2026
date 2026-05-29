@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "osim-engine:streaming/gantt_wartequeue.json",
+  "title": "gantt_wartequeue frame",
+  "description": "Sub-Stream gantt_wartequeue (GRAFIKFENSTER-SPEC §3.2): per-Ressource Warteschlangen-Länge als Treppenfunktion. Count-Modus (GetZstWartProzesse), 1:1 zu PRessBeleg.cpp:1807-1809.",
+  "type": "object",
+  "required": ["t", "stream", "seq", "v"],
+  "properties": {
+    "t": { "type": "integer" },
+    "stream": { "const": "gantt_wartequeue" },
+    "seq": { "type": "integer" },
+    "wall_t": { "type": "string" },
+    "meta_event": { "type": "string" },
+    "v": {
+      "type": "object",
+      "required": ["ressource_id", "wartende", "t"],
+      "properties": {
+        "ressource_id": { "type": ["string", "null"] },
+        "wartende": { "type": "integer", "minimum": 0 },
+        "t": { "type": "integer" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

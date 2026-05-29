@@ -12,11 +12,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-# Die sechs gelockten Sub-Stream-Tags (SPEC §6.2). Reihenfolge = SPEC.
+# Sub-Stream-Tags (SPEC §6.2 + 01-14-Erweiterung). Reihenfolge = SPEC.
+# gantt_wartequeue wurde in 01-14 als neuer Full-Stream hinzugefügt.
 STREAM_TAGS: tuple[str, ...] = (
     "lifecycle",
     "gantt_durchlauf",
     "gantt_einsatz",
+    "gantt_wartequeue",
     "gantt_schicht",
     "kpi_auswertung",
     "reporting_record",

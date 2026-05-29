@@ -53,10 +53,13 @@ def _read_jsonl(path: Path) -> list[dict]:
 # ======================================================================
 
 
-def test_exactly_six_schemas_one_per_substream() -> None:
-    """O-5 / SPEC §6.1: genau ein JSON-Schema je Sub-Stream-Tag."""
+def test_exactly_one_schema_per_substream() -> None:
+    """O-5 / SPEC §6.1: genau ein JSON-Schema je Sub-Stream-Tag.
+
+    Ab 01-14: 7 Streams (gantt_wartequeue neu hinzugefügt).
+    """
     files = sorted(p.name for p in _SCHEMA_DIR.glob("*.json"))
-    assert len(files) == 6, f"erwarte 6 Schemas, gefunden: {files}"
+    assert len(files) == len(STREAM_TAGS), f"erwarte {len(STREAM_TAGS)} Schemas, gefunden: {files}"
     assert files == sorted(f"{tag}.json" for tag in STREAM_TAGS)
 
 

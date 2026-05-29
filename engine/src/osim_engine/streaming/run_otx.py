@@ -96,8 +96,9 @@ def _drive_run(
     writer.close()
 
     # Finale meta.json: coverage_ratio (D-2.1/D-2.2 — surface coverage, still
-    # stream what runs) + periods + pace + finaler drop_count. write_meta ist
-    # idempotent (überschreibt die initiale meta.json im selben run-dir).
+    # stream what runs) + periods + pace + finaler drop_count + streams-Status.
+    # write_meta ist idempotent (überschreibt die initiale meta.json im selben run-dir).
+    from osim_engine.streaming.partial import build_streams_status
     write_meta(
         run_path,
         run_id=run_id,
@@ -107,6 +108,7 @@ def _drive_run(
             "pace": pace,
         },
         drop_count=writer.drop_count,
+        streams=build_streams_status(),
     )
 
     return run_path
