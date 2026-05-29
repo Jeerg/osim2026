@@ -12,7 +12,7 @@
  */
 
 /** Zeiteinhein-Bezeichner für Achsen-Labels. */
-export type TimeUnit = "h" | "d" | "s";
+export type TimeUnit = "d" | "h" | "m" | "s";
 
 /** Ergebnis der Achsen-Auto-Skalierung. */
 export interface AxisScale {
@@ -36,6 +36,8 @@ export interface AxisScale {
  * @param spanSeconds  Perioden-Länge end-begin in Sekunden.
  */
 export function timeAxisScale(spanSeconds: number): AxisScale {
+  // Kanonische OSim-Perioden 1:1 (OGfxRow.cpp:1265-1303) — exakte Treue, wenn
+  // genau eine Standard-Periode dargestellt wird.
   switch (spanSeconds) {
     case 86400:
       return { intervals: 24, unit: "h" };
@@ -45,9 +47,17 @@ export function timeAxisScale(spanSeconds: number): AxisScale {
       return { intervals: 30, unit: "d" };
     case 2678400:
       return { intervals: 31, unit: "d" };
-    default:
-      return { intervals: 10, unit: "s" };
   }
+  // Freies / mehr-Perioden-Fenster (Port-Erweiterung): Einheit nach
+  // Größenordnung wählen, sonst zeigt die Achse unleserliche rohe Sekunden.
+  // 8 Intervalle (OGfxRow-Default-Nähe), Einheit = größte sinnvolle.
+  if (!Number.isFinite(spanSeconds) || spanSeconds <= 0) {
+    return { intervals: 8, unit: "s" };
+  }
+  if (spanSeconds >= 2 * 86400) return { intervals: 8, unit: "d" };
+  if (spanSeconds >= 2 * 3600) return { intervals: 8, unit: "h" };
+  if (spanSeconds >= 2 * 60) return { intervals: 8, unit: "m" };
+  return { intervals: 8, unit: "s" };
 }
 
 /**

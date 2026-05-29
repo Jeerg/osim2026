@@ -74,10 +74,16 @@ describe("timeAxisScale", () => {
     expect(timeAxisScale(2678400)).toEqual({ intervals: 31, unit: "d" });
   });
 
-  it("Test 3e: sonstige Spanne → {intervals:10, unit:'s'}", () => {
-    expect(timeAxisScale(3600)).toEqual({ intervals: 10, unit: "s" });
-    expect(timeAxisScale(0)).toEqual({ intervals: 10, unit: "s" });
-    expect(timeAxisScale(1000000)).toEqual({ intervals: 10, unit: "s" });
+  it("Test 3e: freie Spanne → Einheit nach Größenordnung (lesbare Achse statt roher Sekunden)", () => {
+    // Browser-UAT-Fix: ein dynamisches Mehr-Perioden-Fenster (z.B. ~59 Tage)
+    // darf nicht in rohen Sekunden-Labels enden. Einheit wird nach Magnitude
+    // gewählt; 8 Intervalle (OGfxRow-Default-Nähe).
+    expect(timeAxisScale(0)).toEqual({ intervals: 8, unit: "s" });
+    expect(timeAxisScale(90)).toEqual({ intervals: 8, unit: "s" }); // < 2min
+    expect(timeAxisScale(3600)).toEqual({ intervals: 8, unit: "m" }); // 1h → Minuten
+    expect(timeAxisScale(7200)).toEqual({ intervals: 8, unit: "h" }); // ≥ 2h → Stunden
+    expect(timeAxisScale(1000000)).toEqual({ intervals: 8, unit: "d" }); // ~11.5d → Tage
+    expect(timeAxisScale(5104785)).toEqual({ intervals: 8, unit: "d" }); // ~59d Bosch2-Lauf
   });
 });
 

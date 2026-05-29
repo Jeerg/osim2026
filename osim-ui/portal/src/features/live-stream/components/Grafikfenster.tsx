@@ -35,10 +35,12 @@ import { time2client, timeAxisScale, GRAFIKFENSTER_MODES } from "./grafikfenster
 const ROW_HEIGHT_PX = 24;
 /** Höhe eines Belegungs-Segments in Pixel (analog BAR_HEIGHT_PX in GanttRow). */
 const SEG_HEIGHT_PX = 16;
-/** Breite der linken Ressourcen-Leiste in Pixel (§2.1: 15 * charWidth ≈ 120px). */
-const LEFT_BAR_WIDTH_PX = 120;
-/** Höhe der Zeit-Achsen-Leiste am Fuß. */
-const AXIS_HEIGHT_PX = 20;
+/** Breite der linken Ressourcen-Leiste in Pixel (§2.1: 15 * charWidth). Die
+ * OSim-Ressourcennamen (z.B. "WAR P10 (Warein.)", Person + Schicht-Suffix) sind
+ * lang und rechtsbündig — 120px schnitten sie ab; 210px gibt ihnen Platz. */
+const LEFT_BAR_WIDTH_PX = 210;
+/** Höhe der Zeit-Achsen-Leiste am Fuß (mit lesbaren d/h/m-Labels). */
+const AXIS_HEIGHT_PX = 28;
 /** Modus-Schlüssel-Typ. */
 export type GrafikModus = "belegung" | "warteschlangen" | "qualifikation";
 
@@ -316,31 +318,36 @@ function ZeitachsBar({
 }): React.ReactElement {
   const { intervals, unit } = timeAxisScale(periodEnd - periodBegin);
   const span = periodEnd - periodBegin;
+  // Einheits-Faktor (OGfxRow.cpp:1619-1625): d=86400, h=3600, m=60, s=1.
+  const fakt = unit === "d" ? 86400 : unit === "h" ? 3600 : unit === "m" ? 60 : 1;
 
   const ticks = Array.from({ length: intervals + 1 }, (_, i) => {
     const t = periodBegin + (i / intervals) * span;
     const x = time2client(t, periodBegin, periodEnd, widthPx);
-    const value = periodBegin / (unit === "h" ? 3600 : unit === "d" ? 86400 : 1) + (i / intervals) * (span / (unit === "h" ? 3600 : unit === "d" ? 86400 : 1));
+    const value = periodBegin / fakt + (i / intervals) * (span / fakt);
     const label = `${Math.round(value)}${unit}`;
     return { x, label };
   });
 
   return (
     <div
-      className="relative border-t border-border"
+      className="relative border-t border-border bg-muted/30"
       style={{ height: AXIS_HEIGHT_PX, width: widthPx }}
       aria-label="Zeitachse"
     >
       {ticks.map((tick, i) => (
         <React.Fragment key={i}>
           <div
-            className="absolute top-0 border-l border-dashed border-muted-foreground/40"
+            className="absolute top-0 border-l border-dashed border-muted-foreground/50"
             style={{ left: tick.x, height: AXIS_HEIGHT_PX }}
             aria-hidden="true"
           />
           <span
-            className="absolute top-1 text-[10px] text-muted-foreground"
-            style={{ left: tick.x + 2 }}
+            className="absolute top-1 text-[11px] font-medium tabular-nums text-foreground"
+            style={{
+              left: i === intervals ? undefined : tick.x + 3,
+              right: i === intervals ? 2 : undefined,
+            }}
           >
             {tick.label}
           </span>
@@ -431,6 +438,23 @@ export function Grafikfenster({
     [queueSamples],
   );
 
+  // Responsive Breite: das Grid füllt die verfügbare Fläche (OSim OGfxCtrl nutzt
+  // die volle Control-Breite, nicht eine feste 800px-Spalte). Per ResizeObserver
+  // gemessen; die Prop widthPx ist nur Startwert/Fallback (z.B. in JSDOM-Tests
+  // ohne ResizeObserver).
+  const gridAreaRef = React.useRef<HTMLDivElement>(null);
+  const [effWidth, setEffWidth] = React.useState<number>(widthPx);
+  React.useEffect(() => {
+    const el = gridAreaRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (typeof w === "number" && w > 0) setEffWidth(Math.floor(w));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Aktuelle Zeit = max t aller relevanten Frames (§2.6)
   const maxT = React.useMemo(() => {
     let t = periodBegin;
@@ -440,7 +464,7 @@ export function Grafikfenster({
     return t;
   }, [einsatzFrames, queueFrames, periodBegin]);
 
-  const currentTimePx = time2client(maxT, periodBegin, periodEnd, widthPx);
+  const currentTimePx = time2client(maxT, periodBegin, periodEnd, effWidth);
 
   // Modus-Name für Top-Bar
   const modeObj = GRAFIKFENSTER_MODES.find((m) => m.key === modus);
@@ -471,9 +495,10 @@ export function Grafikfenster({
           {ressourcen.map((rid) => (
             <div
               key={rid}
-              className="flex items-center justify-end border-b border-dashed border-border px-2 text-right text-xs text-foreground"
+              className="flex items-center justify-end overflow-hidden whitespace-nowrap border-b border-dashed border-border px-2 text-right text-xs text-foreground"
               style={{ height: ROW_HEIGHT_PX }}
               aria-label={rid}
+              title={rid}
             >
               {rid}
             </div>
@@ -481,7 +506,11 @@ export function Grafikfenster({
         </div>
 
         {/* Grid-Bereich */}
-        <div className="relative flex-1 overflow-hidden" style={{ minWidth: 0 }}>
+        <div
+          ref={gridAreaRef}
+          className="relative flex-1 overflow-hidden"
+          style={{ minWidth: 0 }}
+        >
           {/* Qualifikation-Gated-Hinweis (§3.3, T-01-15-02) */}
           {modus === "qualifikation" && (
             <div
@@ -498,16 +527,16 @@ export function Grafikfenster({
 
           {/* Ressourcen-Zeilen (Belegung / Warteschlangen) */}
           {modus !== "qualifikation" && (
-            <div style={{ width: widthPx, position: "relative" }}>
+            <div style={{ width: effWidth, position: "relative" }}>
               {/* Gepunktete vertikale Rasterlinien (§2.4) */}
               {(() => {
                 const { intervals } = timeAxisScale(periodEnd - periodBegin);
                 return Array.from({ length: intervals + 1 }, (_, i) => {
-                  const x = (i / intervals) * widthPx;
+                  const x = (i / intervals) * effWidth;
                   return (
                     <div
                       key={i}
-                      className="absolute top-0 border-l border-dashed border-muted-foreground/20"
+                      className="absolute top-0 border-l border-dashed border-muted-foreground/30"
                       style={{ left: x, bottom: 0 }}
                       aria-hidden="true"
                     />
@@ -536,7 +565,7 @@ export function Grafikfenster({
                     segments={segments}
                     periodBegin={periodBegin}
                     periodEnd={periodEnd}
-                    widthPx={widthPx}
+                    widthPx={effWidth}
                   />
                 ))}
 
@@ -548,7 +577,7 @@ export function Grafikfenster({
                     samples={queueSamples}
                     periodBegin={periodBegin}
                     periodEnd={periodEnd}
-                    widthPx={widthPx}
+                    widthPx={effWidth}
                     maxWartende={maxWartende}
                   />
                 ))}
@@ -560,7 +589,7 @@ export function Grafikfenster({
             <ZeitachsBar
               periodBegin={periodBegin}
               periodEnd={periodEnd}
-              widthPx={widthPx}
+              widthPx={effWidth}
               currentTimePx={currentTimePx}
             />
           )}
