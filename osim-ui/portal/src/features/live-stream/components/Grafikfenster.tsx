@@ -367,8 +367,8 @@ const EMPTY_FRAMES: Frame[] = [];
 export function Grafikfenster({
   modus,
   widthPx,
-  periodBegin,
-  periodEnd,
+  periodBegin: periodBeginProp,
+  periodEnd: periodEndProp,
   ressourcenFromModel,
 }: GrafikfensterProps): React.ReactElement {
   const einsatzFrames = useLiveStreamStore(
@@ -377,6 +377,33 @@ export function Grafikfenster({
   const queueFrames = useLiveStreamStore(
     (s) => s.byStream["gantt_wartequeue"] ?? EMPTY_FRAMES,
   );
+
+  // Zeitfenster DYNAMISCH aus den vorhandenen Frames ableiten — NICHT hart auf
+  // 1 Tag (Browser-UAT-Bug: ein 4-Perioden-Bosch2-Lauf spannt ~59 Tage; das
+  // hart verdrahtete 0..86400-Fenster schob alle Segmente + das Queue-Gebirge
+  // rechts off-screen → "während dem Lauf keinerlei Grafik"). Solange keine
+  // Frames da sind, gelten die übergebenen Props als Default (leere Lanes).
+  const { periodBegin, periodEnd } = React.useMemo(() => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    const consider = (n: unknown): void => {
+      if (typeof n === "number" && Number.isFinite(n)) {
+        if (n < lo) lo = n;
+        if (n > hi) hi = n;
+      }
+    };
+    for (const f of einsatzFrames) {
+      const v = f.v as { start_time?: number; end_time?: number };
+      consider(v.start_time);
+      consider(v.end_time);
+      consider(f.t);
+    }
+    for (const f of queueFrames) consider(f.t);
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) {
+      return { periodBegin: periodBeginProp, periodEnd: periodEndProp };
+    }
+    return { periodBegin: lo, periodEnd: hi };
+  }, [einsatzFrames, queueFrames, periodBeginProp, periodEndProp]);
 
   const ressourcen = React.useMemo(
     () => extractRessourcen(einsatzFrames, queueFrames, ressourcenFromModel),
