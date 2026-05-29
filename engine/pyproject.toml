@@ -30,6 +30,10 @@ packages = ["src/osim_engine"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "bench: Latenz-/Overhead-Benchmarks (manuell/CI-opt-in)",
+    "slow: lang laufende Tests",
+]
 
 [tool.ruff]
 line-length = 100
