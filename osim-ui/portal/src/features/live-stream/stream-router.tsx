@@ -1,19 +1,23 @@
 /**
- * stream-router — multiplext den aktiven Stream-Tag auf seine Render-Komponente
- * (Plan 01-05 Task 1, O-3 / AC-4 / SPEC §8.1).
+ * stream-router — multiplext einen OSim-Viewer-Tab auf seine Render-Komponente
+ * (Plan 01-05 Task 1 → GAP-CLOSURE 01-12 Task 2, O-2 / O-3 / AC-4 / SPEC §8.1).
  *
- * Der `StreamRouter` liest die Frames des angegebenen (bzw. des aktiven)
- * Stream-Tags aus dem Live-Stream-Store (D-4.2) und rendert GENAU EINEN Stream
- * (Isolation, AC-4):
+ * Der `StreamRouter` bekommt einen {@link ViewerTab} aus der viewer-config
+ * (echter OSim-Viewer statt rohem Stream-Tag), liest die Frames seines
+ * source-Tags aus dem Live-Stream-Store (D-4.2) und rendert GENAU EINEN Viewer
+ * (Stream-Isolation, AC-4):
  *
- *   - gantt_durchlauf  → pro Auftrag eine GanttRow (Geometrie via GObject)
- *   - kpi_auswertung   → ein KpiTile-Grid (eine Kachel pro kind, Trend N/N-1)
- *   - reporting_record → eine virtualisierte RecordTable (Filter/Sort)
- *   - gantt_einsatz / gantt_schicht → einfache Status-Liste (partial-Streams)
- *   - lifecycle        → einfache Status-Liste der Lifecycle-Events
+ *   - Durchlaufplan (gantt_durchlauf)        → DurchlaufplanGantt (GanttRow/GObject)
+ *   - Einsatzzeit (gantt_einsatz)            → StatusList (partial-Stream)
+ *   - Schicht (gantt_schicht)                → SchichtTable
+ *   - Auswertungs-Tab (kpi_auswertung+kind)  → AuswertungTable, gefiltert auf
+ *                                              die Frames dieses kinds
  *
- * Über jedem Panel rendert der Router den {@link PartialBanner} des Tags
+ * Über jedem Panel rendert der Router den {@link PartialBanner} des source-Tags
  * (partial-Status + Schema-Mismatch, D-2.2 / D-OP-4 / AC-7).
+ *
+ * Der generische KpiTile-Grid-Pfad der Auswertungen entfällt (durch die echten
+ * OSim-Tabellen ersetzt).
  *
  * Styling strikt über Design-Tokens (3FLS-Guide), keine ad-hoc Hex-Werte.
  */
@@ -21,151 +25,67 @@
 import * as React from "react";
 import { useLiveStreamStore } from "./store";
 import type { Frame, StreamTag } from "./types";
-import { GanttRow } from "./components/GanttRow";
-import { KpiTile } from "./components/KpiTile";
-import { RecordTable } from "./components/RecordTable";
+import type { ViewerTab } from "./viewer-config";
+import { DurchlaufplanGantt } from "./components/DurchlaufplanGantt";
+import { AuswertungTable } from "./components/AuswertungTable";
+import { SchichtTable } from "./components/SchichtTable";
 import { PartialBanner } from "./components/PartialBanner";
 
-/** Pixel pro Sim-Sekunde für die Gantt-Zeit-Achse (analog /live-Route). */
-const PX_PER_SECOND = 0.01;
-
 export interface StreamRouterProps {
-  /**
-   * Zu rendernder Stream-Tag. Default: der aktive Tag aus dem Store
-   * (Tab-Auswahl). Explizit gesetzt für Tests/embeddings.
-   */
-  tag?: StreamTag;
+  /** Zu rendernder OSim-Viewer-Tab (aus viewer-config). */
+  tab: ViewerTab;
 }
 
-export function StreamRouter({ tag }: StreamRouterProps): React.ReactElement {
-  const activeStream = useLiveStreamStore((s) => s.activeStream);
+export function StreamRouter({ tab }: StreamRouterProps): React.ReactElement {
   const byStream = useLiveStreamStore((s) => s.byStream);
-  const effectiveTag = tag ?? activeStream;
-
-  if (effectiveTag === null) {
-    return (
-      <p className="p-4 text-sm text-muted-foreground" data-testid="stream-router-empty">
-        Kein Stream ausgewählt.
-      </p>
-    );
-  }
-
-  const frames = byStream[effectiveTag] ?? [];
+  const frames = byStream[tab.source] ?? [];
 
   return (
-    <div className="flex flex-col gap-3" data-testid={`stream-router-${effectiveTag}`}>
-      <PartialBanner tag={effectiveTag} />
-      <StreamPanel tag={effectiveTag} frames={frames} />
+    <div className="flex flex-col gap-3" data-testid={`stream-router-${tab.id}`}>
+      <PartialBanner tag={tab.source} />
+      <ViewerPanel tab={tab} frames={frames} />
     </div>
   );
 }
 
-function StreamPanel({
-  tag,
+function ViewerPanel({
+  tab,
   frames,
 }: {
-  tag: StreamTag;
+  tab: ViewerTab;
   frames: Frame[];
 }): React.ReactElement {
-  switch (tag) {
+  // Auswertungs-Tab: die kpi_auswertung-Frames auf das kind dieses Tabs filtern
+  // (Isolation, AC-4) und an die kind-spezifische AuswertungTable reichen.
+  if (tab.source === "kpi_auswertung" && tab.kind) {
+    const kindFrames = frames.filter(
+      (f) => (f.v as { kind?: string }).kind === tab.kind,
+    );
+    return <AuswertungTable kind={tab.kind} frames={kindFrames} />;
+  }
+
+  switch (tab.source) {
     case "gantt_durchlauf":
-      return <GanttPanel frames={frames} />;
-    case "kpi_auswertung":
-      return <KpiPanel frames={frames} />;
-    case "reporting_record":
-      return <RecordTable frames={frames} />;
-    case "gantt_einsatz":
+      return <DurchlaufplanGantt frames={frames} />;
     case "gantt_schicht":
+      return <SchichtTable frames={frames} />;
+    case "gantt_einsatz":
     case "lifecycle":
-      return <StatusList tag={tag} frames={frames} />;
+    case "reporting_record":
+      return <StatusList tag={tab.source} frames={frames} />;
     default:
       return (
-        <p className="p-4 text-sm text-muted-foreground" data-testid="stream-router-unknown">
-          Unbekannter Stream.
+        <p
+          className="p-4 text-sm text-muted-foreground"
+          data-testid="stream-router-unknown"
+        >
+          Unbekannter Viewer.
         </p>
       );
   }
 }
 
-/** gantt_durchlauf → pro Auftrag eine GanttRow. */
-function GanttPanel({ frames }: { frames: Frame[] }): React.ReactElement {
-  const byAuftrag = React.useMemo(() => {
-    const map = new Map<string, Frame[]>();
-    for (const f of frames) {
-      const auftrag = String((f.v as { auftrag_id?: string }).auftrag_id ?? "?");
-      const list = map.get(auftrag);
-      if (list) list.push(f);
-      else map.set(auftrag, [f]);
-    }
-    return map;
-  }, [frames]);
-
-  if (byAuftrag.size === 0) {
-    return (
-      <p className="p-4 text-sm text-muted-foreground" data-testid="gantt-empty">
-        Noch keine Durchlauf-Daten.
-      </p>
-    );
-  }
-
-  return (
-    <div className="overflow-auto" data-testid="gantt-panel">
-      {[...byAuftrag.entries()].map(([auftrag, rowFrames]) => (
-        <GanttRow
-          key={auftrag}
-          auftragId={auftrag}
-          frames={rowFrames}
-          pxPerSecond={PX_PER_SECOND}
-        />
-      ))}
-    </div>
-  );
-}
-
-/** kpi_auswertung → eine KpiTile pro kind, Trend gegen die Vorperiode. */
-function KpiPanel({ frames }: { frames: Frame[] }): React.ReactElement {
-  // Pro kind den jüngsten (current) und zweitjüngsten (previous) Frame finden.
-  const tilesByKind = React.useMemo(() => {
-    const byKind = new Map<string, Frame[]>();
-    for (const f of frames) {
-      const kind = String((f.v as { kind?: string }).kind ?? "unbekannt");
-      const list = byKind.get(kind);
-      if (list) list.push(f);
-      else byKind.set(kind, [f]);
-    }
-    return byKind;
-  }, [frames]);
-
-  if (tilesByKind.size === 0) {
-    return (
-      <p className="p-4 text-sm text-muted-foreground" data-testid="kpi-empty">
-        Noch keine Auswertungs-Daten.
-      </p>
-    );
-  }
-
-  return (
-    <div
-      className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4"
-      data-testid="kpi-grid"
-    >
-      {[...tilesByKind.entries()].map(([kind, kindFrames]) => {
-        const current = kindFrames[kindFrames.length - 1];
-        const previous = kindFrames[kindFrames.length - 2];
-        return (
-          <KpiTile
-            key={kind}
-            kind={kind}
-            current={current.v}
-            previous={previous?.v}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-/** Einfache Status-Liste (lifecycle + partial-Gantt-Streams). */
+/** Einfache Status-Liste für die partial-/Zeit-Streams (Einsatzzeit etc.). */
 function StatusList({
   tag,
   frames,
@@ -175,7 +95,10 @@ function StatusList({
 }): React.ReactElement {
   if (frames.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted-foreground" data-testid={`status-empty-${tag}`}>
+      <p
+        className="p-4 text-sm text-muted-foreground"
+        data-testid={`status-empty-${tag}`}
+      >
         Noch keine Daten.
       </p>
     );
@@ -183,7 +106,10 @@ function StatusList({
   // Nur die jüngsten Einträge zeigen (Status-Liste, kein Voll-Log).
   const recent = frames.slice(-50);
   return (
-    <ul className="flex flex-col gap-1 text-sm" data-testid={`status-list-${tag}`}>
+    <ul
+      className="flex flex-col gap-1 text-sm"
+      data-testid={`status-list-${tag}`}
+    >
       {recent.map((f) => {
         const kind = String((f.v as { kind?: string }).kind ?? "");
         return (
