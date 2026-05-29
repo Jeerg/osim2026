@@ -1,22 +1,23 @@
-"""Integration-Tests für den ``kpi_auswertung``-Stream (Phase 01-03).
+"""Integration-Tests für den ``kpi_auswertung``-Stream (Phase 01-11, gap_closure).
+
+OSim2004-Feldtreue: jede der 11 Analysen trägt die EXAKTEN Feldnamen aus dem
+zugehörigen ``ISimulatorViewerAusw*.cpp`` (keine erfundene Generik mehr).
 
 Zwei Ebenen:
 
-1. **Aggregator-Arithmetik** (Task 1) — die Insights-Klassen aus
-   ``insights/classes.py`` sind echte Counter-Hoster (P5-N geschlossen, D-3.2).
-   Die Snapshot-Felder folgen SPEC §6.3 und werden gegen handgerechnete Werte
-   gepinnt (Parity-Stil wie ``tests/unit/core/test_day_of_sim_parity.py``).
-   Die Counter-Updates sind O(1) pro Event (kein Re-Scan, D-3.1/§7.3).
+1. **Aggregator-Feldsätze** (Task 1) — die Insights-Klassen aus
+   ``insights/classes.py`` sind echte Period-Aggregatoren (D-3.2). NOW-BUILDABLE
+   (prod_auftrag/best_auftrag/nbearbeit/wschlange) sammeln echte Zeilen-Records;
+   SLICE-GATED (pers/betr/kauf/eigen/kalkulation/gesamt/schicht) tragen die
+   echten OSim-Feldnamen mit null + ``missing_slice`` (KEINE erfundenen Zahlen).
 
 2. **Listener-Lauf** (Task 2) — ``AuswertungListener`` emittiert period-end
    für ALLE 11 ``kind``-Diskriminatoren (D-3.3) je genau einen Frame, mit
    korrektem ``period_num`` (period-only, D-3.4). Self-Registrierung via
    ``register_listener`` (kein ``attach.py``-Edit).
 
-Quelle der KPI-Feldsemantik: SPEC §6.3 (Frame-Beispiele) + §7.3
-(incremental-Counter-Strategie). Die C++-Referenz ``ISimulatorViewerAusw*``
-liefert dieselbe Feldableitung; die Arithmetik (avg=sum/count,
-pct=teil/period*100) ist hier deterministisch gepinnt für den AC-9-Spot-Check.
+Quelle der Feldsemantik: ``../OSim2004/OSimV01(Fj)/OSimINSIGHTS/
+ISimulatorViewerAusw*.cpp`` (1:1 gepinnt). NICHTS erfunden.
 """
 
 from __future__ import annotations
@@ -42,107 +43,231 @@ ELEVEN_KINDS = {
 
 
 # ======================================================================
-# Task 1 — Aggregator-Arithmetik (insights/classes.py)
+# Task 1 — NOW-BUILDABLE Aggregatoren (echte Zeilen-Records)
 # ======================================================================
 
 
-def test_fertigungsauftrag_aggregator_snapshot_arithmetik() -> None:
-    """IFertigungsauftrag-Aggregator: nach 3 abgeschlossenen + 1 verspäteten
-    Auftrag stimmen count_* und durchlaufzeit_avg/max/min exakt (D-3.1)."""
+def test_prod_auftrag_aggregator_echte_records() -> None:
+    """IFertigungsauftrag (prod_auftrag): snapshot() liefert Zeilen-Records mit
+    den EXAKTEN OSim-Feldnamen (teil/menge/soll_beginn_tag/beschreibung)."""
     from osim_engine.insights import IFertigungsauftrag
 
     agg = IFertigungsauftrag()
-    # 3 abgeschlossen mit Durchlaufzeiten 3600 / 7200 / 18000 (eine verspätet).
-    agg.update_auftrag_start()
-    agg.update_auftrag_start()
-    agg.update_auftrag_start()
-    agg.update_auftrag_start()  # 4. Auftrag bleibt laufend
-    agg.update_auftrag_ende(durchlaufzeit=3600, verspaetet=False)
-    agg.update_auftrag_ende(durchlaufzeit=7200, verspaetet=False)
-    agg.update_auftrag_ende(durchlaufzeit=18000, verspaetet=True)
+    agg.add_prod_auftrag(teil="Welle", menge=12, soll_beginn_tag=3, beschreibung="Antriebswelle")
+    agg.add_prod_auftrag(teil="Nabe", menge=4, soll_beginn_tag=5, beschreibung="Radnabe")
 
     snap = agg.snapshot(period_num=0)
-    assert snap["count_gesamt"] == 4
-    assert snap["count_abgeschlossen"] == 3
-    assert snap["count_laufend"] == 1
-    assert snap["count_verspaetet"] == 1
-    # avg = (3600+7200+18000)/3 = 9600
-    assert snap["durchlaufzeit_avg"] == 9600
-    assert snap["durchlaufzeit_max"] == 18000
-    assert snap["durchlaufzeit_min"] == 3600
     assert snap["period_num"] == 0
+    assert snap["records"] == [
+        {"teil": "Welle", "menge": 12, "soll_beginn_tag": 3, "beschreibung": "Antriebswelle"},
+        {"teil": "Nabe", "menge": 4, "soll_beginn_tag": 5, "beschreibung": "Radnabe"},
+    ]
+    # KEINE Generik-Felder mehr
+    assert "count_gesamt" not in snap
+    assert "durchlaufzeit_avg" not in snap
 
 
-def test_auftrag_aggregator_leer_snapshot_keine_division_durch_null() -> None:
-    """Ohne abgeschlossene Aufträge ist durchlaufzeit_avg/max/min == 0
-    (keine ZeroDivision)."""
-    from osim_engine.insights import IFertigungsauftrag
+def test_best_auftrag_aggregator_echte_records_und_typ() -> None:
+    """IBestellauftrag (best_auftrag): teil/menge/best_termin_tag/auftrags_typ/
+    beschreibung; auftrags_typ ∈ {"normal","eil"} (m_best_typ)."""
+    from osim_engine.insights import IBestellauftrag
 
-    snap = IFertigungsauftrag().snapshot(period_num=0)
-    assert snap["count_gesamt"] == 0
-    assert snap["durchlaufzeit_avg"] == 0
-    assert snap["durchlaufzeit_max"] == 0
-    assert snap["durchlaufzeit_min"] == 0
+    agg = IBestellauftrag()
+    agg.add_best_auftrag(teil="Schraube", menge=500, best_termin_tag=2, auftrags_typ="normal", beschreibung="M8x20")
+    agg.add_best_auftrag(teil="Lager", menge=20, best_termin_tag=1, auftrags_typ="eil", beschreibung="Kugellager")
+
+    snap = agg.snapshot(period_num=1)
+    assert snap["records"][0] == {
+        "teil": "Schraube", "menge": 500, "best_termin_tag": 2,
+        "auftrags_typ": "normal", "beschreibung": "M8x20",
+    }
+    assert snap["records"][1]["auftrags_typ"] == "eil"
+    assert snap["period_num"] == 1
 
 
-def test_betriebsmittel_aggregator_auslastung_pct() -> None:
-    """IBetriebsmittel: auslastung_pct = bearbeitung/period*100 (SPEC §6.3)."""
-    from osim_engine.insights import IBetriebsmittel
+def test_nbearbeit_aggregator_einlast_records() -> None:
+    """INBearbeit (nbearbeit): teil/menge/beginntermin für eingelastete, nicht
+    abgearbeitete Aufträge (Filter fsEinlast — vom Listener angewandt)."""
+    from osim_engine.insights import INBearbeit
 
-    agg = IBetriebsmittel()
-    agg.set_period_len(10000)
-    agg.update_bearbeitung(7840)   # 78.4 %
-    agg.update_ruest(960)          # 9.6 %
-    agg.update_stillstand(1200)    # 12.0 %
+    agg = INBearbeit()
+    agg.add_nbearbeit(teil="Welle", menge=12, beginntermin=3)
 
     snap = agg.snapshot(period_num=0)
-    assert snap["auslastung_pct"] == 78.4
-    assert snap["ruest_pct"] == 9.6
-    assert snap["stillstand_pct"] == 12.0
-    assert snap["haupt_nutzungsart"] == "bearbeitung"
+    assert snap["records"] == [{"teil": "Welle", "menge": 12, "beginntermin": 3}]
 
 
-def test_betriebsmittel_aggregator_period_len_null_keine_division() -> None:
+def test_wschlange_aggregator_warteschlangen_records() -> None:
+    """IProzess (wschlange): bm_name/teil/restmenge/wartestatus[/op/material].
+    wartestatus aus dem dokumentierten OSim-Set."""
+    from osim_engine.insights import IProzess
+
+    agg = IProzess()
+    agg.add_wschlange(bm_name="Dreh1", teil="Welle", restmenge=8, wartestatus=IProzess.WARTET_VOR_BM, op="OP10")
+    agg.add_wschlange(
+        bm_name="Fraes2", teil="Nabe", restmenge=2,
+        wartestatus=IProzess.WARTET_MATERIAL, material="Rohling",
+    )
+    agg.add_wschlange(bm_name="Bohr3", teil="Flansch", restmenge=1, wartestatus=IProzess.WARTET_PERSONAL)
+
+    snap = agg.snapshot(period_num=0)
+    assert snap["records"][0] == {
+        "bm_name": "Dreh1", "teil": "Welle", "restmenge": 8,
+        "wartestatus": "wartet_vor_bm", "op": "OP10",
+    }
+    assert snap["records"][1]["wartestatus"] == "wartet_material"
+    assert snap["records"][1]["material"] == "Rohling"
+    assert snap["records"][2]["wartestatus"] == "wartet_personal"
+    assert "op" not in snap["records"][2]
+
+
+def test_now_buildable_reset_period_leert_records() -> None:
+    """reset_period() leert die now-buildable Record-Sammler; period_num bleibt
+    im snapshot (period-only, D-3.4)."""
+    from osim_engine.insights import IBestellauftrag, IFertigungsauftrag, IProzess
+
+    fa = IFertigungsauftrag()
+    fa.add_prod_auftrag(teil="X", menge=1, soll_beginn_tag=0, beschreibung="x")
+    fa.reset_period()
+    assert fa.snapshot(period_num=2)["records"] == []
+
+    ba = IBestellauftrag()
+    ba.add_best_auftrag(teil="Y", menge=2, best_termin_tag=0, auftrags_typ="normal", beschreibung="y")
+    ba.reset_period()
+    assert ba.snapshot(period_num=2)["records"] == []
+
+    pr = IProzess()
+    pr.add_wschlange(bm_name="B", teil="Z", restmenge=1, wartestatus=IProzess.WARTET_VOR_BM)
+    pr.reset_period()
+    assert pr.snapshot(period_num=2)["records"] == []
+
+
+# ======================================================================
+# Task 1 — SLICE-GATED Aggregatoren (echte Feldnamen, null + missing_slice)
+# ======================================================================
+
+
+def test_pers_aggregator_gated_echte_felder() -> None:
+    """IPerson (pers, 8 Spalten): echte OSim-Feldnamen mit null + missing_slice
+    P5-M (ISimulatorViewerAuswPers.cpp)."""
+    from osim_engine.insights import IPerson
+
+    snap = IPerson().snapshot(period_num=0)
+    for field in (
+        "name", "schichten", "ueberstunden_pct", "kann_kap_pct", "auslastung_pct",
+        "kosten_pro_arbeitsstd", "kalk_stundensatz", "gesamtkosten_periode",
+    ):
+        assert field in snap and snap[field] is None, field
+    assert snap["missing_slice"] == "P5-M"
+
+
+def test_betr_aggregator_gated_echte_felder() -> None:
+    """IBetriebsmittel (betr, 5 Spalten): name/fixkosten_pro_stunde/
+    kosten_pro_arbeitsstd/kalk_stundensatz/gesamtkosten_periode (gated)."""
     from osim_engine.insights import IBetriebsmittel
 
     snap = IBetriebsmittel().snapshot(period_num=0)
-    assert snap["auslastung_pct"] == 0.0
+    for field in (
+        "name", "fixkosten_pro_stunde", "kosten_pro_arbeitsstd",
+        "kalk_stundensatz", "gesamtkosten_periode",
+    ):
+        assert field in snap and snap[field] is None, field
+    assert snap["missing_slice"] == "Kosten-Slice"
+    # KEINE alte Generik
+    assert "ruest_pct" not in snap
+    assert "haupt_nutzungsart" not in snap
 
 
-def test_reset_period_setzt_counter_zurueck() -> None:
-    """reset_period() setzt die Counter für die neue Periode zurück
-    (period-only, D-3.4)."""
-    from osim_engine.insights import IBetriebsmittel, IFertigungsauftrag
+def test_kauf_aggregator_gated_zehn_felder() -> None:
+    """ILagerKauf (kauf, 10 Spalten, LAGERINHALT KAUFTEILE)."""
+    from osim_engine.insights import ILagerKauf
 
-    fa = IFertigungsauftrag()
-    fa.update_auftrag_start()
-    fa.update_auftrag_ende(durchlaufzeit=5000, verspaetet=True)
-    fa.reset_period()
-    s = fa.snapshot(period_num=1)
-    assert s["count_gesamt"] == 0
-    assert s["count_abgeschlossen"] == 0
-    assert s["count_verspaetet"] == 0
-    assert s["durchlaufzeit_max"] == 0
-
-    bm = IBetriebsmittel()
-    bm.set_period_len(10000)
-    bm.update_bearbeitung(5000)
-    bm.reset_period()
-    sb = bm.snapshot(period_num=1)
-    assert sb["auslastung_pct"] == 0.0
+    snap = ILagerKauf().snapshot(period_num=0)
+    for field in (
+        "teil", "aktueller_bestand", "verbrauchte_teile", "gelieferte_teile",
+        "vergebliche_anforderung", "teilewert_gesamt", "teilewert_neuteile",
+        "bestellkosten", "lagerhaltungskosten", "kapitalkosten",
+    ):
+        assert field in snap and snap[field] is None, field
+    assert snap["missing_slice"] == "Bestands-/Kosten-Slice"
 
 
-def test_simulator_rollup_aggregator_snapshot() -> None:
-    """ISimulator (gesamt-Roll-up) liefert eine Snapshot mit kind-tauglichen
-    Default-Feldern und period_num."""
+def test_eigen_aggregator_gated_elf_felder() -> None:
+    """ILagerEigen (eigen, 11 Spalten, LAGERINHALT EIGENFERTIGUNGSTEILE)."""
+    from osim_engine.insights import ILagerEigen
+
+    snap = ILagerEigen().snapshot(period_num=0)
+    for field in (
+        "teil", "aktueller_bestand", "prod_menge", "verbr_menge",
+        "teilewert_gesamt", "teilewert_neuteile", "eingehend_teile",
+        "betrm_kosten", "personalkosten", "lagerhaltungskosten", "kapitalkosten",
+    ):
+        assert field in snap and snap[field] is None, field
+    assert snap["missing_slice"] == "Bestands-/Kosten-Slice"
+
+
+def test_kalkulation_aggregator_gated_beide_bloecke() -> None:
+    """IGonzo (kalkulation): Kostenkalkulation + Lagerkalkulation (K/E/P)."""
+    from osim_engine.insights import IGonzo
+
+    snap = IGonzo().snapshot(period_num=0)
+    for field in (
+        "last_lgw", "betr_kost", "pers_kost", "lager_kost", "kapit_kost",
+        "besch_kost", "teile_kost", "lagerwertabgang_p1", "lagerwertabgang_p2",
+        "lagerwertabgang_p3", "berechneter_lagerwert",
+        "last_lgw_k", "last_lgw_e", "last_lgw_p",
+        "lga_k_teile", "lgz_k_teile", "lgw_k_teile", "lgw_fertig", "lgw_aktuell",
+    ):
+        assert field in snap and snap[field] is None, field
+    assert snap["missing_slice"] == "Kosten-/Bestands-Slice"
+    # KEINE alte Generik
+    assert "kosten_sum" not in snap
+
+
+def test_gesamt_aggregator_gated_plus_durchsatz() -> None:
+    """ISimulator (gesamt): OSim-Gesamt-Felder gated + now-buildable Durchsatz."""
     from osim_engine.insights import ISimulator
 
-    snap = ISimulator().snapshot(period_num=2)
-    assert snap["period_num"] == 2
+    agg = ISimulator()
+    agg.update_auftrag_gesamt()
+    agg.update_auftrag_gesamt()
+    agg.update_auftrag_fertig()
+
+    snap = agg.snapshot(period_num=2)
+    # gated OSim-Felder
+    assert snap["verkaufserloes"] is None
+    assert snap["verf_kapazitaet_pct"] is None
+    assert snap["auslastung_pct"] is None
+    assert snap["lieferfaehigkeit_pct"] is None
+    assert snap["mittlerer_lagerwert"] is None
+    assert snap["missing_slice"] == "Sales-/Kosten-Slice"
+    # Verkaufsergebnisse je Produkt 1-3 (gated, echte Feldnamen)
+    assert len(snap["verkaufsergebnisse"]) == 3
+    ve = snap["verkaufsergebnisse"][0]
+    for field in ("vertriebswunsch", "absatz", "herstellkosten", "verkaufspreis", "erloes"):
+        assert field in ve and ve[field] is None, field
+    # now-buildable Durchsatz (real)
+    assert snap["count_auftraege_gesamt"] == 2
+    assert snap["count_auftraege_fertig"] == 1
+    assert snap["count_auftraege_offen"] == 1
+
+
+def test_schicht_aggregator_gated_vier_spalten() -> None:
+    """IArbeitszeit (schicht, 4 Spalten ISimulatorViewerSchicht): person/
+    schichten/ueberstunden/einheiten gated + missing_slice P5-M."""
+    from osim_engine.insights import IArbeitszeit
+
+    snap = IArbeitszeit().snapshot(period_num=0)
+    for field in ("person", "schichten", "ueberstunden", "einheiten"):
+        assert field in snap and snap[field] is None, field
+    assert snap["missing_slice"] == "P5-M"
+    # KEINE alte soll-/iststunden-Generik
+    assert "sollstunden" not in snap
+    assert "iststunden" not in snap
 
 
 def test_jede_klasse_behaelt_basisklasse() -> None:
-    """Die 14 Klassen behalten ihre Vererbungssignatur (nur Erweiterung)."""
+    """Die Klassen behalten ihre Vererbungssignatur (nur Erweiterung)."""
     from osim_engine.insights import (
         IArbeitszeit, IAuftrag, IBestellauftrag, IBetrPers, IBetriebsmittel,
         IDurchlaufplan, IFertigungsauftrag, IGonzo, IInfo, ILager,
@@ -229,14 +354,51 @@ def test_kpi_auswertung_eleven_frames_per_period(tmp_path: Path) -> None:
     assert by_period, "keine period-end-KPI-Frames"
     for period_num, frames in by_period.items():
         kinds = [f["v"]["kind"] for f in frames]
-        # je kind genau einmal pro Periode
         assert sorted(kinds) == sorted(ELEVEN_KINDS), (
             f"Periode {period_num}: kinds={sorted(kinds)}"
         )
-    # period_num beginnt bei 0 und ist lückenlos aufsteigend
     periods = sorted(by_period)
     assert periods == list(range(len(periods)))
     assert periods[0] == 0
+
+
+def test_kpi_now_buildable_kinds_tragen_records(tmp_path: Path) -> None:
+    """now-buildable kinds (prod_auftrag/best_auftrag/nbearbeit/wschlange)
+    tragen ein records-Array (echte OSim-Struktur, kein Generik-Counter)."""
+    from osim_engine.streaming.attach import attach_streaming_listeners
+
+    sim = _build_scenario()
+    writer = attach_streaming_listeners(sim, run_dir=str(tmp_path))
+    sim.start()
+    writer.close()
+
+    lines = [ln for ln in writer.path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    kpi = [json.loads(ln)["v"] for ln in lines if json.loads(ln)["stream"] == "kpi_auswertung"]
+    for kind in ("prod_auftrag", "best_auftrag", "nbearbeit", "wschlange"):
+        rows = [v for v in kpi if v["kind"] == kind]
+        assert rows, f"kein Frame fuer {kind}"
+        for v in rows:
+            assert "records" in v and isinstance(v["records"], list), kind
+            assert "count_gesamt" not in v, f"{kind} traegt noch Generik"
+
+
+def test_kpi_slice_gated_kinds_tragen_missing_slice(tmp_path: Path) -> None:
+    """slice-gated kinds (pers/betr/kauf/eigen/kalkulation/schicht) tragen
+    missing_slice + null-Felder (keine erfundenen Zahlen)."""
+    from osim_engine.streaming.attach import attach_streaming_listeners
+
+    sim = _build_scenario()
+    writer = attach_streaming_listeners(sim, run_dir=str(tmp_path))
+    sim.start()
+    writer.close()
+
+    lines = [ln for ln in writer.path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    kpi = [json.loads(ln)["v"] for ln in lines if json.loads(ln)["stream"] == "kpi_auswertung"]
+    for kind in ("pers", "betr", "kauf", "eigen", "kalkulation"):
+        rows = [v for v in kpi if v["kind"] == kind]
+        assert rows, f"kein Frame fuer {kind}"
+        for v in rows:
+            assert "missing_slice" in v, kind
 
 
 def test_kpi_auswertung_frames_carry_seq_and_t(tmp_path: Path) -> None:
@@ -256,7 +418,6 @@ def test_kpi_auswertung_frames_carry_seq_and_t(tmp_path: Path) -> None:
         assert isinstance(f["t"], int)
         assert "kind" in f["v"]
         assert "period_num" in f["v"]
-    # global monotone seq über ALLE Frames bleibt erhalten
     seqs = [f["seq"] for f in frames]
     assert seqs == sorted(seqs)
     assert len(set(seqs)) == len(seqs)
