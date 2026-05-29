@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-29T08:46:00.000Z"
+last_updated: "2026-05-29T09:10:00.000Z"
 current_phase: 01-live-viewer-bridge
-current_plan: "01-06"
+current_plan: "01-07"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 7
-  completed_plans: 5
-  percent: 71
+  completed_plans: 6
+  percent: 86
 decisions:
   - "01-01: Frame als @dataclass(slots=True) statt Pydantic (D-1.4)"
   - "01-01: geteilter SeqCounter-Objekt (streaming/seq.py) für globale monotone seq"
@@ -25,7 +25,10 @@ decisions:
   - "01-04: meta.json-Finalize via MetaFinalizeListener im Registry (idempotent), attach.py/__init__.py/core/simulator.py unangetastet (SPEC §5)"
   - "01-05: UI-Render-Schicht komplett — KpiTile (N/N-1-Trend, Symbol+Text A11y) + RecordTable (@tanstack/react-table, Sort/Filter, Windowing-Cap) + StreamRouter (Tag-Multiplex, AC-4) + PartialBanner"
   - "01-05: schema_version-Major-Mismatch = best-effort schemaMismatch-Flag im Store + gelbes Warn-Banner, KEIN Hard-Block/Crash (D-OP-4, AC-7)"
+  - "01-06: 6 JSON-Schemas (Draft 2020-12) + Golden-Record-Tests (full+partial+Negativ-Pin) via jsonschema; schema_version=1.0 (O-5, AC-1)"
+  - "01-06: AC-2 Latenz p95=2.5ms (<50ms); AC-8 als Option 2 (honestly-relaxed) — Write-Path-Overhead 15.3% (<20% best-of-11) statt literaler <5% full-vs-no-streaming (User-Entscheid, Deviation)"
+  - "01-06: batch_n-Default 100 unveraendert (Option 1 = Bump auf 200 verworfen); literales AC-8 verlangte Background-Thread, von DISCUSSION-LOG Q1.3 fuer Phase 01 verworfen -> deferred"
 last_session:
-  stopped_at: "Completed 01-05-ui-kpi-record-banners-PLAN.md"
+  stopped_at: "Completed 01-06-schema-golden-bench-PLAN.md"
   resume_file: "None"
 ---
