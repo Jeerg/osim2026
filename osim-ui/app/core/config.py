@@ -65,5 +65,15 @@ class Settings:
             os.environ.get("LOCK_MAX_INACTIVITY_SECONDS", "900")
         )
 
+        # --- Sim-Runs (Plan 01-08, D-OP-2) ---------------------------------
+        # run-Basis-Verzeichnis; der run_otx-Subprozess legt darunter sein
+        # tenant-präfixiertes <run-id>/-Verzeichnis an.
+        self.runs_dir: str = os.environ.get("OSIM_RUNS_DIR", "./data/runs")
+        # Serverseitiger Default-Pace (s) am Flush-Boundary, damit über die API
+        # gestartete Läufe beobachtbar live schreiben (AC-3/AC-5-Basis).
+        self.run_default_pace: float = float(os.environ.get("OSIM_RUN_PACE", "0.2"))
+        # T-RUN-04-Cap: Obergrenze der Perioden pro Lauf (DoS-Schutz).
+        self.run_max_periods: int = int(os.environ.get("OSIM_RUN_MAX_PERIODS", "24"))
+
 
 settings = Settings()
