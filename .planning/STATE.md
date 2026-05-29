@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-29T07:10:00.000Z"
+last_updated: "2026-05-29T06:32:36.000Z"
 current_phase: 01-live-viewer-bridge
-current_plan: "01-04"
+current_plan: "01-05"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 7
-  completed_plans: 3
-  percent: 43
+  completed_plans: 4
+  percent: 57
 decisions:
   - "01-01: Frame als @dataclass(slots=True) statt Pydantic (D-1.4)"
   - "01-01: geteilter SeqCounter-Objekt (streaming/seq.py) für globale monotone seq"
@@ -21,7 +21,9 @@ decisions:
   - "01-02: Per-Stream-Buffer-Cap MAX_FRAMES_PER_STREAM=10000 + 30Hz-Render-Coalescing (T-01-05/D-4.4)"
   - "01-03: Insights-Klassen sind Period-Aggregatoren (P5-N geschlossen, D-3.2); kpi_auswertung mit 11 kinds via AuswertungListener"
   - "01-03: KPI period_num = m_periodNum-1 (Kern incrementet vor Listener-Fanout); kauf/eigen=IAuftrag-Subkinds, gesamt=ISimulator-Roll-up"
+  - "01-04: alle 6 Sub-Streams abgebaut; gantt_einsatz/gantt_schicht/reporting_record + kpi_auswertung partial in meta.json (missing_slices P5-D/L/M)"
+  - "01-04: meta.json-Finalize via MetaFinalizeListener im Registry (idempotent), attach.py/__init__.py/core/simulator.py unangetastet (SPEC §5)"
 last_session:
-  stopped_at: "Completed 01-03-kpi-aggregation-PLAN.md"
+  stopped_at: "Completed 01-04-remaining-streams-partial-PLAN.md"
   resume_file: "None"
 ---
