@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-29T12:30:00.000Z"
+last_updated: "2026-05-29T16:00:00.000Z"
 current_phase: 01-live-viewer-bridge
-current_plan: "01-11"
+current_plan: "01-12"
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 12
+  completed_plans: 12
   percent: 100
 decisions:
   - "01-01: Frame als @dataclass(slots=True) statt Pydantic (D-1.4)"
@@ -43,7 +43,10 @@ decisions:
   - "01-10: NO-FIXME+eslint+tsc clean; Live-Playwright-Run stack-/UAT-abhaengig (psycopg/uv-sources-Gap) -> AC-3/AC-5 erst gegen laufenden Dev-Stack (3 passed) bewiesen, NICHT gefaelscht; Human-Check PENDING"
   - "01-11: Analyse-Feldsaetze 1:1 gegen ../OSim2004 ISimulatorViewerAusw*.cpp gepinnt (keine erfundene Generik mehr); now-buildable prod_auftrag/nbearbeit/wschlange mit echten records, slice-gated pers/betr/kauf/eigen/kalkulation/gesamt/schicht mit null + missing_slice"
   - "01-11: best_auftrag im headless-Port quellenlos (kein m_bestell-Modell) -> gated (leere records + missing_slice), nicht erfunden; gantt_schicht = person/schichten/ueberstunden/einheiten (ISimulatorViewerSchicht) statt soll-/iststunden"
+  - "01-12: /live-Tabs aus VIEWER_TABS (echte OSim-Labels: Durchlaufplan/Einsatzzeit/Schicht/Gesamt/Produktionsauftraege/...) statt roher Stream-Tags"
+  - "01-12: Durchlaufplan = Default-/Primaer-Grafik-Viewer; Lauf-START aus generischer Button-Leiste IN den Grafik-Viewer verschoben (FSimulatorViewerGfx-treu: Start/Pause/Reset ueber dem Live-Render-Canvas); Pause/Reset honestly disabled (headless-Port hat nur Start)"
+  - "01-12: AuswertungTable 3 Render-Modi (records/snapshot/sections) je kind; Spalten-keys an 01-11-Feldnamen gebunden, Header 1:1 .cpp; slice-gated -> '(Slice offen)' (T-01-12A), nie 0/erfunden"
 last_session:
-  stopped_at: "Completed 01-11-PLAN.md (gap_closure: OSim2004-treue Analysen). insights/classes.py + auswertung/schicht-Listener + 2 JSON-Schemas + Golden 1:1 gegen die .cpp gepinnt; test_streaming_kpi+schema 44 gruen, insights/streaming-Suiten 65 gruen, 0 Schema-Fehler im Live-Lauf. 3 pre-existing C++-Parity/OTX-Failures out-of-scope (deferred-items). SACRED §5 gewahrt. Phase 01: 11/11 Plaene"
+  stopped_at: "Completed 01-12-PLAN.md (gap_closure: UI echte OSim2004-Viewer + Grafik-Viewer-Pflicht). viewer-config + AuswertungTable/SchichtTable/DurchlaufplanGantt; /live traegt echte OSim-Viewer-Tabs, Durchlaufplan ist Default-/Primaer-Grafik-Viewer und der Lauf wird VON IHM aus gestartet (FSimulatorViewerGfx-treu) statt ueber generische Standard-Flaeche. 42 live-stream-Tests gruen, 6 touched files lint(0 err)+tsc-clean. Phase 01: 12/12 Plaene"
   resume_file: "None"
 ---
