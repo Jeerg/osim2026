@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedLiveRouteImport } from './routes/_authenticated/live'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
 import { Route as AuthenticatedModelsIdRouteImport } from './routes/_authenticated/models/$id'
 
@@ -29,6 +30,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedLiveRoute = AuthenticatedLiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedModelsIndexRoute =
   AuthenticatedModelsIndexRouteImport.update({
     id: '/models/',
@@ -44,11 +50,13 @@ const AuthenticatedModelsIdRoute = AuthenticatedModelsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
+  '/live': typeof AuthenticatedLiveRoute
   '/models/$id': typeof AuthenticatedModelsIdRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/live': typeof AuthenticatedLiveRoute
   '/': typeof AuthenticatedIndexRoute
   '/models/$id': typeof AuthenticatedModelsIdRoute
   '/models': typeof AuthenticatedModelsIndexRoute
@@ -57,19 +65,21 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authenticated/live': typeof AuthenticatedLiveRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/models/$id': typeof AuthenticatedModelsIdRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/models/$id' | '/models/'
+  fullPaths: '/' | '/login' | '/live' | '/models/$id' | '/models/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/' | '/models/$id' | '/models'
+  to: '/login' | '/live' | '/' | '/models/$id' | '/models'
   id:
     | '__root__'
     | '/_authenticated'
     | '/login'
+    | '/_authenticated/live'
     | '/_authenticated/'
     | '/_authenticated/models/$id'
     | '/_authenticated/models/'
@@ -103,6 +113,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/live': {
+      id: '/_authenticated/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof AuthenticatedLiveRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/models/': {
       id: '/_authenticated/models/'
       path: '/models'
@@ -121,12 +138,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedLiveRoute: typeof AuthenticatedLiveRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedModelsIdRoute: typeof AuthenticatedModelsIdRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedLiveRoute: AuthenticatedLiveRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedModelsIdRoute: AuthenticatedModelsIdRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
