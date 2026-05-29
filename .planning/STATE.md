@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-29T10:25:00.000Z"
+last_updated: "2026-05-29T11:23:00.000Z"
 current_phase: 01-live-viewer-bridge
-current_plan: "01-07"
+current_plan: "01-08"
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_plans: 10
+  completed_plans: 8
+  percent: 80
 decisions:
   - "01-01: Frame als @dataclass(slots=True) statt Pydantic (D-1.4)"
   - "01-01: geteilter SeqCounter-Objekt (streaming/seq.py) für globale monotone seq"
@@ -30,7 +30,12 @@ decisions:
   - "01-06: batch_n-Default 100 unveraendert (Option 1 = Bump auf 200 verworfen); literales AC-8 verlangte Background-Thread, von DISCUSSION-LOG Q1.3 fuer Phase 01 verworfen -> deferred"
   - "01-07: Demo-Lauf verifiziert 2017 Frames (0 Schema-Fehler, gantt+kpi vorhanden, seq monoton); /live->StreamRouter verdrahtet (01-05-Stub geschlossen)"
   - "01-07: E2E live-stream.spec.ts test.fixme (ehrlich pending) bis Backend-Stream-Read-Endpoint (M2/SPEC §4); Human-Verify-Checkpoint (Browser-UAT/AC-9-Parity) offen — NICHT gefaelscht"
+  - "01-08: Sim-Lauf als separater OS-Prozess (subprocess.Popen von run_otx), NIE Thread/inline (Reproduzierbarkeitsvertrag)"
+  - "01-08: --pace = reine Wall-Clock-Drossel am Flush-/Period-Boundary; Stream byte-identisch pace 0 vs >0 (PAWLICEK-LCG unangetastet); server-default 0.2s"
+  - "01-08: run_otx gibt RUN_DIR= FRUEH aus (vor Pacing-Schleife, geflusht); RunService liest ohne blockierendes wait — paced Lauf laeuft live weiter"
+  - "01-08: Run-Ownership via run_meta.json + tenant-praefixierter Pfad; KEINE DB-Tabelle/Migration; ReadFn-Vertrag {text,next_offset} fuer 01-09; periods-Cap 24"
+  - "01-08: osim-ui-venv psycopg-Treiber fehlt + stale uv.sources -> 4 Endpoint-Tests ehrlich geskippt (needs_app_import), Logik gruen via Service-Pfad (deferred-items.md)"
 last_session:
-  stopped_at: "Completed 01-07-e2e-demo-uat-PLAN.md (autonome Anteile); Human-Verify-Checkpoint offen"
-  resume_file: ".planning/phases/01-live-viewer-bridge/UAT.md"
+  stopped_at: "Completed 01-08-PLAN.md (gap_closure: run+transport); engine 5/5 + osim-ui 10 service-tests gruen, 4 endpoint-tests host-env-geskippt"
+  resume_file: ".planning/phases/01-live-viewer-bridge/01-09-PLAN.md"
 ---

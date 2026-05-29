@@ -35,3 +35,23 @@ auto-fix issues directly caused by the current task's changes).
 - **Rest-Hinweis:** `npm ci` schlägt fehl, weil das committete Lockfile mit den
   Workspace-Paketen (`@osim/graphobject*`) out-of-sync ist (pre-existing). Ein
   `npm install` zum Re-Sync des Lockfiles ist ein separater Maintenance-Schritt.
+
+## 01-08: osim-ui-venv — psycopg-Treiber + stale uv.sources (2026-05-29)
+
+- **Befund:** Der osim-ui-`.venv` hat keinen Postgres-DBAPI-Treiber
+  (`psycopg`/`psycopg2`) installiert — Folge eines unvollständigen `uv sync`.
+  Die `[tool.uv.sources]`-Editable-Referenz auf die Engine zeigt nach der
+  Repo-Migration auf einen doppelten Pfad
+  (`osim-engine/osim-engine/engine`), was `uv run` mit "Distribution not found"
+  blockiert. Workaround in 01-08: `.venv/Scripts/python.exe -m pytest` direkt
+  (das `_editable_impl_osim_engine.pth` zeigt korrekt auf `engine/src`).
+- **Folgen (pre-existing, NICHT durch 01-08 verursacht):**
+  - 4 Tests in `tests/backend/test_database.py` failen mit
+    `ModuleNotFoundError: No module named 'psycopg'` (App-Import triggert
+    `app.core.database.create_engine`). Existieren VOR 01-08.
+  - 4 endpoint-Tests in `test_runs_endpoints.py` (01-08) sind mit einem
+    `needs_app_import`-Guard versehen und skippen ehrlich, solange der Treiber
+    fehlt — sie failen NICHT und faken keinen Pass.
+- **Fix-Vorschlag (eigener Housekeeping-Plan):** `[tool.uv.sources]`-Pfad auf
+  `../engine` korrigieren + `uv sync` neu fahren (zieht psycopg + die Editable-
+  Engine sauber ein). Danach laufen Endpoint- + test_database-Tests wieder.
