@@ -51,6 +51,14 @@ export interface GrafikfensterProps {
   periodBegin: number;
   /** Perioden-Ende in Sekunden (Zeit-Achse). */
   periodEnd: number;
+  /**
+   * Ressourcen-IDs aus dem geladenen Modell (PBetriebsmittel.m_sName).
+   * Diese erscheinen als Zeilen SCHON VOR dem Lauf (leere Lanes).
+   * Frame-Ressourcen (die im Lauf auftauchen) werden als Fallback hinten angehängt.
+   * Entspricht FSimulatorViewerGfx/PGfxModeRessBeleg: Zeilenmenge = Modell-Ressourcen
+   * (autoritativ, pre-start) ∪ in Frames auftauchende ressource_id (Fallback).
+   */
+  ressourcenFromModel?: string[];
 }
 
 /** on/off-Paar-Segment für Belegungs-Render. */
@@ -69,15 +77,37 @@ interface QueueSample {
 }
 
 /**
- * Extrahiert Ressourcen-IDs (distinct, in Reihenfolge des ersten Auftretens).
+ * Extrahiert Ressourcen-IDs (distinct, in OSim-treuer Reihenfolge).
+ *
+ * Reihenfolge-Semantik (FSimulatorViewerGfx/PGfxModeRessBeleg):
+ *  1. Modell-Ressourcen (aus PBetriebsmittel, autoritativ, pre-start) — kommen zuerst
+ *  2. Frame-Ressourcen (Fallback: auftauchen im Lauf, nicht im Modell) — werden angehängt
+ *
  * Defensiv — fehlende ressource_id wird ignoriert (T-01-15-01).
+ *
+ * @param einsatzFrames  gantt_einsatz-Frames aus dem Store
+ * @param queueFrames    gantt_wartequeue-Frames aus dem Store
+ * @param ressourcenFromModel  Optionale autoritativen Modell-Ressourcen (PBetriebsmittel)
  */
 function extractRessourcen(
   einsatzFrames: Frame[],
   queueFrames: Frame[],
+  ressourcenFromModel?: string[],
 ): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
+
+  // Schritt 1: Modell-Ressourcen zuerst (autoritativ, OSim-Reihenfolge)
+  if (ressourcenFromModel && ressourcenFromModel.length > 0) {
+    for (const rid of ressourcenFromModel) {
+      if (typeof rid === "string" && rid.length > 0 && !seen.has(rid)) {
+        seen.add(rid);
+        result.push(rid);
+      }
+    }
+  }
+
+  // Schritt 2: Frame-Ressourcen als Fallback (im Modell nicht enthaltene)
   for (const f of [...einsatzFrames, ...queueFrames]) {
     const id = (f.v as { ressource_id?: string }).ressource_id;
     if (typeof id === "string" && id.length > 0 && !seen.has(id)) {
@@ -339,6 +369,7 @@ export function Grafikfenster({
   widthPx,
   periodBegin,
   periodEnd,
+  ressourcenFromModel,
 }: GrafikfensterProps): React.ReactElement {
   const einsatzFrames = useLiveStreamStore(
     (s) => s.byStream["gantt_einsatz"] ?? EMPTY_FRAMES,
@@ -348,8 +379,8 @@ export function Grafikfenster({
   );
 
   const ressourcen = React.useMemo(
-    () => extractRessourcen(einsatzFrames, queueFrames),
-    [einsatzFrames, queueFrames],
+    () => extractRessourcen(einsatzFrames, queueFrames, ressourcenFromModel),
+    [einsatzFrames, queueFrames, ressourcenFromModel],
   );
 
   const segments = React.useMemo(

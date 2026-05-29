@@ -39,6 +39,7 @@ import {
   type ReadFn,
 } from "@/features/live-stream/tail-reader";
 import { useLiveStreamStore } from "@/features/live-stream/store";
+import { useModelStore } from "@/stores/model-store";
 import { StreamRouter } from "@/features/live-stream/stream-router";
 import {
   DEFAULT_VIEWER_TAB_ID,
@@ -90,6 +91,30 @@ function LivePage({
   const setMeta = useLiveStreamStore((s) => s.setMeta);
   const hasGap = useLiveStreamStore((s) => s.hasGap);
 
+  // Aktive Modell-ID aus dem gemeinsamen ModelStore (modulübergreifend persistent).
+  // Wenn der User ein Modell in /models/$id öffnet, setzt loadFromWire() die ID.
+  // Wenn der User auf /live ein Modell wählt, setzt setActiveModelId() die ID.
+  // Bleibt erhalten bis der User explizit wechselt (kein lokales useState mehr).
+  const storeModelId = useModelStore((s) => s.modelId);
+  const storeWire = useModelStore((s) => s.wire);
+  const setActiveModelId = useModelStore((s) => s.setActiveModelId);
+
+  // Abgeleitete Betriebsmittel-Liste aus dem Wire (PBetriebsmittel.m_sName).
+  // Erscheinen als leere Lanes SCHON VOR dem Start (FSimulatorViewerGfx-treu).
+  // Nach OID sortiert (OSim-Reihenfolge).
+  const ressourcenFromModel = React.useMemo((): string[] => {
+    if (!storeWire) return [];
+    return Object.values(storeWire.objects)
+      .filter((o) => o.klass === "PBetriebsmittel")
+      .sort((a, b) => a.oid - b.oid)
+      .map((o) =>
+        typeof o.attrs.m_sName === "string" ? o.attrs.m_sName : `oid_${o.oid}`,
+      );
+  }, [storeWire]);
+
+  // Effektive modelId: aus Store (Picker-Änderung schreibt zurück)
+  const modelId = storeModelId ?? "";
+
   const { data: models, isLoading: modelsLoading } = useModels();
 
   // Aktiver OSim-Viewer-Tab (Default = der primäre Grafik-Viewer Durchlaufplan).
@@ -100,8 +125,7 @@ function LivePage({
   // Grafikfenster-Modus (Belegung / Warteschlangen / Qualifikation).
   const [grafikModus, setGrafikModus] = React.useState<GrafikModus>("belegung");
 
-  // Run-Setup-State.
-  const [modelId, setModelId] = React.useState<string>("");
+  // Run-Setup-State (modelId kommt jetzt aus dem Store, nicht aus useState).
   const [runId, setRunId] = React.useState<string | null>(null);
   const [meta, setRunMeta] = React.useState<MetaJson | undefined>(metaOverride);
   const [coverageRatio, setCoverageRatio] = React.useState<number | null>(null);
@@ -205,7 +229,7 @@ function LivePage({
               id="live-model-select"
               data-testid="live-model-select"
               value={modelId}
-              onChange={(e) => setModelId(e.target.value)}
+              onChange={(e) => setActiveModelId(e.target.value)}
               disabled={modelsLoading || starting}
               className="h-9 min-w-[16rem] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -300,6 +324,7 @@ function LivePage({
                   widthPx={800}
                   periodBegin={0}
                   periodEnd={86400}
+                  ressourcenFromModel={ressourcenFromModel}
                 />
               </div>
             ) : (

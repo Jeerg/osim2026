@@ -37,6 +37,13 @@ interface ModelState {
 
 interface ModelActions {
   /**
+   * Setzt die aktive Modell-ID ohne Wire zu laden (live.tsx-Picker-Auswahl).
+   * Ermöglicht modulübergreifende Persistenz der gewählten Modell-ID ohne
+   * den Wire-Load-Pfad zu berühren (Vorauswahl auf /live, Plan 01-15 Fix).
+   * Setzt selection + dirty NICHT zurück — nur modelId.
+   */
+  setActiveModelId: (modelId: string) => void;
+  /**
    * Lädt einen frischen Wire-Tree. Setzt `dirty=false`. `selection` wird
    * atomar auf `initialSelection` gesetzt wenn definiert (Welle G13:
    * Reload-Persistenz via URL-Search-Params), sonst auf den Simulator-Root.
@@ -171,6 +178,11 @@ export const useModelStore = create<ModelStore>()(
 
       return {
         ...initialState,
+
+        setActiveModelId: (modelId) =>
+          set((state) => {
+            state.modelId = modelId;
+          }),
 
         loadFromWire: (modelId, wire, initialSelection) =>
           set((state) => {
