@@ -28,7 +28,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { apiErrorMessage } from "@/api/error-message";
-import { useModels } from "@/api/models";
+import { useModel, useModels } from "@/api/models";
 import {
   buildStreamReadFn,
   fetchRunMeta,
@@ -99,21 +99,34 @@ function LivePage({
   const storeWire = useModelStore((s) => s.wire);
   const setActiveModelId = useModelStore((s) => s.setActiveModelId);
 
-  // Abgeleitete Betriebsmittel-Liste aus dem Wire (PBetriebsmittel.m_sName).
-  // Erscheinen als leere Lanes SCHON VOR dem Start (FSimulatorViewerGfx-treu).
-  // Nach OID sortiert (OSim-Reihenfolge).
-  const ressourcenFromModel = React.useMemo((): string[] => {
-    if (!storeWire) return [];
-    return Object.values(storeWire.objects)
-      .filter((o) => o.klass === "PBetriebsmittel")
-      .sort((a, b) => a.oid - b.oid)
-      .map((o) =>
-        typeof o.attrs.m_sName === "string" ? o.attrs.m_sName : `oid_${o.oid}`,
-      );
-  }, [storeWire]);
-
   // Effektive modelId: aus Store (Picker-Änderung schreibt zurück)
   const modelId = storeModelId ?? "";
+
+  // /live lädt den Wire des aktiven Modells SELBST (statt darauf zu hoffen, dass
+  // der Editor ihn vorher in den Store gefüllt hat). Damit erscheinen die
+  // Ressourcen-Lanes auch dann, wenn man direkt auf /live ein Modell wählt oder
+  // die Seite neu lädt. `enabled: !!modelId` in useModel verhindert Leer-Fetches.
+  const { data: activeModel } = useModel(modelId || null);
+
+  // Abgeleitete Ressourcen-Liste aus dem Wire (PPerson + PBetriebsmittel,
+  // m_sName). Erscheinen als leere Lanes SCHON VOR dem Start
+  // (FSimulatorViewerGfx-treu). Reihenfolge 1:1 C++ dFillRessList: Personen
+  // zuerst, dann Betriebsmittel, je nach OID. Quelle = frisch geladener Wire,
+  // Fallback = Editor-Store-Wire (falls schon geladen).
+  const ressourcenFromModel = React.useMemo((): string[] => {
+    const wire = activeModel?.wire ?? storeWire;
+    if (!wire) return [];
+    const objs = Object.values(wire.objects);
+    const byOid = (a: (typeof objs)[number], b: (typeof objs)[number]) =>
+      a.oid - b.oid;
+    const personen = objs.filter((o) => o.klass === "PPerson").sort(byOid);
+    const betriebsmittel = objs
+      .filter((o) => o.klass === "PBetriebsmittel")
+      .sort(byOid);
+    return [...personen, ...betriebsmittel].map((o) =>
+      typeof o.attrs.m_sName === "string" ? o.attrs.m_sName : `oid_${o.oid}`,
+    );
+  }, [activeModel, storeWire]);
 
   const { data: models, isLoading: modelsLoading } = useModels();
 

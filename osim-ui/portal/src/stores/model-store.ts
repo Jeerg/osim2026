@@ -118,9 +118,39 @@ interface ModelActions {
 
 type ModelStore = ModelState & ModelActions;
 
+/**
+ * localStorage-Schlüssel für die zuletzt aktive Modell-ID. Nur die ID wird
+ * persistiert — NICHT der `wire` (kann bei Bosch2_wechseln ~18 MB groß sein,
+ * siehe T-07-03). Damit überlebt die Modell-Auswahl auch einen Seiten-Reload
+ * (User-Anforderung 01-15: "das Modell muss da sein und bleiben bis ich ein
+ * anderes wähle"), während /live den zugehörigen Wire bei Bedarf frisch über
+ * `useModel()` nachlädt.
+ */
+const ACTIVE_MODEL_LS_KEY = "osim.activeModelId";
+
+function readPersistedModelId(): string | null {
+  try {
+    return typeof localStorage !== "undefined"
+      ? localStorage.getItem(ACTIVE_MODEL_LS_KEY)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistModelId(modelId: string | null): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (modelId) localStorage.setItem(ACTIVE_MODEL_LS_KEY, modelId);
+    else localStorage.removeItem(ACTIVE_MODEL_LS_KEY);
+  } catch {
+    /* localStorage nicht verfügbar (Private-Mode) — in-memory genügt */
+  }
+}
+
 const initialState: ModelState = {
   wire: null,
-  modelId: null,
+  modelId: readPersistedModelId(),
   selection: null,
   dirty: false,
 };
@@ -179,12 +209,15 @@ export const useModelStore = create<ModelStore>()(
       return {
         ...initialState,
 
-        setActiveModelId: (modelId) =>
+        setActiveModelId: (modelId) => {
+          persistModelId(modelId);
           set((state) => {
             state.modelId = modelId;
-          }),
+          });
+        },
 
-        loadFromWire: (modelId, wire, initialSelection) =>
+        loadFromWire: (modelId, wire, initialSelection) => {
+          persistModelId(modelId);
           set((state) => {
             state.wire = wire;
             state.modelId = modelId;
@@ -197,7 +230,8 @@ export const useModelStore = create<ModelStore>()(
                 ? initialSelection
                 : wire.simulator_oid;
             state.dirty = false;
-          }),
+          });
+        },
 
         selectObject: (oid) =>
           set((state) => {
@@ -315,13 +349,15 @@ export const useModelStore = create<ModelStore>()(
             state.dirty = false;
           }),
 
-        clear: () =>
+        clear: () => {
+          persistModelId(null);
           set((state) => {
             state.wire = null;
             state.modelId = null;
             state.selection = null;
             state.dirty = false;
-          }),
+          });
+        },
       };
     }),
     {
