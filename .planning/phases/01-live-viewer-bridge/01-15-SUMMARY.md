@@ -184,7 +184,51 @@ T-01-15-03 (DoS unbegrenzte Frames): Grafikfenster konsumiert die bereits durch
 `MAX_FRAMES_PER_STREAM` gecappten Store-Frames — kein zusaetzlicher Windowing-Code
 noetig.
 
+## Gap-Closure nach Browser-UAT
+
+Zwei Defekte wurden nach der Browser-UAT identifiziert und behoben (atomare TDD RED/GREEN Commits).
+
+### Defekt A — Ressourcen-Lanes nur aus Frames (FSimulatorViewerGfx-Abweichung)
+
+**Symptom:** "ich sehe keine ressourcenzeilen" — Grafikfenster blieb leer vor dem Start
+**Ursache:** `extractRessourcen()` leitete Zeilen AUSSCHLIESSLICH aus gantt_einsatz/gantt_wartequeue-Frames
+ab. Vor dem Lauf (oder bei Modellen mit 100% eaKeineBelegung) kamen null Frames → null Zeilen.
+**OSim-Soll (PGfxModeRessBeleg):** Zeilen = Modell-Ressourcen (autoritativ, pre-start) ∪ Frame-Ressourcen (Fallback)
+**Fix:**
+- `GrafikfensterProps`: neue optionale Prop `ressourcenFromModel?: string[]`
+- `extractRessourcen()`: Modell-Ressourcen zuerst (Reihenfolge 1:1 OSim-treu), Frame-Ressourcen hinten
+- `live.tsx`: leitet `PBetriebsmittel.m_sName`-Liste aus `useModelStore.wire` ab (nach OID sortiert)
+- Ressourcen-Lanes erscheinen LEER SCHON VOR dem Lauf-Start
+**Commits:** 7345f90 (RED), 2abb58e (GREEN)
+**Files:** `Grafikfenster.tsx`, `live.tsx`
+
+### Defekt B — Modell-Auswahl nicht persistent / nicht modulübergreifend
+
+**Symptom:** "das modell verliert er" — bei Navigation zu /live war keine Vorauswahl vorhanden;
+Modell aus Modellierungs-UI wurde auf /live nicht übernommen.
+**Ursache:** `live.tsx` hielt `modelId` in lokalem `React.useState("")` — verloren bei Navigation.
+**Fix:**
+- `useModelStore`: neue Action `setActiveModelId(id: string)` — setzt `modelId` ohne Wire zu laden
+- `live.tsx`: `modelId` jetzt aus `useModelStore((s) => s.modelId)` (kein lokales useState mehr)
+- Picker-Änderung auf /live schreibt via `setActiveModelId()` in den Store
+- Wenn User in `/models/$id` ein Modell lädt, setzt `loadFromWire()` bereits `modelId` → Vorauswahl auf /live
+- Auswahl bleibt bis der User explizit wechselt (modulübergreifend persistent)
+**Commits:** 7345f90 (RED), 2abb58e (GREEN)
+**Files:** `model-store.ts`, `live.tsx`
+
+### Neue Tests (Gap-Closure)
+
+- **Test A1:** `ressourcenFromModel` ohne Frames → Zeilen erscheinen leer (pre-start) ✓
+- **Test A2:** Modell-Reihenfolge zuerst, Frame-Fallback dahinter ✓
+- **Test B1:** `useModelStore.setActiveModelId` existiert und setzt modelId ✓
+- **Test B2:** `loadFromWire` setzt modelId → lesbar auf /live ✓
+- **Test B3:** PBetriebsmittel-Extraktion aus Wire-Objects korrekt ✓
+
+**Gesamt nach Gap-Closure:** 12/12 Tests in Grafikfenster.spec.tsx gruen (war 7/7 → +5 neue).
+471 Unit-Tests gesamt gruen. tsc --noEmit clean. 0 ESLint-Errors auf berührten Dateien.
+
 ## Self-Check: PASSED
 
-Alle Task-Commits vorhanden (7eba51a, 8fe8de4, 8958a66, 0680ed1, 69d5e32, c932a47, 45af119).
-29 Plan-Verifikationstests gruen (16+7+6). tsc --noEmit clean. ESLint-Warnungen 0 Errors.
+Alle Task-Commits vorhanden (7eba51a, 8fe8de4, 8958a66, 0680ed1, 69d5e32, c932a47, 45af119,
+7345f90-RED, 2abb58e-GREEN).
+29+5=34 Plan-Verifikationstests gruen. tsc --noEmit clean. ESLint-Warnungen 0 Errors.
