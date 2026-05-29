@@ -29,15 +29,18 @@ import {
   type ReadFn,
 } from "@/features/live-stream/tail-reader";
 import { useLiveStreamStore } from "@/features/live-stream/store";
-import { GanttRow } from "@/features/live-stream/components/GanttRow";
-import { STREAM_TAGS, type Frame, type StreamTag } from "@/features/live-stream/types";
+import { StreamRouter } from "@/features/live-stream/stream-router";
+import {
+  STREAM_TAGS,
+  type Frame,
+  type MetaJson,
+  type StreamTag,
+} from "@/features/live-stream/types";
 
 /** Polling-Intervall des Tail-Readers (D-4.4). */
 const POLL_INTERVAL_MS = 200;
 /** Render-Throttle: max ~30 Hz (D-4.4 Frame-Coalescing). */
 const RENDER_THROTTLE_MS = Math.floor(1000 / 30);
-/** Pixel pro Sim-Sekunde für die Gantt-Zeit-Achse. */
-const PX_PER_SECOND = 0.01;
 
 /** Deutsche Tab-Labels pro Stream-Tag (Reihenfolge Discretion D-4.1). */
 const STREAM_LABELS: Record<StreamTag, string> = {
@@ -62,18 +65,31 @@ const noopRead: ReadFn = async () => ({ text: "", nextOffset: 0 });
 interface LivePageProps {
   /** Injizierbar für Tests/Backend-Wire. Default: no-op (kein Run). */
   read?: ReadFn;
+  /**
+   * Optionaler meta.json-Snapshot des aktiven Runs. Wird, falls gesetzt, beim
+   * Mount in den Store gespiegelt (Schema-Mismatch-Banner + partial-Status,
+   * D-2.2 / D-OP-4 / AC-7). Default: kein Meta (Walking-Skeleton ohne Run).
+   */
+  meta?: MetaJson;
 }
 
-function LivePage({ read = noopRead }: LivePageProps): React.ReactElement {
+function LivePage({ read = noopRead, meta }: LivePageProps): React.ReactElement {
   const activeStream = useLiveStreamStore((s) => s.activeStream);
   const setActiveStream = useLiveStreamStore((s) => s.setActiveStream);
   const ingest = useLiveStreamStore((s) => s.ingest);
+  const setMeta = useLiveStreamStore((s) => s.setMeta);
   const hasGap = useLiveStreamStore((s) => s.hasGap);
 
   // Default-Tab beim ersten Mount setzen.
   React.useEffect(() => {
     if (activeStream === null) setActiveStream("gantt_durchlauf");
   }, [activeStream, setActiveStream]);
+
+  // meta.json (falls vorhanden) in den Store spiegeln — speist den
+  // partial-/Schema-Mismatch-Banner-Pfad des StreamRouter (D-2.2 / D-OP-4).
+  React.useEffect(() => {
+    if (meta) setMeta(meta);
+  }, [meta, setMeta]);
 
   // 200ms-Polling-Tick mit 30Hz-Coalescing: gelesene Frames werden gepuffert
   // und höchstens alle RENDER_THROTTLE_MS in den Store geflusht.
@@ -142,58 +158,15 @@ function LivePage({ read = noopRead }: LivePageProps): React.ReactElement {
 
         {STREAM_TAGS.map((tag) => (
           <TabsContent key={tag} value={tag} className="flex-1">
-            {tag === "gantt_durchlauf" ? (
-              <GanttDurchlaufPanel />
-            ) : (
-              <p className="p-4 text-sm text-muted-foreground">
-                {STREAM_LABELS[tag]}: Renderer folgt in Wave 3.
-              </p>
-            )}
+            {/* Jeder Tab rendert genau seinen Stream über den StreamRouter
+                (Stream-Isolation, AC-4). Der Router liest die Frames des Tags
+                aus dem Store und multiplext auf Gantt / KPI-Grid / RecordTable
+                / Status-Liste; darüber rendert er den partial-/Schema-Mismatch-
+                Banner (D-2.2 / D-OP-4 / AC-7). */}
+            <StreamRouter tag={tag} />
           </TabsContent>
         ))}
       </Tabs>
-    </div>
-  );
-}
-
-/**
- * Rendert pro Auftrag eine GanttRow aus den aktuell gepufferten
- * gantt_durchlauf-Frames. Gruppiert über `auftrag_id`.
- */
-function GanttDurchlaufPanel(): React.ReactElement {
-  const frames = useLiveStreamStore((s) => s.byStream.gantt_durchlauf);
-
-  const byAuftrag = React.useMemo(() => {
-    const map = new Map<string, Frame[]>();
-    for (const f of frames) {
-      const auftrag = String(
-        (f.v as { auftrag_id?: string }).auftrag_id ?? "?",
-      );
-      const list = map.get(auftrag);
-      if (list) list.push(f);
-      else map.set(auftrag, [f]);
-    }
-    return map;
-  }, [frames]);
-
-  if (byAuftrag.size === 0) {
-    return (
-      <p className="p-4 text-sm text-muted-foreground" data-testid="live-empty">
-        Noch keine Durchlauf-Daten — Stream wartet auf einen aktiven Lauf.
-      </p>
-    );
-  }
-
-  return (
-    <div className="mt-2 overflow-auto" data-testid="live-gantt">
-      {[...byAuftrag.entries()].map(([auftrag, rowFrames]) => (
-        <GanttRow
-          key={auftrag}
-          auftragId={auftrag}
-          frames={rowFrames}
-          pxPerSecond={PX_PER_SECOND}
-        />
-      ))}
     </div>
   );
 }

@@ -30,7 +30,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./e2e",
+  // Phase-1-Specs liegen unter ./e2e; die Live-Stream-Spec (Plan 01-07,
+  // AC-3/4/5) liegt vertraglich unter ./tests (PLAN-Frontmatter). testMatch
+  // deckt beide Verzeichnisse ab, damit `npm run test:e2e` alle findet.
+  testDir: ".",
+  testMatch: ["e2e/**/*.spec.ts", "tests/**/*.spec.ts"],
   // Tests teilen sich den docker-compose-Stack — serielle Ausführung.
   fullyParallel: false,
   workers: 1,
