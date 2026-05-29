@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-29T11:09:32.000Z"
+last_updated: "2026-05-29T11:20:00.000Z"
 current_phase: 01-live-viewer-bridge
-current_plan: "01-09"
+current_plan: "01-10"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 10
-  completed_plans: 9
-  percent: 90
+  completed_plans: 10
+  percent: 100
 decisions:
   - "01-01: Frame als @dataclass(slots=True) statt Pydantic (D-1.4)"
   - "01-01: geteilter SeqCounter-Objekt (streaming/seq.py) für globale monotone seq"
@@ -38,7 +38,10 @@ decisions:
   - "01-09: Topbar-Nav als neues zentriertes <nav> (3. Flex-Kind) zwischen Wordmark + gelockter 3FLS-Rechts-Gruppe; Links Live/Bibliothek, aktiv via activeProps font-weight+Unterstrich (nicht nur Farbe), Token-Focus-Ring"
   - "01-09: Modell-Picker als natives <select> (nicht Radix) fuer E2E-Robustheit; KEIN E2E--Filter im /live-Picker (anders als models/index); read via useMemo run-getrieben (noopRead nur run-loser Default)"
   - "01-09: Store-Reset bei Run-(Re-)Start gegen Frame-Vermischung (T-LIVE-FE-03); fetchRunMeta best-effort, coverage_ratio<1 als Hinweis gesurfaced; data-testids fuer 01-10-E2E exponiert"
+  - "01-10: E2E live-stream.spec.ts entpinnt (test.fixme weg, 3 aktive Tests AC-3/AC-4/AC-5); realer PACED Run ueber /live-UI statt Test-Schreibpfad; append()/ganttFrame()/test-erfundene IDs (FA-LIVE-001 etc.) entfernt"
+  - "01-10: Modell-Weg = Upload (nicht Seed), E2E-live-<ts> via bestehenden Upload-Flow + DELETE-Cleanup; deterministische auftrag_id aus erster gantt-row im DOM gelesen (vom Lauf selbst produziert), AC-5 toHaveCount(1) dagegen"
+  - "01-10: NO-FIXME+eslint+tsc clean; Live-Playwright-Run stack-/UAT-abhaengig (psycopg/uv-sources-Gap) -> AC-3/AC-5 erst gegen laufenden Dev-Stack (3 passed) bewiesen, NICHT gefaelscht; Human-Check PENDING"
 last_session:
-  stopped_at: "Completed 01-09-PLAN.md (gap_closure: FE-Wiring+Nav); 34/34 live-stream-Tests gruen, 3 touched files lint+tsc-clean, nav-link-live + live-model-select/live-start-run/live-active-run-id fuer 01-10-E2E bereit"
-  resume_file: ".planning/phases/01-live-viewer-bridge/01-10-PLAN.md"
+  stopped_at: "Completed 01-10-PLAN.md (gap_closure: E2E un-fixme, letzte Gap-Spec); live-stream.spec.ts treibt realen PACED Run ueber /live, NO-FIXME+eslint+tsc clean; Live-Playwright-Run = Dev-Stack/UAT-Step (3 passed PENDING). Phase 01: 10/10 Plaene"
+  resume_file: "None"
 ---
