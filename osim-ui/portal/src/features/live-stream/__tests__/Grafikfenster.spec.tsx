@@ -7,6 +7,11 @@
  *           Qualifikation → ehrlich leer/gated
  *  Test 3: Steuerleiste mit Start/Weiter/Abbruch/Zurücksetzen + Felder
  *  Test 4: Rote Zeit-Linie bei max Frame-t
+ *
+ * GAP-CLOSURE nach Browser-UAT (Plan 01-15 Fix):
+ *  Test A1: ressourcenFromModel ohne Frames → Ressourcen-Zeilen erscheinen leer
+ *  Test A2: ressourcenFromModel + Frames → Modell-Reihenfolge zuerst, Frame-Fallback dahinter
+ *  Test B1: live.tsx liest activeModelId aus useModelStore (Persistenz-Test via Store)
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -14,7 +19,9 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { Grafikfenster } from "../components/Grafikfenster";
 import { GrafikfensterControls } from "../components/GrafikfensterControls";
 import { useLiveStreamStore } from "../store";
+import { useModelStore } from "@/stores/model-store";
 import type { Frame } from "../types";
+import type { ModelTreeWire } from "@/api/models";
 
 function einsatzOnFrame(
   seq: number,
@@ -152,6 +159,69 @@ describe("Grafikfenster", () => {
   });
 });
 
+describe("Grafikfenster — GAP-CLOSURE: ressourcenFromModel (Defekt A)", () => {
+  beforeEach(() => {
+    useLiveStreamStore.getState().reset();
+    useModelStore.getState().clear();
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("Test A1: ressourcenFromModel ohne Frames → Ressourcen-Zeilen erscheinen leer (pre-start)", () => {
+    // KEIN Frame im Store — Frames kommen erst beim Lauf
+    // Aber das Modell ist bekannt → Zeilen müssen trotzdem erscheinen
+    render(
+      <Grafikfenster
+        modus="belegung"
+        widthPx={800}
+        periodBegin={0}
+        periodEnd={86400}
+        ressourcenFromModel={["Drehe-01", "Fraes-01", "Montage-01"]}
+      />,
+    );
+
+    expect(screen.getByTestId("grafik-row-Drehe-01")).toBeInTheDocument();
+    expect(screen.getByTestId("grafik-row-Fraes-01")).toBeInTheDocument();
+    expect(screen.getByTestId("grafik-row-Montage-01")).toBeInTheDocument();
+    // Keine Segmente — leer vor dem Start ist korrekt
+    expect(screen.queryAllByTestId(/grafik-seg-/).length).toBe(0);
+  });
+
+  it("Test A2: ressourcenFromModel + Frames → Modell-Reihenfolge zuerst, Frame-Fallback dahinter", () => {
+    // Frame-Ressource "Unbekannt-99" taucht im Modell nicht auf → Fallback
+    useLiveStreamStore.getState().ingest([
+      einsatzOnFrame(1, "Fraes-01", 5, 0),
+      einsatzOffFrame(2, "Fraes-01", 0, 3600),
+      einsatzOnFrame(3, "Unbekannt-99", 5, 1800),
+      einsatzOffFrame(4, "Unbekannt-99", 1800, 5400),
+    ]);
+
+    render(
+      <Grafikfenster
+        modus="belegung"
+        widthPx={800}
+        periodBegin={0}
+        periodEnd={86400}
+        ressourcenFromModel={["Drehe-01", "Fraes-01"]}
+      />,
+    );
+
+    // Alle Zeilen vorhanden
+    expect(screen.getByTestId("grafik-row-Drehe-01")).toBeInTheDocument();
+    expect(screen.getByTestId("grafik-row-Fraes-01")).toBeInTheDocument();
+    // Fallback-Zeile aus Frame (im Modell nicht vorhanden)
+    expect(screen.getByTestId("grafik-row-Unbekannt-99")).toBeInTheDocument();
+
+    // Reihenfolge: Modell-Ressourcen zuerst
+    const rows = screen.getAllByTestId(/grafik-row-/);
+    const ids = rows.map((el) => el.getAttribute("data-testid")?.replace("grafik-row-", ""));
+    expect(ids[0]).toBe("Drehe-01");
+    expect(ids[1]).toBe("Fraes-01");
+    expect(ids[2]).toBe("Unbekannt-99");
+  });
+});
+
 describe("GrafikfensterControls", () => {
   afterEach(() => {
     cleanup();
@@ -196,5 +266,66 @@ describe("GrafikfensterControls", () => {
 
     expect(screen.getByTestId("grafik-btn-abbruch")).toBeDisabled();
     expect(screen.getByTestId("grafik-btn-zurueck")).toBeDisabled();
+  });
+});
+
+describe("useModelStore — modelId-Persistenz für live.tsx (Defekt B)", () => {
+  afterEach(() => {
+    useModelStore.getState().clear();
+  });
+
+  it("Test B1: useModelStore.modelId wird durch setActiveModelId gesetzt und gelesen", () => {
+    // Defekt B: live.tsx braucht eine setActiveModelId-Action ohne Wire-Laden.
+    // Nach dieser Aktion ist modelId im Store gesetzt (persistiert modulübergreifend).
+    const store = useModelStore.getState();
+    // setActiveModelId muss im Store existieren
+    expect(typeof (store as { setActiveModelId?: (id: string) => void }).setActiveModelId).toBe("function");
+
+    (store as { setActiveModelId: (id: string) => void }).setActiveModelId("bosch2-model-id");
+    expect(useModelStore.getState().modelId).toBe("bosch2-model-id");
+  });
+
+  it("Test B2: loadFromWire setzt modelId, live.tsx kann ihn ohne eigenes useState lesen", () => {
+    const wire: ModelTreeWire = {
+      version: 1,
+      simulator_oid: 1,
+      objects: {
+        1: { oid: 1, klass: "PSimulator", attrs: {}, sub_refs: [] },
+        2: { oid: 2, klass: "PBetriebsmittel", attrs: { m_sName: "Drehe-01" }, sub_refs: [] },
+        3: { oid: 3, klass: "PBetriebsmittel", attrs: { m_sName: "Fraes-01" }, sub_refs: [] },
+      },
+      coverage: { loaded: 3, skipped: 0, unsupported: [] },
+      schemas_url: "/api/v1/schemas",
+    };
+
+    useModelStore.getState().loadFromWire("test-model-id", wire);
+    expect(useModelStore.getState().modelId).toBe("test-model-id");
+  });
+
+  it("Test B3: PBetriebsmittel-Ressourcen werden korrekt aus Wire-Objects extrahiert", () => {
+    const wire: ModelTreeWire = {
+      version: 1,
+      simulator_oid: 1,
+      objects: {
+        1: { oid: 1, klass: "PSimulator", attrs: {}, sub_refs: [] },
+        2: { oid: 2, klass: "PBetriebsmittel", attrs: { m_sName: "Drehe-01" }, sub_refs: [] },
+        3: { oid: 3, klass: "PBetriebsmittel", attrs: { m_sName: "Fraes-01" }, sub_refs: [] },
+        4: { oid: 4, klass: "PDurchlaufplan", attrs: {}, sub_refs: [] },
+      },
+      coverage: { loaded: 4, skipped: 0, unsupported: [] },
+      schemas_url: "/api/v1/schemas",
+    };
+
+    useModelStore.getState().loadFromWire("test-model-id", wire);
+    const { wire: loadedWire } = useModelStore.getState();
+    expect(loadedWire).not.toBeNull();
+
+    // Extrahiere PBetriebsmittel-Namen (analog zur Implementierung in live.tsx)
+    const betriebsmittel = Object.values(loadedWire!.objects)
+      .filter((o) => o.klass === "PBetriebsmittel")
+      .sort((a, b) => a.oid - b.oid)
+      .map((o) => (typeof o.attrs.m_sName === "string" ? o.attrs.m_sName : `oid_${o.oid}`));
+
+    expect(betriebsmittel).toEqual(["Drehe-01", "Fraes-01"]);
   });
 });
