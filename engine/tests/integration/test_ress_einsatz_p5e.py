@@ -20,12 +20,18 @@ Out-of-Scope (explizit):
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 from osim_engine.decisions.strategie_rsv import AssozBelegLinkStatus
 from osim_engine.pps.ausloeser.einzel import PAslEinzel
 from osim_engine.pps.knoten.zeitvorgabe import PDpKnKonstant
 from osim_engine.pps.simulator import PSimulator
 from osim_engine.resources.assoziation.beleg import PAssozBeleg
 from osim_engine.resources.beleg import PBetriebsmittel, PRessBeleg, RessBelegListener, RessStatus
+
+_BOSCH2 = Path(__file__).resolve().parent.parent.parent / "experiments" / ".work" / "Bosch2_wechseln-azeitsim.otx"
 
 
 # ---------------------------------------------------------------------------
@@ -273,4 +279,85 @@ def test_get_base_link_status_unveraendert_nach_set() -> None:
     base = assoz.get_base_link_status(ress)
     assert base == AssozBelegLinkStatus.ABL_STD, (
         f"get_base_link_status sollte ABL_STD bleiben nach set_link_status, erhielt {base}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 3: Bosch2-Acceptance-Test — Regressions-Wächter gegen Symptom 0/34819
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _BOSCH2.exists(), reason="Bosch2_wechseln-azeitsim.otx nicht gefunden")
+def test_bosch2_eabelegen_knoten_count() -> None:
+    """Regressions-Wächter: Bosch2-Lauf hat 0 EABELEGEN-Knoten (modell-treu).
+
+    BEFUND (Plan 01-13 Task 1): Alle 140688 EPEntscheidungsAufgabe-Aufrufe
+    haben m_eRessUsage=EAKEINEBELEGUNG. Es gibt KEINEN EABELEGEN-Knoten im
+    Bosch2_wechseln-Modell. Leere ress_belegen-Zählung ist daher modell-treu
+    und KEIN Bug in der Belegungs-Kette.
+
+    Dieser Test verankert den Befund als Regressions-Wächter:
+    - Falls der Zähler plötzlich > 0 ist, hat sich das Modell geändert
+      (oder die Knoten-Typen wurden korrekt auf eaBelegen geändert — dann
+      sollte auch test_minimal_fixture_ress_belegen_feuert weiterhin grün sein).
+    - Falls der Zähler immer noch 0 ist, ist der Befund bestätigt und
+      Streaming-Listener müssen den korrekten Pfad nehmen (Plan 01-14/01-15).
+
+    Deterministisch: PAWLICEK-LCG-Seed unverändert (kein RNG-Eingriff).
+    """
+    from collections import Counter
+
+    from osim_engine.decisions.aufgabe import (
+        EntAufgabeBelegStatus,
+        EPEntscheidungsAufgabe,
+    )
+    from osim_engine.io.otx_loader import OtxLoader
+    from osim_engine.io.otx_reader import parse_otx_file
+    from osim_engine.resources.beleg import PRessBeleg
+
+    ress_belegen_count = 0
+    usage_counter: Counter[str] = Counter()
+
+    _orig_ress_belegen = PRessBeleg.ress_belegen
+
+    def _counting_ress_belegen(self, proz):
+        nonlocal ress_belegen_count
+        ress_belegen_count += 1
+        return _orig_ress_belegen(self, proz)
+
+    _orig_ent_bb = EPEntscheidungsAufgabe.bearbeit_beginnen
+
+    def _counting_ent_bb(self, proz_this):
+        usage = getattr(self, "m_eRessUsage", -1)
+        try:
+            name = EntAufgabeBelegStatus(usage).name
+        except ValueError:
+            name = str(usage)
+        usage_counter[name] += 1
+        return _orig_ent_bb(self, proz_this)
+
+    PRessBeleg.ress_belegen = _counting_ress_belegen          # type: ignore[method-assign]
+    EPEntscheidungsAufgabe.bearbeit_beginnen = _counting_ent_bb  # type: ignore[method-assign]
+
+    try:
+        otx = parse_otx_file(_BOSCH2)
+        loader = OtxLoader()
+        result = loader.load(otx)
+        sim = result.simulator
+        sim.start()  # 1 Periode
+    finally:
+        PRessBeleg.ress_belegen = _orig_ress_belegen             # type: ignore[method-assign]
+        EPEntscheidungsAufgabe.bearbeit_beginnen = _orig_ent_bb  # type: ignore[method-assign]
+
+    # BEFUND-VERANKERUNG: Bosch2 hat 100% eaKeineBelegung
+    eabelegen_count = usage_counter.get("EABELEGEN", 0)
+    assert eabelegen_count == 0, (
+        f"Befund geändert! Bosch2 hat jetzt {eabelegen_count} EABELEGEN-Knoten. "
+        f"Prüfe ob ress_belegen ebenfalls > 0 wurde (was korrekt wäre). "
+        f"Gesamte m_eRessUsage-Verteilung: {dict(usage_counter)}"
+    )
+    assert ress_belegen_count == 0, (
+        f"Symptom 0/34819: ress_belegen feuerte {ress_belegen_count} Mal trotz "
+        f"0 EABELEGEN-Knoten — Inkonsistenz im Belegungs-Pfad! "
+        f"m_eRessUsage-Verteilung: {dict(usage_counter)}"
     )
