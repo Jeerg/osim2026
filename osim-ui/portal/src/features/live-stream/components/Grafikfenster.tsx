@@ -452,7 +452,7 @@ export function Grafikfenster({
     if (zoom === "fit") return Math.max(containerW, MIN_GRID_WIDTH_PX);
     return Math.max(
       MIN_GRID_WIDTH_PX,
-      Math.round(calcContentWidthPx(span, zoom, zoomFactor)),
+      Math.round(calcContentWidthPx(span, zoom, zoomFactor, containerW)),
     );
   }, [zoom, zoomFactor, span, containerW]);
 

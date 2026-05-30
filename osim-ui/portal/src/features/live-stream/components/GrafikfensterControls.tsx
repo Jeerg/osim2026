@@ -32,6 +32,7 @@ export type SimStatus = "begin" | "period" | "running" | "suspended";
 /** Label-Map für Zoom-Stufen (Anzeige-Texte, analog 3fls ZOOM_OPTIONS). */
 const ZOOM_LABELS: Record<SimZoomLevel, string> = {
   fit: "Fit",
+  woche: "Woche",
   tag: "Tag",
   stunde: "Std",
   viertelstunde: "15m",

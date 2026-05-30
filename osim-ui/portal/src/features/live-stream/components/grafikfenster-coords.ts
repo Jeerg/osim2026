@@ -24,31 +24,44 @@
  */
 
 /** Zoom-Stufen für das Grafikfenster (analog 3fls ZoomLevel). */
-export type SimZoomLevel = "fit" | "tag" | "stunde" | "viertelstunde";
+export type SimZoomLevel = "fit" | "woche" | "tag" | "stunde" | "viertelstunde";
 
 /** Alle definierten Zoom-Stufen (Ordnung: Übersicht → Detail). */
 export const SIM_ZOOM_LEVELS: readonly SimZoomLevel[] = [
   "fit",
+  "woche",
   "tag",
   "stunde",
   "viertelstunde",
 ] as const;
 
 /**
- * Pixel pro Sekunde je Zoom-Stufe (analog PX_PER_DAY_BY_ZOOM in 3fls).
- *
- * Herleitung:
- *  - "tag"          = 4 px/h = 4/3600 px/s ≈ 0.001111  → bei 59 Tagen: ~505 px Content
- *  - "stunde"       = 30 px/h = 30/3600 px/s ≈ 0.008333 → bei 1 Tag: ~720 px Content
- *  - "viertelstunde"= 120 px/h = 120/3600 px/s ≈ 0.03333 → bei 1h: ~120 px Content
- *
- * "fit" hat keinen festen Wert — er wird per Container-Breite/Span berechnet.
+ * Dauer (in Sekunden), die eine Zoom-Stufe ~ in die Viewport-Breite legt.
+ * INTUITIVE Semantik (Browser-UAT "zoom geht nicht richtig"): bei "tag" füllt
+ * EIN Sim-Tag ungefähr die sichtbare Breite, bei "woche" eine Woche usw. Der
+ * px/s-Wert wird daraus + der echten Container-Breite berechnet (nicht mehr
+ * feste px/h, die bei langen Perioden unbrauchbar wurden).
  */
-export const PX_PER_SECOND_BY_ZOOM: Record<Exclude<SimZoomLevel, "fit">, number> = {
-  tag: 4 / 3600,          // ~0.001111 px/s → 4 px pro Sim-Stunde
-  stunde: 30 / 3600,      // ~0.008333 px/s → 30 px pro Sim-Stunde
-  viertelstunde: 120 / 3600, // ~0.033333 px/s → 120 px pro Sim-Stunde (= 2px/min)
+export const ZOOM_LEVEL_DURATION_SEC: Record<
+  Exclude<SimZoomLevel, "fit">,
+  number
+> = {
+  woche: 7 * 86400, // 604800
+  tag: 86400,
+  stunde: 3600,
+  viertelstunde: 900,
 };
+
+/**
+ * Obergrenze der Content-Breite in px. Schützt vor Mega-Leinwand (feine Stufe
+ * auf langer Periode → sonst 800k+ px → Render bricht / Sicht bleibt leer,
+ * "Grafik nach Zoomen weg"). px/s wird so gedeckelt, dass span*px ≤ MAX.
+ */
+export const MAX_CONTENT_PX = 24000;
+
+/** Fallback-Viewport-Breite, wenn die echte Container-Breite (noch) unbekannt
+ * ist (z.B. JSDOM ohne Layout). */
+export const NOMINAL_VIEWPORT_PX = 1100;
 
 /**
  * Berechnet den effektiven px/s-Wert für eine Zoom-Stufe + Faktor.
@@ -67,14 +80,21 @@ export function effectivePxPerSecond(
   containerWidthPx = 0,
   spanSeconds = 0,
 ): number {
+  const vp = containerWidthPx > 0 ? containerWidthPx : NOMINAL_VIEWPORT_PX;
+  let px: number;
   if (level === "fit") {
-    if (containerWidthPx > 0 && spanSeconds > 0) {
-      return (containerWidthPx / spanSeconds) * zoomFactor;
-    }
-    // Fallback: wie "tag"
-    return PX_PER_SECOND_BY_ZOOM.tag * zoomFactor;
+    // Ganze Periode füllt den Viewport.
+    px = (spanSeconds > 0 ? vp / spanSeconds : vp / 86400) * zoomFactor;
+  } else {
+    // Die Stufen-Dauer füllt den Viewport (woche/tag/stunde/15min).
+    px = (vp / ZOOM_LEVEL_DURATION_SEC[level]) * zoomFactor;
   }
-  return PX_PER_SECOND_BY_ZOOM[level] * zoomFactor;
+  // Deckel: Content-Breite (span * px) ≤ MAX_CONTENT_PX (Render-Schutz).
+  if (spanSeconds > 0) {
+    const maxPx = MAX_CONTENT_PX / spanSeconds;
+    if (px > maxPx) px = maxPx;
+  }
+  return px;
 }
 
 /**
@@ -133,10 +153,12 @@ export function contentWidthPx(
   zoomFactor = 1,
   containerWidthPx = 0,
 ): number {
-  if (level === "fit") {
-    return containerWidthPx > 0 ? containerWidthPx : spanSeconds * PX_PER_SECOND_BY_ZOOM.tag;
+  if (spanSeconds <= 0) {
+    return containerWidthPx > 0 ? containerWidthPx : NOMINAL_VIEWPORT_PX;
   }
-  return spanSeconds * PX_PER_SECOND_BY_ZOOM[level] * zoomFactor;
+  // Identische px/s-Quelle wie toX (inkl. Deckel) → Segmente bleiben im Content
+  // erreichbar (kein "leer auch nach Scrollen" mehr).
+  return spanSeconds * effectivePxPerSecond(level, zoomFactor, containerWidthPx, spanSeconds);
 }
 
 /** Ein Tick auf der Sim-Zeit-Achse. */
