@@ -386,8 +386,8 @@ function LivePage({
                 <Grafikfenster
                   modus={grafikModus}
                   widthPx={800}
-                  periodBegin={0}
-                  periodEnd={86400}
+                  periodBegin={periodInfo.begin}
+                  periodEnd={periodInfo.end}
                   ressourcenFromModel={ressourcenFromModel}
                   zoom={grafikZoom}
                   zoomFactor={grafikZoomFactor}
