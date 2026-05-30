@@ -2,125 +2,112 @@
 phase: 01-live-viewer-bridge
 plan: 16
 status: in_progress
-kind: ui-rebuild-kennzahlen-handoff
+kind: osim-treue-offensive-handoff
 updated: "2026-05-30"
 ---
 
-# Resume-Handoff — Phase 01 / 01-16 (PSim-Menübaum + OSim-Kennzahlen)
+# Resume-Handoff — Phase 01 / 01-16 (OSim-Treue-Offensive: DLZ + 2D + Audit + Fixes)
 
-Stand für `/clear` → `/gsd resume`. Diese Session hat (a) die finale 01-15-UAT
-abgeschlossen (Warteschlangen-Fix + api-Image), (b) /live nach PSim umstrukturiert
-und (c) OSim-treue Kennzahlen aus dem Sim-Stream eingebaut. **Offen: Browser-UAT
-der Kennzahlen-Charts durch den Nutzer; danach P5-D (echte Auslastung).**
+Stand für `/clear` → `/gsd resume`. Diese Session hat (a) die DLZ exakt aus den
+OSim-Akkumulatoren neu aufgebaut + Charts auf 2D umgestellt, (b) einen
+umfassenden Treue-Audit ALLER wertliefernden Streams gegen das C++-Original
+gefahren, (c) die gefundenen Fehler 1:1 gefixt bzw. ehrlich gegatet.
+**OFFEN: Browser-UAT durch den Nutzer ÜBER DEN GRAFIK-VIEWER.**
 
-## Was diese Session gemacht hat (alles committet, alle Gates grün)
+## Leitprinzip dieser Session (wichtig für Resume)
+
+`engine/osim2004-trace/` validiert die Reproduzierbarkeits-Basis **bit-exakt**
+(PAWLICEK-LCG + Verteilungen + Event-Pool-Sortierung). → Die Sim-Trajektorie ist
+garantiert identisch zum Original. **Folge: 1:1-Formel-Port ⟹ exakte Zahlen,
+zwangsläufig** — das alte OSim muss NICHT laufen. Der Audit prüft also nur die
+**Read-Side-Treue** (Listener/Insights lesen den Sim-Zustand wie das C++-FillList).
+
+## Was diese Session committet hat (alles auf main gepusht, api-Image neu)
 
 Commits (neueste zuerst):
-- `01d34e6` docs(01-16): STATE + Recherche-SPECs (Grafikfenster, Auswertung-Chart, P5D-Scope)
-- `bdc4bbc` feat(01-16): OSim-treue Kennzahlen aus dem Sim-Stream + Repo-Sync (skip-worktree)
-- `ad86c80` feat(01-16): /live als PSim-Menübaum — Simulationsgrafik vs. Auswertung getrennt
-- `7c44802` docs(01-15): STATE + Resume-Handoff (api-Image-Rebuild erledigt)
-- `63ea1f2` fix(01-15): Warteschlangen-Gebirge springt nicht mehr (volle Historie + Decimation)
-- `c76ddf4` fix(01-15): Dockerfile-Engine-COPY auf Monorepo-Pfad (engine/ statt osim-engine/engine)
+- `122261e` fix: gantt_wartequeue zählt 1:1 (alle Knoten-Prozesse, waiting + in Bearbeitung)
+- `abd4348` docs: wartequeue ehrlich als partial (Zwischenschritt, in 122261e zurück auf full)
+- `aa04c46` fix: Auswertungs-Records 1:1 — Teil=Durchlaufplan-Name, restmenge gated
+- `74f2837` docs: OSim-Treue-Audit-Report
+- `adfeba1` fix: gesamt-Durchsatz exakt aus Auslöser-Akkumulatoren (−28955 → 5864/5740/124)
+- `551c532` feat: ø-Balken exakt (count==0-Auslöser + NoZeroInEval-Schalter)
+- `0e930fc` feat: OSim-treue DLZ aus Auslöser-Akkumulatoren + 2D-Kennzahl-Charts
 
-### A) 01-15 abgeschlossen
-- **api-Image-Rebuild**: Engine (inkl. WartequeueListener) ist dauerhaft im Image
-  (kein `docker cp` mehr). Dockerfile-Bug gefixt: `COPY osim-engine/engine` →
-  `COPY engine` (Monorepo-Pfad).
-- **Warteschlangen-Sprung-Bug** behoben (Browser-UAT-Beschwerde „Grafik springt,
-  alte Zeitscheibe gelöscht, Lücken-Fehler"). EMPIRISCH gemessen: 494.938
-  gantt_wartequeue-Frames/Periode, seq lückenlos, drop_count=0 → Engine korrekt,
-  Bug war rein im UI-Umgang mit dem Volumen:
-  1. `store.ts`: 10k-Cap kürzte JEDEN Stream → nur ~2% Historie überlebte. Fix:
-     stream-spezifische Caps (gantt_* = 1.000.000).
-  2. `live.tsx`: `pending.push(...frames)` (Spread) sprengte bei ~600k Frames den
-     Call-Stack → still verworfen, Byte-Offset schon weiter → ECHTE seq-Lücke →
-     falsches Gap-Banner. Fix: element-weises Anhängen.
-  3. `Grafikfenster.tsx`: O(n×Zeilen)-filter + 8k-Punkt-Polygon → Jank. Fix:
-     Vorgruppierung (Map) + Decimation pro Pixelspalte (Spalten-Maximum).
+## Exakt/korrekt gemacht (verifiziert)
 
-### B) /live-Umbau nach PSim (LIVE-LAYOUT-SPEC.md)
-Mein Denkfehler war: flache Tableiste mit „Durchlaufplan" als primärem Tab. Korrekt
-(PSim, osim2004-ui-analysis §2.1): Simulationsgrafik (Grafikfenster) ≠ Durchlaufplan
-(Modellierung) ≠ Auswertung (eigenes Menü).
-- Linker **Menübaum** (`LiveMenuTree.tsx`, Quelle `LIVE_MENU` in viewer-config.ts).
-- **Steuerleiste oben**, geteilt über alle Sichten (Modus steuert der Baum →
-  `showModus=false`; Zoom nur bei Grafik → `showZoom=isGrafik`).
-- Default = Simulation → Belegung. Durchlaufplan/Einsatzzeit-Gantt aus dem Menü raus.
+| Kennzahl | Stand |
+|---|---|
+| DLZ je Durchlaufplan/Auslöser + beide ø-Modi | bit-exakt (PAusloeser GetKnzMittlDlfz) |
+| Anzahl Auslösungen | exakt (m_iPtkAusloesungCount) |
+| Belegung gantt_einsatz (on/off) | exakt (m_oProzCurrent, 46563 saubere Paare) |
+| Gesamt-Durchsatz | gefixt: 5864/5740/124 (war −28955) |
+| Teil-Spalte (prod_auftrag/nbearbeit/wschlange) | = Durchlaufplan-Name (m_durch->m_name) |
+| gantt_wartequeue | 1:1: zählt wartend + in Bearbeitung (96→110), Trajektorie identisch |
 
-### C) OSim-treue Kennzahlen aus dem Stream (KENNZAHLEN-SPEC.md)
-Leitprinzip (Nutzer): Engine loggt ROHDATEN, UI berechnet Kennzahlen → beliebig
-nachrüstbar. Tiefe OSim2004-C++-Analyse, alle Formeln mit `<datei>:<zeile>` belegt.
-- **Engine** (read-only, kein Sim-Kern-Edit): `gantt_durchlauf`-start trägt jetzt
-  `durchlaufplan_oid` + `durchlaufplan_id` (Bezugsobjekt Durchlaufplan) und
-  `soll_end_termin` (= start + m_iSollDauer, PAusloeser.cpp:1457; -1-Sentinel
-  erhalten). Quelle: `ausloeser.m_lDlpl.oid/.m_sName`.
-- **UI** (`osim-ui/portal/src/features/live-stream/kennzahlen.ts`): jede Funktion
-  zitiert die OSim-Quelle.
-  - `mittlereDurchlaufzeit` (PAusloeser.cpp:149-155); über-alles = MITTEL DER
-    OBJEKT-MITTEL, nicht Pool-Mittel (:650-712); NoZeroInEval (:675-692).
-  - `anzahlAusloesungen` (:122-125), ø-Balken rot (:508-510).
-  - `ressourcenAuslastungApprox` (Näherung belegt/Periode; exakt =
-    abgearbBedarf/Kapazitätsbestand PRessBeleg.cpp:1617-1622 braucht P5-D).
-  - ø/Sum-Aggregat rot/blau wie OChartCtrl.
-- Menübaum: neue Gruppe **„Kennzahlen (Diagramme)"** mit 4 Blättern; rendert über
-  `KennzahlChartPanel.tsx` → bestehender `AuswertungChart.tsx` (3D-Balken + ø).
+## Ehrlich gegatet (Modell nicht portiert → „exakt" erst nach Portierung)
 
-## Verifikations-Stand (zuletzt grün)
-- UI: `cd osim-ui/portal && npx tsc --noEmit` = 0; `npx vitest run src/features/live-stream`
-  = 118 grün (14 Dateien); eslint = 0 (nur 1 vorbestehender fast-refresh-Warn in live.tsx).
-- Engine: `engine/.venv/Scripts/python.exe -m pytest engine/tests/integration/test_streaming*.py engine/tests/unit/test_gantt_kennzahl_fields.py -q`
-  = 53 + 4 grün (golden-bench/schema unverändert, weil additive Felder).
-- Stack: api + portal healthy. Neue Engine-Felder verifiziert IM Image
-  (`durchlaufplan_oid: True | soll_end_termin: True`).
+- wschlange.restmenge → null (UI „—"); prod_auftrag.beschreibung → leer
+  (FEMOS-Mengen-/Lager-Modell nicht portiert).
+- Auslastung = Näherung (belegte Zeit / Periode statt abgearbBedarf/Einsatzzeit;
+  braucht P5-D/P5-M-Schichtmodell), ehrlich im Chart-Titel etikettiert.
+- 8 Auswertungen (Personal/Betriebsmittel/Kauf/Eigen/Kalkulation/Gesamt-Kosten/
+  Schicht/Bestellauftrag) = null + missing_slice, KEINE erfundenen Zahlen.
 
-## NÄCHSTER SCHRITT (Browser-UAT durch Nutzer)
-http://localhost:3002/live — Login jwfischer69@gmail.com / 123456 — Strg+Shift+R —
-NEUEN Lauf starten — links Gruppe **„Kennzahlen (Diagramme)"**:
-1. „Mittlere Durchlaufzeit · Auslöser" + „· Durchlaufplan" → grüne 3D-Balken je
-   Bezugsobjekt + roter ø-Balken. Plausibel?
-2. „Anzahl fertiggestellter Auslösungen" → Balken je Auslöser.
-3. „Ressourcenauslastung (Näherung)" → % je Ressource (ehrlich als Näherung
-   etikettiert).
-Nutzer gibt Rückmeldung, ob die Werte plausibel/OSim-konform aussehen.
+## NÄCHSTER SCHRITT — Browser-UAT ÜBER DEN GRAFIK-VIEWER (Nutzer-Hartregel!)
 
-## DANACH (geplante Reihenfolge, vom Nutzer bestätigt)
-1. **P5-D-Engine**: Betriebsmittel-Auslastung real (abgearb. Bedarf /
-   Kapazitätsbestand, Einsatzzeit, Zeitstress) → Auslastung von „Näherung" auf
-   „exakt". 1:1 PRessBeleg-Kennzahlen, Reproduzierbarkeitsvertrag.
-2. **Liefertermintreue als Chart** (Datengrundlage soll_end_termin liegt schon).
-3. **Später, eigene Slices**: Kosten + Lager/Material (im Original nie/teilweise
-   simuliert) — explizit out of scope jetzt.
+**Memory [[feedback-sim-grafik-viewer-immer]]: Sim-Verifikation IMMER über den
+Grafik-Viewer, NICHT den Standard-Viewer. Wirft der Lauf trotzdem eine Exception
+→ das MODELL anpassen (nicht anders messen).**
+
+http://localhost:3002/live — Login jwfischer69@gmail.com / 123456 — Strg+Shift+R:
+1. Links „Simulation → Belegung" (= Grafik-Viewer) wählen, Lauf aus der
+   Steuerleiste über dem Grafikfenster starten (Knopf liegt IM Grafik-Viewer).
+2. Durchlaufen lassen, dann prüfen:
+   - „Simulation → Warteschlangen" — Werte jetzt höher (inkl. in Bearbeitung).
+   - „Kennzahlen (Diagramme)" — DLZ (2D, ø-Schalter), Anzahl.
+   - „Auswertung → Gesamt" — offene Aufträge positiv; Warteschlange-Restmenge „—".
+3. Exception beim Start im Grafik-Viewer → Fehlermeldung an Claude, dann Modell anpassen.
+
+## DANACH (geplante Reihenfolge)
+
+1. Restliche exakt-Machung = **Modell-Portierung** (P5-D/P5-M + FEMOS-/Kosten-/
+   Mengen-Slice) → eigene Phasen. Erst dann sind Auslastung/Restmenge/Kosten exakt.
+2. **ERP-nahes Instanz-Modell** (Materialnummer an Durchlaufplan + instanziieren)
+   — eigene Phase, siehe `.planning/IDEAS-BACKLOG.md`. Löst auch die 5740-Auslöser-
+   Kardinalität (heute Top-N-Behelf).
+3. Optional aufräumen: die zwei vorbestehenden obsoleten/roten Tests (siehe unten).
+
+## Vorbestehende rote Tests (NICHT aus dieser Session — nicht meine Regression)
+
+- 4× `test_streaming_partial.py` (gantt_einsatz full/partial-Mismatch aus 01-14).
+- `test_ress_einsatz_p5e.py::test_bosch2_eabelegen_knoten_count` — stale 01-13-
+  Wächter: behauptet ress_belegen feuere 0×, ist seit dem 01-14-Belegungs-Wiring
+  überholt (feuert 46563× = treibt den Belegungs-Stream). Meine Änderung entfernte
+  nur eine Zeile INNERHALB ress_belegen → kann die Aufrufzahl nicht ändern.
+- `tests/unit/core/test_day_of_sim_parity.py` — Collection-Error (fehlende tzdata
+  „Europe/Berlin" auf Windows-Python). Blockiert `-k`-Läufe → mit explizitem
+  Datei-Pfad oder `-p no:cacheprovider` umgehen.
+
+## Referenz-Artefakte (committet)
+
+- `.planning/AUDIT-OSIM-TREUE.md` — vollständiger priorisierter Treue-Audit.
+- `.planning/IDEAS-BACKLOG.md` — ERP-Instanz-Modell-Phase.
 
 ## Wichtige Fakten / Gotchas
-- **skip-worktree-Falle (WICHTIG):** Mehrere Portal-Quelldateien trugen ein git
-  `assume-unchanged`/`skip-worktree`-Bit → `git add` verschluckte Änderungen still,
-  HEAD wurde inkonsistent. Vor JEDEM Commit prüfen:
-  `git ls-files -v | Select-String '^[a-z] '`. Falls geänderte Dateien dort:
-  `git update-index --no-skip-worktree <f>` + `--no-assume-unchanged <f>`. Siehe
-  Memory `skip-worktree-trap.md`.
-- **CRLF**: `core.autocrlf=true` → viele Dateien zeigen Pseudo-Diffs. Echten Diff
-  mit `git diff --ignore-all-space` prüfen (0 Zeilen = nur CRLF, harmlos).
-- **api-Container** = gebautes Image. Nach Engine-Änderung NEU bauen:
-  `docker compose -f osim-ui/docker-compose.yml build api` +
-  `... up -d --no-deps api`. Portal = Bind-Mount + HMR (bei Bedarf
-  `docker restart osim-ui-portal-1`).
-- **Bash-Tool unzuverlässig in dieser Session** (Outputs verschluckt, Pfade mit ö/()
-  scheitern bei Read/sed). PowerShell-Tool war robuster für git/pytest/Datei-Reads.
-- **Headless-Engine-Lauf** (Debug): `engine/.venv/Scripts/python.exe -m
-  osim_engine.streaming.run_otx --otx engine/experiments/.work/Bosch2_wechseln-azeitsim.otx
-  --run-dir <dir> --periods 1`.
-- **OSim2004-C++-Quelle**: `../OSim2004/OSimV01(Fj)/` (Pfad mit ö+Klammern quoten).
-  graphify-Graph unter `../OSim2004/graphify-out/`. Für Kennzahl-Formeln IMMER dort
-  nachschlagen, nicht erfinden.
 
-## Referenz-SPECs (committet, .planning/phases/01-live-viewer-bridge/)
-- `KENNZAHLEN-SPEC.md` — alle KPI-Formeln + Engine-Log-Schema + Recompute-Regeln
-- `LIVE-LAYOUT-SPEC.md` — /live-Struktur (Menübaum, Steuerleiste)
-- `GRAFIKFENSTER-SPEC.md`, `AUSWERTUNG-CHART-SPEC.md`, `P5D-SCOPE.md` — Recherche
-
-## Offene Kleinigkeiten
-- `.planning/.../01-09-PLAN.md` + `01-10-PLAN.md` zeigen uncommittete Diffs (NICHT
-  aus dieser Session, vor Session schon da). Bei Bedarf separat prüfen/committen.
-- 4 KPI-Charts sind verdrahtet; weitere (min DLZ, ZegDLZ, Liefertermintreue) sind
-  per KennzahlSpec leicht ergänzbar, sobald Datengrundlage steht.
+- **Verifikation:** UI/Sim IMMER über Grafik-Viewer (Memory). Engine-Pytest +
+  headless run_otx sind viewer-unabhängig (Memory nimmt sie explizit aus).
+- **Headless-Lauf:** `engine/.venv/Scripts/python.exe -m osim_engine.streaming.run_otx
+  --otx engine/experiments/.work/Bosch2_wechseln-azeitsim.otx --run-dir .work/<dir> --periods 1`.
+- **Konsole cp1252:** bei Python-prints mit Sonderzeichen `PYTHONIOENCODING=utf-8`;
+  Live-JSONL hat Leerzeichen nach Doppelpunkt (`"stream": "x"`), Golden ist kompakt.
+- **api nach Engine-Änderung neu bauen:** `docker compose -f osim-ui/docker-compose.yml
+  build api` + `up -d --no-deps api`. Portal = Bind-Mount + HMR.
+- **skip-worktree-Falle:** vor Commit `git ls-files -v <pfade> | grep -vE "^H "`.
+  Diese Session: alle geänderten Dateien waren `H` (normal), keine Falle.
+- **OSim2004-C++:** `../OSim2004/OSimV01(Fj)/` (Pfad mit ö+Klammern quoten). Für
+  Treue-Formeln IMMER dort nachschlagen. Kern-Klassen: PAusloeser.cpp (DLZ/Anzahl),
+  PRessBeleg.cpp (Belegung/Auslastung/Warteschlange), OSimulator.cpp (PtkIntervall*),
+  PAssozRessource.cpp (PtkUpDateProcessQueue), ISimulatorViewerAusw*.cpp (FillLists).
+- **uncommitted vor Session:** `.planning/.../01-09-PLAN.md` + `01-10-PLAN.md`
+  (nicht meine; bei Bedarf separat prüfen). `engine/.work/` = Scratch (ignorierbar).
