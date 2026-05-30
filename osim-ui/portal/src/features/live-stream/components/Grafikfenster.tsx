@@ -298,21 +298,24 @@ function WarteschlangenRow({
   const buildPolygon = (): string => {
     if (mySamples.length === 0) return "";
     const pts: string[] = [];
-    // Start: linker Boden
-    pts.push(`0,${h}`);
+    // Boden am ERSTEN Sample (nicht bei x=0 — sonst diagonale Rampe vom linken
+    // Rand, die den Berg zeitlich verzerrt).
+    const x0 = toX(mySamples[0].t);
+    pts.push(`${x0},${h}`);
+    // Treppe VORWÄRTS: Wert w_i gilt AB t_i bis zum nächsten Sample t_{i+1}
+    // (Queue-Länge ist eine Halte-Funktion). Der alte Code zeichnete w_i über
+    // das VORHERIGE Intervall [t_{i-1}, t_i] → Werte wurden zeitlich nach links
+    // gezogen/gestreckt (Browser-UAT: "plötzlich ziehst du sie in die Länge").
     for (let i = 0; i < mySamples.length; i++) {
-      const s = mySamples[i];
-      const x = toX(s.t);
-      const barH = Math.max(2, s.wartende * scaleY);
-      const y = h - barH;
-      // Treppenfunktion: zuerst horizontal auf x, dann vertikal auf y
-      if (i > 0) {
-        const prevX = toX(mySamples[i - 1].t);
-        pts.push(`${prevX},${y}`); // horizontale Stufe
-      }
-      pts.push(`${x},${y}`);
+      const xi = toX(mySamples[i].t);
+      const barH = Math.max(2, mySamples[i].wartende * scaleY);
+      const yi = h - barH;
+      const xNext =
+        i + 1 < mySamples.length ? toX(mySamples[i + 1].t) : xi;
+      pts.push(`${xi},${yi}`); // Stufe an t_i
+      pts.push(`${xNext},${yi}`); // Wert halten bis t_{i+1}
     }
-    // Rechter Boden
+    // Rechter Boden am letzten Sample
     const lastX = toX(mySamples[mySamples.length - 1].t);
     pts.push(`${lastX},${h}`);
     return pts.join(" ");
