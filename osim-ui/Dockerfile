@@ -2,9 +2,10 @@
 #
 # Build-Context-Konvention (WICHTIG):
 #   Damit das Image die Engine als editable-install bekommt, MUSS der Build mit
-#   `context: ..` ausgeführt werden — dem parent-Verzeichnis von osim-ui (also
-#   `C:\Users\JörgWFischer\PycharmProjects\`). Von dort liegt
-#   `osim-engine/engine/` neben `osim-ui/`.
+#   `context: ..` ausgeführt werden — dem parent-Verzeichnis von osim-ui. Seit der
+#   Monorepo-Migration (2026-05-28) ist das die Repo-Wurzel
+#   `C:\Users\JörgWFischer\PycharmProjects\osim-engine\`. Von dort liegt
+#   `engine/` neben `osim-ui/`.
 #
 #   docker-compose nutzt:
 #       build:
@@ -36,9 +37,11 @@ RUN pip install --no-cache-dir uv
 
 # Engine zuerst kopieren, damit der editable-install (pyproject.toml verweist
 # via [tool.uv.sources] osim-engine = { path = "../osim-engine/engine" }) das
-# Source-Tree findet. Build-Context ist `..` (siehe Header-Kommentar).
+# Source-Tree findet. Build-Context ist `..` = Repo-Wurzel (siehe Header). Die
+# Engine-Quelle liegt dort unter `engine/`; im Image bleibt sie unter
+# `/workspace/osim-engine/engine`, damit die venv-/pyproject-Pfade matchen.
 WORKDIR /workspace
-COPY osim-engine/engine /workspace/osim-engine/engine
+COPY engine /workspace/osim-engine/engine
 
 WORKDIR /workspace/osim-ui
 # pyproject.toml referenziert README.md im Project-Block — also mit kopieren,
