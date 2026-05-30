@@ -27,6 +27,7 @@ _LISTENER_MODULES: tuple[str, ...] = (
     "schicht",
     "reporting",
     "wartequeue",
+    "kennzahl_dlz",
 )
 
 

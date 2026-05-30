@@ -1,11 +1,11 @@
 /**
- * KennzahlChartPanel — rendert eine OSim-Kennzahl als 3D-Balken-Chart.
+ * KennzahlChartPanel — rendert eine OSim-Kennzahl als 2D-Balken-Chart.
  *
- * Brücke zwischen der UI-seitigen Kennzahl-Berechnung (kennzahlen.ts, 1:1 zu den
- * OSim-Formeln) und der Darstellung (AuswertungChart, OChartCtrl-treu). Liest die
- * Rohdaten-Frames aus dem Live-Store, füllt den Werte-Cube und dekoriert.
- *
- * Welche Kennzahl + welches Bezugsobjekt: über die KennzahlSpec (viewer-config).
+ * Brücke zwischen der UI-seitigen Kennzahl-Berechnung (kennzahlen.ts) und der
+ * Darstellung (AuswertungChart). DLZ/Anzahl lesen den `kennzahl_dlz`-Stream
+ * (Auslöser-DLZ-Rohdaten, OSim-treu); die Auslastungs-Näherung liest
+ * `gantt_einsatz`. Welche Kennzahl + welches Bezugsobjekt: KennzahlSpec
+ * (viewer-config).
  */
 
 import * as React from "react";
@@ -16,6 +16,7 @@ import {
   mittlereDurchlaufzeit,
   anzahlAusloesungen,
   ressourcenAuslastungApprox,
+  latestDlzRecords,
   cubeToChart,
 } from "../kennzahlen";
 import { AuswertungChart } from "./AuswertungChart";
@@ -32,8 +33,8 @@ export function KennzahlChartPanel({
   spec,
   periodLen,
 }: KennzahlChartPanelProps): React.ReactElement {
-  const durchlaufFrames = useLiveStreamStore(
-    (s) => s.byStream["gantt_durchlauf"] ?? EMPTY,
+  const dlzFrames = useLiveStreamStore(
+    (s) => s.byStream["kennzahl_dlz"] ?? EMPTY,
   );
   const einsatzFrames = useLiveStreamStore(
     (s) => s.byStream["gantt_einsatz"] ?? EMPTY,
@@ -43,26 +44,22 @@ export function KennzahlChartPanel({
     switch (spec.fn) {
       case "mittlereDurchlaufzeit":
         return mittlereDurchlaufzeit(
-          durchlaufFrames,
-          spec.gruppeKey ?? "auftrag_oid",
+          latestDlzRecords(dlzFrames),
+          spec.by ?? "ausloeser",
           spec.title,
-          {},
-          spec.nameKey,
         );
       case "anzahlAusloesungen":
         return anzahlAusloesungen(
-          durchlaufFrames,
-          spec.gruppeKey ?? "auftrag_oid",
+          latestDlzRecords(dlzFrames),
+          spec.by ?? "durchlaufplan",
           spec.title,
-          {},
-          spec.nameKey,
         );
       case "ressourcenAuslastungApprox":
         return ressourcenAuslastungApprox(einsatzFrames, periodLen, spec.title);
       default:
-        return { title: spec.title, categories: [], summary: null };
+        return { title: spec.title, categories: [], summary: null, note: null };
     }
-  }, [spec, durchlaufFrames, einsatzFrames, periodLen]);
+  }, [spec, dlzFrames, einsatzFrames, periodLen]);
 
   const chart = cubeToChart(cube);
 
@@ -72,6 +69,7 @@ export function KennzahlChartPanel({
         title={chart.title}
         categories={chart.categories}
         summaryType={chart.summaryType}
+        note={chart.note}
       />
     </div>
   );

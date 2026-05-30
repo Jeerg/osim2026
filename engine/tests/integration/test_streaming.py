@@ -53,10 +53,11 @@ def test_frame_serialize_includes_optionals_when_set() -> None:
 
 
 def test_stream_tags_contain_all_required_substreams() -> None:
-    """STREAM_TAGS enthält alle Sub-Streams inkl. gantt_wartequeue (neu in 01-14)."""
+    """STREAM_TAGS enthält alle Sub-Streams inkl. gantt_wartequeue (01-14) und
+    kennzahl_dlz (Durchlaufzeit-Rohdaten je Auslöser, 01-16)."""
     required = (
         "lifecycle", "gantt_durchlauf", "gantt_einsatz", "gantt_wartequeue",
-        "gantt_schicht", "kpi_auswertung", "reporting_record",
+        "gantt_schicht", "kpi_auswertung", "reporting_record", "kennzahl_dlz",
     )
     assert STREAM_TAGS == required
 

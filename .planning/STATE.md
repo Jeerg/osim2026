@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: "01-16: /live als PSim-Menübaum (Simulation/Kennzahlen/Auswertung getrennt, Steuerleiste oben, Durchlaufplan-Gantt raus) + OSim-treue Kennzahlen aus dem Sim-Stream (kennzahlen.ts: mittlere DLZ je Auslöser/Durchlaufplan + über-alles, Anzahl, Auslastungs-Näherung; OChartCtrl-3D-Balken). Engine: gantt_durchlauf-start trägt durchlaufplan_oid/-id + soll_end_termin. SPECs: LIVE-LAYOUT-SPEC, KENNZAHLEN-SPEC. api-Image neu, läuft. Offen: Browser-UAT der Kennzahlen-Charts; danach P5-D (echte Auslastung)."
-last_updated: "2026-05-30T14:45:00Z"
+stopped_at: "01-16: DLZ-Fix + 2D-Charts. NEUER Engine-Stream kennzahl_dlz (Listener liest am Perioden-Ende die Auslöser-Akkumulatoren m_dPtkDurchlaufzeit/m_iPtkAusloesungCount = OSim GetKnzMittlDlfz; kein Sim-Kern-Eingriff). UI: kennzahlen.ts rechnet DLZ + Anzahl je Durchlaufplan/Auslöser aus den records, Top-N + ø-über-alle (kein stiller Cap, note 'N von M'). AuswertungChart von 3D auf flaches 2D umgebaut. Befund: gantt_durchlauf-ende war pro Operation (nicht pro Auslösung) → DLZ war leer+falsch; jetzt korrekt aus on_dlpl_beendet-Akkumulatoren. Modell lädt 5740 Auslöser/364 Pläne (Instanzenebene) → ERP-Instanz-Umbau als eigene Phase vertagt (IDEAS-BACKLOG). Verifiziert: Engine 37+ grün, headless 5740 records/364 Pläne; UI 122 grün, tsc 0, eslint 0 (geänderte Dateien). api-Image neu gebaut+läuft, Stream baked-in. OFFEN: Browser-UAT der 2D-Kennzahlen-Charts."
+last_updated: "2026-05-30T17:05:00Z"
 resume_file: ".planning/phases/01-live-viewer-bridge/01-16-RESUME-HANDOFF.md"
 progress:
   total_phases: 1

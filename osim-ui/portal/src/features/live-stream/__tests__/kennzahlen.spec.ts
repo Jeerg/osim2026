@@ -1,10 +1,10 @@
 /**
  * EXAKT-ABGLEICH-Test: UI-Kennzahl-Berechnung vs. OSim2004-Original-Formeln.
  *
- * Strategie (Test-Conventions: Hand-Trace-Tabelle): ein kleines, vollständig von
- * Hand durchgerechnetes Szenario. Jeder Erwartungswert ist direkt aus der
- * OSim-C++-Formel abgeleitet und mit der Quelle (OSimV01(Fj)/<datei>:<zeile>)
- * kommentiert. Bestehen die Tests, rechnet das UI bit-genau wie das Original.
+ * Quelle der DLZ-/Anzahl-Kennzahlen ist jetzt der `kennzahl_dlz`-Stream
+ * (ein record je Auslöser mit `dlz_sum` = Σ Durchlaufzeit und `count`). Jeder
+ * Erwartungswert ist von Hand aus der OSim-C++-Formel abgeleitet (Quelle im
+ * Kommentar). Bestehen die Tests, rechnet das UI wie das Original.
  *
  * Bezug: KENNZAHLEN-SPEC.md §2 + §4 + §5.
  */
@@ -14,181 +14,166 @@ import {
   mittlereDurchlaufzeit,
   anzahlAusloesungen,
   ressourcenAuslastungApprox,
+  latestDlzRecords,
   cubeToChart,
+  type DlzRecord,
 } from "../kennzahlen";
 import type { Frame } from "../types";
 
-let seqCounter = 0;
-function start(auftrag: string, oid: number, t: number): Frame {
-  return {
-    t,
-    stream: "gantt_durchlauf",
-    seq: ++seqCounter,
-    v: {
-      kind: "start",
-      auftrag_id: auftrag,
-      auftrag_oid: oid,
-      prozess_id: `${auftrag}-P`,
-      start_time: t,
-    },
-  };
+function rec(
+  ausloeser: string,
+  durchlaufplan: string | null,
+  dlz_sum: number,
+  count: number,
+): DlzRecord {
+  return { ausloeser, durchlaufplan, dlz_sum, count, ausloeser_oid: -1, durchlaufplan_oid: -1 };
 }
-function ende(auftrag: string, t: number): Frame {
+
+let seqCounter = 0;
+function dlzFrame(records: DlzRecord[]): Frame {
   return {
-    t,
-    stream: "gantt_durchlauf",
+    t: 86400,
+    stream: "kennzahl_dlz",
     seq: ++seqCounter,
-    v: { kind: "ende", auftrag_id: auftrag, end_time: t },
+    v: { kind: "period", period_num: 0, records },
   };
 }
 function einsatzOn(ress: string, t: number): Frame {
-  return {
-    t,
-    stream: "gantt_einsatz",
-    seq: ++seqCounter,
-    v: { kind: "on", ressource_id: ress, start_time: t },
-  };
+  return { t, stream: "gantt_einsatz", seq: ++seqCounter, v: { kind: "on", ressource_id: ress, start_time: t } };
 }
 function einsatzOff(ress: string, t: number): Frame {
-  return {
-    t,
-    stream: "gantt_einsatz",
-    seq: ++seqCounter,
-    v: { kind: "off", ressource_id: ress, end_time: t },
-  };
+  return { t, stream: "gantt_einsatz", seq: ++seqCounter, v: { kind: "off", ressource_id: ress, end_time: t } };
 }
 
-describe("mittlereDurchlaufzeit (PAusloeser.cpp:149-155 + PtkMittlDlfz :650-712)", () => {
-  it("Mittel je Auslöser = Σ(end−start) / count abgeschlossener Instanzen", () => {
-    // Auslöser A (oid 1): zwei Auslösungen, DLZ 100 und 300 → Mittel 200.
-    // Auslöser B (oid 2): eine Auslösung, DLZ 50 → Mittel 50.
-    // Hand-Trace:
-    //   A: (1100-1000)=100, (1700-1400)=300 → (100+300)/2 = 200
-    //   B: (2200-2150)=50                      → 50/1        = 50
-    const frames: Frame[] = [
-      start("A", 1, 1000), ende("A", 1100),
-      start("A", 1, 1400), ende("A", 1700),
-      start("B", 2, 2150), ende("B", 2200),
+describe("latestDlzRecords", () => {
+  it("nimmt die records des ZULETZT gestreamten Frames (jüngste Periode)", () => {
+    const frames = [
+      dlzFrame([rec("A", "P", 100, 1)]),
+      dlzFrame([rec("B", "Q", 200, 1)]),
     ];
-    const cube = mittlereDurchlaufzeit(frames, "auftrag_oid");
+    expect(latestDlzRecords(frames)).toEqual([rec("B", "Q", 200, 1)]);
+  });
+  it("leere Frame-Liste → []", () => {
+    expect(latestDlzRecords([])).toEqual([]);
+  });
+});
+
+describe("mittlereDurchlaufzeit · Auslöser (PAusloeser GetKnzMittlDlfz :149-155)", () => {
+  it("Mittel je Auslöser = dlz_sum / count, absteigend sortiert", () => {
+    // A: dlz_sum 400, count 2 → 200 ; B: dlz_sum 50, count 1 → 50
+    const cube = mittlereDurchlaufzeit(
+      [rec("A", "P", 400, 2), rec("B", "Q", 50, 1)],
+      "ausloeser",
+    );
     expect(cube.categories).toEqual([
       { name: "A", value: 200 },
       { name: "B", value: 50 },
     ]);
   });
 
-  it("über-alles = MITTEL DER OBJEKT-MITTEL, nicht Pool-Mittel (PAusloeser.cpp:689-692)", () => {
-    // Gegenprobe: beide Maße unterscheiden sich deutlich.
-    //   A: 2 Instanzen je DLZ 100 → Objekt-Mittel 100
-    //   B: 1 Instanz   DLZ 400    → Objekt-Mittel 400
-    // Mittel-der-Mittel (OSim ø) = (100 + 400) / 2 = 250
-    // Pool-Mittel (FALSCH)       = (100+100+400)/3 ≈ 200  → darf NICHT herauskommen
-    const frames: Frame[] = [
-      start("A", 1, 0), ende("A", 100),
-      start("A", 1, 200), ende("A", 300),
-      start("B", 2, 0), ende("B", 400),
-    ];
-    const cube = mittlereDurchlaufzeit(frames, "auftrag_oid");
-    expect(cube.summary).not.toBeNull();
-    expect(cube.summary!.kind).toBe("oe"); // ø / rot (PAusloeser.cpp:744-746)
-    expect(cube.summary!.label).toBe("ø");
-    expect(cube.summary!.value).toBe(250); // Mittel-der-Mittel
-    expect(cube.summary!.value).not.toBe(200); // NICHT Pool-Mittel
+  it("ø = MITTEL DER OBJEKT-MITTEL über ALLE Objekte (:650-712)", () => {
+    // A: 200, B: 50 → ø = (200+50)/2 = 125 (rot / oe, :744-746)
+    const cube = mittlereDurchlaufzeit(
+      [rec("A", "P", 400, 2), rec("B", "Q", 50, 1)],
+      "ausloeser",
+    );
+    expect(cube.summary).toEqual({ label: "ø", value: 125, kind: "oe" });
   });
 
-  it("count=0 für ein Objekt → Objekt-Mittel 0.0 (PAusloeser.cpp:150-151)", () => {
-    // Ein offener start ohne ende (Instanz nicht fertiggestellt) zählt NICHT
-    // (PAusloeser.cpp:115-116: count++ nur bei OnDlplBeendet).
-    const frames: Frame[] = [
-      start("A", 1, 0), ende("A", 100), // A: Mittel 100
-      start("B", 2, 50),                 // B: offen → keine fertige Instanz
-    ];
-    const cube = mittlereDurchlaufzeit(frames, "auftrag_oid");
-    // B taucht NICHT als Kategorie auf (keine abgeschlossene Instanz).
-    expect(cube.categories).toEqual([{ name: "A", value: 100 }]);
-    expect(cube.summary!.value).toBe(100);
+  it("NoZeroInEval: ø teilt durch Objekte mit Mittel≠0 (:675-689)", () => {
+    // A 100, B 300, C 0 (DLZ-Summe 0 bei count 1 → mittel 0)
+    const recs = [rec("A", "P", 100, 1), rec("B", "P", 300, 1), rec("C", "Q", 0, 1)];
+    expect(mittlereDurchlaufzeit(recs, "ausloeser").summary!.value).toBeCloseTo(400 / 3, 6);
+    expect(
+      mittlereDurchlaufzeit(recs, "ausloeser", "t", { noZeroInEval: true }).summary!.value,
+    ).toBe(200);
   });
 
-  it("NoZeroInEval: ø teilt durch Objekte mit Mittel≠0 (PAusloeser.cpp:675-689)", () => {
-    // Drei Objekte, eines mit Mittel 0:
-    //   A: DLZ 100 → 100 ; B: DLZ 300 → 300 ; C: DLZ 0 (start==ende) → 0
-    // default     : (100+300+0)/3 = 133.33…  (durch GetCount, :692)
-    // NoZeroInEval: (100+300+0)/2 = 200       (durch #(≠0), :689)
-    const frames: Frame[] = [
-      start("A", 1, 0), ende("A", 100),
-      start("B", 2, 0), ende("B", 300),
-      start("C", 3, 500), ende("C", 500), // DLZ 0
+  it("Top-N: zeigt nur die N größten Balken + ehrlicher Hinweis; ø über ALLE", () => {
+    // 5 Objekte mit Mittel 10,20,30,40,50; topN 2 → [50,40] + "Top 2 von 5"
+    const recs = [
+      rec("A", "P", 10, 1), rec("B", "P", 20, 1), rec("C", "P", 30, 1),
+      rec("D", "P", 40, 1), rec("E", "P", 50, 1),
     ];
-    const def = mittlereDurchlaufzeit(frames, "auftrag_oid");
-    expect(def.summary!.value).toBeCloseTo(400 / 3, 6);
-
-    const nz = mittlereDurchlaufzeit(frames, "auftrag_oid", "mittlere Durchlaufzeit", {
-      noZeroInEval: true,
-    });
-    expect(nz.summary!.value).toBe(200);
+    const cube = mittlereDurchlaufzeit(recs, "ausloeser", "t", { topN: 2 });
+    expect(cube.categories).toEqual([{ name: "E", value: 50 }, { name: "D", value: 40 }]);
+    expect(cube.note).toBe("Top 2 von 5");
+    // ø bezieht ALLE 5 ein: (10+20+30+40+50)/5 = 30
+    expect(cube.summary!.value).toBe(30);
   });
 
-  it("leerer Stream → keine Kategorien, kein Aggregat", () => {
-    const cube = mittlereDurchlaufzeit([], "auftrag_oid");
+  it("leerer Stream → keine Kategorien, kein Aggregat, kein Hinweis", () => {
+    const cube = mittlereDurchlaufzeit([], "ausloeser");
     expect(cube.categories).toEqual([]);
     expect(cube.summary).toBeNull();
+    expect(cube.note).toBeNull();
   });
 });
 
-describe("anzahlAusloesungen (PAusloeser.cpp:122-125 + PtkAnzAusloesung :434-476)", () => {
-  it("zählt fertiggestellte Instanzen je Objekt; ø = Mittel der Anzahlen", () => {
-    // A: 2 fertige + 1 offen → 2 ; B: 1 fertig → 1
-    // offener start zählt NICHT (count++ nur bei Ende, :115-116)
-    const frames: Frame[] = [
-      start("A", 1, 0), ende("A", 100),
-      start("A", 1, 200), ende("A", 300),
-      start("A", 1, 400), // offen
-      start("B", 2, 0), ende("B", 50),
-    ];
-    const cube = anzahlAusloesungen(frames, "auftrag_oid");
+describe("mittlereDurchlaufzeit · Durchlaufplan (gepoolt, PDurchlaufplan :2072-2117)", () => {
+  it("Plan-Mittel = Σdlz_sum / Σcount über die Auslöser des Plans", () => {
+    // P: (100+300)/(1+1) = 200 ; Q: 400/1 = 400 → sortiert [Q 400, P 200]
+    const recs = [rec("A", "P", 100, 1), rec("B", "P", 300, 1), rec("C", "Q", 400, 1)];
+    const cube = mittlereDurchlaufzeit(recs, "durchlaufplan");
     expect(cube.categories).toEqual([
-      { name: "A", value: 2 },
-      { name: "B", value: 1 },
+      { name: "Q", value: 400 },
+      { name: "P", value: 200 },
     ]);
-    // ø = (2+1)/2 = 1.5, rot (PAusloeser.cpp:459, :508-510)
-    expect(cube.summary).toEqual({ label: "ø", value: 1.5, kind: "oe" });
+    // ø = Mittel der Plan-Mittel = (400+200)/2 = 300
+    expect(cube.summary!.value).toBe(300);
+  });
+
+  it("records ohne Plan landen unter '(ohne Plan)'", () => {
+    const cube = mittlereDurchlaufzeit([rec("A", null, 100, 1)], "durchlaufplan");
+    expect(cube.categories).toEqual([{ name: "(ohne Plan)", value: 100 }]);
+  });
+});
+
+describe("anzahlAusloesungen (m_iPtkAusloesungCount, PAusloeser.cpp:122-125)", () => {
+  it("Σcount je Durchlaufplan; ø = Mittel der Anzahlen", () => {
+    // P: 2+1 = 3 ; Q: 1 → sortiert [P 3, Q 1] ; ø = (3+1)/2 = 2
+    const recs = [rec("A", "P", 100, 2), rec("B", "P", 50, 1), rec("C", "Q", 70, 1)];
+    const cube = anzahlAusloesungen(recs, "durchlaufplan");
+    expect(cube.categories).toEqual([
+      { name: "P", value: 3 },
+      { name: "Q", value: 1 },
+    ]);
+    expect(cube.summary).toEqual({ label: "ø", value: 2, kind: "oe" });
   });
 });
 
 describe("ressourcenAuslastungApprox (PRessBeleg.cpp:1617-1622, Näherung)", () => {
   it("belegte Zeit / Perioden-Länge × 100 je Ressource", () => {
-    // M1 belegt [0..3600]+[7200..10800] = 7200s über Periode 86400 → 8.333…%
-    // M2 belegt [0..43200] = 43200s → 50%
+    // M1 belegt 7200s über Periode 86400 → 8.333…% ; M2 belegt 43200 → 50%
     const frames: Frame[] = [
       einsatzOn("M1", 0), einsatzOff("M1", 3600),
       einsatzOn("M1", 7200), einsatzOff("M1", 10800),
       einsatzOn("M2", 0), einsatzOff("M2", 43200),
     ];
     const cube = ressourcenAuslastungApprox(frames, 86400);
-    expect(cube.categories[0].name).toBe("M1");
-    expect(cube.categories[0].value).toBeCloseTo((7200 / 86400) * 100, 6);
-    expect(cube.categories[1].value).toBeCloseTo(50, 6);
-    // ø über beide Ressourcen
+    // sortiert absteigend: M2 (50%) vor M1 (8.33%)
+    expect(cube.categories[0].name).toBe("M2");
+    expect(cube.categories[0].value).toBeCloseTo(50, 6);
+    expect(cube.categories[1].name).toBe("M1");
+    expect(cube.categories[1].value).toBeCloseTo((7200 / 86400) * 100, 6);
     expect(cube.summary!.kind).toBe("oe");
-    expect(cube.summary!.value).toBeCloseTo(
-      ((7200 / 86400) * 100 + 50) / 2,
-      6,
-    );
+    expect(cube.summary!.value).toBeCloseTo(((7200 / 86400) * 100 + 50) / 2, 6);
   });
 });
 
 describe("cubeToChart", () => {
-  it("hängt den Aggregat-Balken als letzte Kategorie an", () => {
-    const frames: Frame[] = [
-      start("A", 1, 0), ende("A", 100),
-      start("B", 2, 0), ende("B", 300),
-    ];
-    const chart = cubeToChart(mittlereDurchlaufzeit(frames, "auftrag_oid"));
+  it("hängt den Aggregat-Balken als letzte Kategorie an + reicht note durch", () => {
+    const cube = mittlereDurchlaufzeit(
+      [rec("A", "P", 100, 1), rec("B", "P", 300, 1)],
+      "ausloeser",
+    );
+    const chart = cubeToChart(cube);
     expect(chart.categories).toEqual([
-      { name: "A", value: 100 },
       { name: "B", value: 300 },
-      { name: "ø", value: 200 }, // (100+300)/2
+      { name: "A", value: 100 },
+      { name: "ø", value: 200 }, // (300+100)/2
     ]);
     expect(chart.summaryType).toBe("oe");
+    expect(chart.note).toBeNull();
   });
 });

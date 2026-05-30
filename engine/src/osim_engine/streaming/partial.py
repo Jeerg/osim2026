@@ -148,4 +148,12 @@ def build_streams_status() -> dict[str, dict[str, Any]]:
             "Status-State-Machine (ende_ist/ende_soll/verspaetung). Period-end "
             "schreibt minimale partial-Records ohne diese Felder.",
         ),
+        "kennzahl_dlz": _entry(
+            "full", [],
+            "Durchlaufzeit-Rohdaten je Auslöser (m_dPtkDurchlaufzeit / "
+            "m_iPtkAusloesungCount, GetKnzMittlDlfz PAusloeser.cpp:149-155). "
+            "Period-end-Snapshot der real akkumulierten Auslösungs-DLZ; das UI "
+            "berechnet Mittel je Auslöser/Durchlaufplan + ø. Keine Skelett-"
+            "Abhängigkeit — die Akkumulation läuft in on_dlpl_beendet (real).",
+        ),
     }

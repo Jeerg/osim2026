@@ -22,6 +22,7 @@ STREAM_TAGS: tuple[str, ...] = (
     "gantt_schicht",
     "kpi_auswertung",
     "reporting_record",
+    "kennzahl_dlz",
 )
 
 

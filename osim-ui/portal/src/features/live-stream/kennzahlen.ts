@@ -5,20 +5,28 @@
  * die Kennzahlen werden HIER im UI berechnet. So lassen sich beliebige Kennzahlen
  * nachrüsten, solange die Rohdaten im Stream liegen.
  *
- * Alle Formeln sind 1:1 aus dem OSim2004-C++-Original übernommen; jede Funktion
- * zitiert die Quelle (OSimV01(Fj)/<datei>:<zeile>). Die Architektur spiegelt
- * OSims Trennung: hier wird der Werte-"Cube" gefüllt (analog Ptk*), die Optik
- * (AuswertungChart) dekoriert separat (analog OChartCtrl).
+ * Durchlaufzeit (DLZ) / Anzahl Auslösungen:
+ *   Quelle ist der `kennzahl_dlz`-Stream (ein Frame je Periode, `v.records[]`).
+ *   Jeder record ist EIN Auslöser mit `dlz_sum` (Σ Durchlaufzeit über die
+ *   abgeschlossenen Auslösungen der Periode) und `count`. Das ist die OSim-treue
+ *   Auslösungs-DLZ (PAusloeser GetKnzMittlDlfz, m_dPtkDurchlaufzeit/
+ *   m_iPtkAusloesungCount) — NICHT die frühere, semantisch falsche
+ *   Operations-Paarung aus `gantt_durchlauf` start/ende.
  *
- * Aggregat-Konvention (PAusloeser.cpp): Skalar-KPIs hängen einen ø-Balken an
- * (arithm. Mittel, rot); Tages-Zeitreihen einen Summen-Balken (blau).
+ * Gruppierung: je Auslöser ODER je Durchlaufplan (records tragen beide Schlüssel).
+ * Da Modelle heute auf Instanzenebene liegen (viele Auslöser/Pläne, siehe
+ * IDEAS-BACKLOG „ERP-nahes Instanz-Modell"), zeigen die Charts die Top-N nach
+ * Wert + einen ø-Balken ÜBER ALLE Objekte (kein stiller Cap: `note` nennt „N von
+ * M"). ø = Mittel der Objekt-Mittel (PAusloeser.cpp:650-712).
+ *
+ * Auslastung: unverändert Näherung aus `gantt_einsatz` on/off.
  */
 
 import type { Frame } from "./types";
 
 /** Eine Chart-Kategorie (ein Balken). */
 export interface KennzahlCategory {
-  /** Name der Kategorie (Bezugsobjekt, z.B. Auslöser-/Ressourcen-Name). */
+  /** Name der Kategorie (Bezugsobjekt, z.B. Auslöser-/Durchlaufplan-/Ressourcen-Name). */
   name: string;
   /** Wert der Kategorie. */
   value: number;
@@ -28,246 +36,194 @@ export interface KennzahlCategory {
 export interface KennzahlCube {
   /** Chart-Titel (= OSim-Kennzahl-Name). */
   title: string;
-  /** Pro-Bezugsobjekt-Balken (in stabiler Reihenfolge). */
+  /** Pro-Bezugsobjekt-Balken (geordnet, absteigend nach Wert; ggf. Top-N). */
   categories: KennzahlCategory[];
   /**
    * Aggregat-Balken (letzte Kategorie im Original). Typ bestimmt Label+Farbe:
-   *  - "oe"  → "ø" / rot  (arithm. Mittel der Objekt-Werte)
+   *  - "oe"  → "ø" / rot  (arithm. Mittel der Objekt-Werte ÜBER ALLE Objekte)
    *  - "sum" → "Sum" / blau (Summe über den Horizont)
    * null, wenn kein Aggregat sinnvoll ist (z.B. leer).
    */
   summary: { label: string; value: number; kind: "oe" | "sum" } | null;
+  /**
+   * Ehrlicher Hinweis, wenn nur eine Teilmenge der Objekte als Balken gezeigt
+   * wird (Top-N). Beispiel: "Top 30 von 364". null = alle Objekte gezeigt.
+   */
+  note: string | null;
 }
 
-/** Optionen, die die Aggregation verändern (OSim-Profil-Flags). */
+/** Optionen, die die Aggregation/Anzeige verändern. */
 export interface KennzahlOptions {
   /**
    * m_PSim_NoZeroInEval (PAusloeser.cpp:675,688): wenn true, teilt der ø-Balken
    * durch die Anzahl der Objekte mit Wert ≠ 0 statt durch die Gesamtanzahl.
-   * Der Zähler summiert IMMER alle Werte (inkl. Nullen). Default false.
+   * Default false.
    */
   noZeroInEval?: boolean;
+  /**
+   * Maximale Anzahl gezeigter Balken (Top-N nach Wert). Der ø-Balken bezieht
+   * IMMER alle Objekte ein. Default 30. 0/undefined → alle.
+   */
+  topN?: number;
 }
 
-/** Eine abgeschlossene Durchlauf-Instanz (aus gantt_durchlauf start+ende). */
-interface DurchlaufInstanz {
-  /** Gruppierungs-Schlüssel des Bezugsobjekts (z.B. auftrag_oid). */
-  gruppe: string;
-  /** Anzeigename des Bezugsobjekts. */
-  name: string;
-  startTime: number;
-  endTime: number;
-}
+/** Default-Anzahl gezeigter Balken (Instanz-Modelle haben hunderte Objekte). */
+export const DEFAULT_TOP_N = 30;
 
-/**
- * Paart gantt_durchlauf start/ende-Frames je Prozess-Instanz zu abgeschlossenen
- * Durchlauf-Instanzen. Offene starts ohne ende werden ignoriert (zählen im
- * Original nicht zur fertiggestellten Menge, PAusloeser.cpp:115-116).
- *
- * Gruppierung über `gruppeKey` (Feld im start-Frame, z.B. "auftrag_oid" für die
- * Auslöser-Sicht; künftig "durchlaufplan_oid" für die Durchlaufplan-Sicht, sobald
- * die Engine es streamt — KENNZAHLEN-SPEC §3).
- *
- * Matching: gantt_durchlauf trägt keine stabile Prozess-OID über start/ende
- * hinweg (gantt.py nutzt id(proz) nur intern). Wir paaren daher FIFO je
- * Betriebsmittel/Auftrag: ein ende schließt das älteste offene start desselben
- * auftrag_id. Das ist für die DLZ-Summe exakt, weil die DLZ einer Instanz
- * end−start ist und die Zuordnung innerhalb eines Auftrags ordnungserhaltend bleibt.
- */
-function paareDurchlaeufe(
-  frames: Frame[],
-  gruppeKey: string,
-  nameKey = "auftrag_id",
-): DurchlaufInstanz[] {
-  // Offene starts je Auftrag (FIFO).
-  const offen = new Map<string, { gruppe: string; name: string; startTime: number }[]>();
-  const result: DurchlaufInstanz[] = [];
-
-  for (const f of frames) {
-    const v = f.v as Record<string, unknown>;
-    const kind = v.kind;
-    const auftragId = String(v.auftrag_id ?? "");
-
-    if (kind === "start") {
-      const gruppeRaw = v[gruppeKey];
-      const gruppe =
-        gruppeRaw === undefined || gruppeRaw === null
-          ? auftragId
-          : String(gruppeRaw);
-      // Anzeigename aus nameKey (z.B. durchlaufplan_id bei Plan-Gruppierung);
-      // Fallback auf den Gruppen-Wert, dann auftrag_id.
-      const nameRaw = v[nameKey];
-      const name =
-        nameRaw !== undefined && nameRaw !== null && String(nameRaw).length > 0
-          ? String(nameRaw)
-          : gruppe || auftragId;
-      const startTime =
-        typeof v.start_time === "number" ? v.start_time : f.t;
-      const list = offen.get(auftragId) ?? [];
-      list.push({ gruppe, name, startTime });
-      offen.set(auftragId, list);
-    } else if (kind === "ende") {
-      const list = offen.get(auftragId);
-      if (!list || list.length === 0) continue; // ende ohne offenes start → ignorieren
-      const start = list.shift()!;
-      const endTime = typeof v.end_time === "number" ? v.end_time : f.t;
-      result.push({
-        gruppe: start.gruppe,
-        name: start.name,
-        startTime: start.startTime,
-        endTime,
-      });
-    }
-  }
-  return result;
-}
-
-/** Pro-Gruppe Mittelwert + stabile Reihenfolge (erstes Auftreten). */
-interface GruppenMittel {
-  gruppe: string;
-  name: string;
-  /** Mittelwert der Gruppe (0 wenn keine Instanz, OSim-Konvention). */
-  mittel: number;
-  /** Anzahl abgeschlossener Instanzen der Gruppe. */
+/** Ein Durchlaufzeit-Rohdaten-Record aus dem kennzahl_dlz-Stream (ein Auslöser). */
+export interface DlzRecord {
+  /** Auslöser-Name (Kategorie-Name in der Auslöser-Sicht). */
+  ausloeser: string;
+  /** Stabile Auslöser-OID (-1 = kein OID). */
+  ausloeser_oid?: number;
+  /** Durchlaufplan-Name (Kategorie-Name in der Plan-Sicht; null = ohne Plan). */
+  durchlaufplan: string | null;
+  /** Durchlaufplan-OID (-1, solange Loader keine Plan-OID setzt). */
+  durchlaufplan_oid?: number;
+  /** Σ Durchlaufzeit über die abgeschlossenen Auslösungen der Periode (Sekunden). */
+  dlz_sum: number;
+  /** Anzahl abgeschlossener Auslösungen der Periode. */
   count: number;
 }
 
-/**
- * Hängt den ø-Aggregat-Balken an (Mittel-der-Mittel, OSim PtkMittlDlfz).
- *
- * über-alles = (Σ Objekt-Mittel) ÷ N — UNGEWICHTETES Mittel der Objekt-Mittel,
- * NICHT Pool-Mittel über alle Instanzen (PAusloeser.cpp:650-712).
- * N = Objektanzahl (default) oder Anzahl Objekte mit Mittel≠0 wenn noZeroInEval
- * (PAusloeser.cpp:675-692).
- */
-function mitOeBalken(
-  title: string,
-  gruppen: GruppenMittel[],
-  options: KennzahlOptions,
-): KennzahlCube {
-  const categories = gruppen.map((g) => ({ name: g.name, value: g.mittel }));
-  let summary: KennzahlCube["summary"] = null;
+/** Gruppierungs-Bezugsobjekt der DLZ-/Anzahl-Kennzahlen. */
+export type DlzGroupBy = "ausloeser" | "durchlaufplan";
 
-  if (gruppen.length > 0) {
-    const sum = gruppen.reduce((acc, g) => acc + g.mittel, 0);
-    const divisor = options.noZeroInEval
-      ? gruppen.filter((g) => g.mittel !== 0).length
-      : gruppen.length;
-    const mittel = divisor > 0 ? sum / divisor : 0;
-    summary = { label: "ø", value: mittel, kind: "oe" };
+/** Label für Records ohne zugeordneten Durchlaufplan. */
+const OHNE_PLAN = "(ohne Plan)";
+
+/**
+ * Liest die records des ZULETZT gestreamten kennzahl_dlz-Frames (die jüngste
+ * Periode). Frühere Perioden-Frames werden ignoriert — die Auslöser-
+ * Akkumulatoren sind period-scoped (on_rec_init-Reset), der letzte Frame trägt
+ * den aktuellsten Stand.
+ */
+export function latestDlzRecords(frames: Frame[]): DlzRecord[] {
+  for (let i = frames.length - 1; i >= 0; i--) {
+    const v = frames[i].v as Record<string, unknown>;
+    if (Array.isArray(v.records)) return v.records as DlzRecord[];
   }
-  return { title, categories, summary };
+  return [];
+}
+
+/** Pro-Gruppe akkumulierte Σdlz + Σcount, in stabiler Auftritts-Reihenfolge. */
+interface Gruppe {
+  name: string;
+  sum: number;
+  count: number;
+}
+
+function gruppiere(records: DlzRecord[], by: DlzGroupBy): Gruppe[] {
+  const order: string[] = [];
+  const map = new Map<string, Gruppe>();
+  for (const r of records) {
+    const name =
+      by === "durchlaufplan" ? r.durchlaufplan ?? OHNE_PLAN : r.ausloeser;
+    let g = map.get(name);
+    if (!g) {
+      g = { name, sum: 0, count: 0 };
+      map.set(name, g);
+      order.push(name);
+    }
+    g.sum += r.dlz_sum;
+    g.count += r.count;
+  }
+  return order.map((n) => map.get(n)!);
 }
 
 /**
- * Mittlere Durchlaufzeit je Bezugsobjekt + ø über alles.
+ * Baut den Cube aus den Objekt-Werten: ø (Mittel-der-Werte über ALLE Objekte) +
+ * Top-N-Kategorien (absteigend nach Wert) + ehrlicher "N von M"-Hinweis.
  *
- * Quelle: PAusloeser::GetKnzMittlDlfz (PAusloeser.cpp:149-155):
- *   mittel = Σ(end−start über abgeschlossene Instanzen) ÷ count, 0 wenn count=0.
- * über-alles: PAusloeserLList::PtkMittlDlfz (PAusloeser.cpp:650-712), Mittel der
- * Objekt-Mittel; NoZeroInEval (:675-692).
- * Identische Formel für Durchlaufplan (PDurchlaufplan.cpp:2072-2117) und Knoten
- * (PDlplKnoten.cpp:119-142) — nur die Gruppierung (gruppeKey) unterscheidet sich.
+ * @param werte   je Objekt {name, value} über ALLE Objekte.
+ * @param topN    max. gezeigte Balken (0/undefined → alle).
+ * @param noZero  ø teilt durch Objekte mit Wert ≠ 0 (NoZeroInEval).
+ */
+function baueCube(
+  title: string,
+  werte: KennzahlCategory[],
+  topN: number,
+  noZero: boolean,
+): KennzahlCube {
+  let summary: KennzahlCube["summary"] = null;
+  if (werte.length > 0) {
+    const sum = werte.reduce((acc, w) => acc + w.value, 0);
+    const divisor = noZero ? werte.filter((w) => w.value !== 0).length : werte.length;
+    summary = { label: "ø", value: divisor > 0 ? sum / divisor : 0, kind: "oe" };
+  }
+
+  const sorted = [...werte].sort((a, b) => b.value - a.value);
+  const limit = topN > 0 ? topN : sorted.length;
+  const categories = sorted.slice(0, limit);
+  const note =
+    sorted.length > limit ? `Top ${limit} von ${sorted.length}` : null;
+
+  return { title, categories, summary, note };
+}
+
+/**
+ * Mittlere Durchlaufzeit je Bezugsobjekt + ø über alle (Top-N).
  *
- * @param frames     gantt_durchlauf-Frames (start+ende).
- * @param gruppeKey  start-Frame-Feld für die Gruppierung ("auftrag_oid" =
- *                   Auslöser-Sicht; "durchlaufplan_oid" = Durchlaufplan-Sicht).
- * @param title      Chart-Titel (OSim-Kennzahl-Name).
+ * Quelle: kennzahl_dlz-records. Pro Gruppe (Auslöser/Durchlaufplan) gepoolt:
+ *   Mittel = Σdlz_sum / Σcount  (= PAusloeser/PDurchlaufplan GetKnzMittlDlfz,
+ *   m_dPtkDurchlaufzeit/m_iPtkAusloesungCount, PAusloeser.cpp:149-155).
+ * ø über alles: Mittel der Objekt-Mittel (PAusloeser.cpp:650-712);
+ * NoZeroInEval (:675-692).
  */
 export function mittlereDurchlaufzeit(
-  frames: Frame[],
-  gruppeKey: string,
+  records: DlzRecord[],
+  by: DlzGroupBy,
   title = "mittlere Durchlaufzeit",
   options: KennzahlOptions = {},
-  nameKey = "auftrag_id",
 ): KennzahlCube {
-  const instanzen = paareDurchlaeufe(frames, gruppeKey, nameKey);
-
-  // Pro Gruppe: Σ Dauer + count, Reihenfolge = erstes Auftreten.
-  const order: string[] = [];
-  const agg = new Map<string, { name: string; summe: number; count: number }>();
-  for (const inst of instanzen) {
-    let a = agg.get(inst.gruppe);
-    if (!a) {
-      a = { name: inst.name, summe: 0, count: 0 };
-      agg.set(inst.gruppe, a);
-      order.push(inst.gruppe);
-    }
-    a.summe += inst.endTime - inst.startTime;
-    a.count += 1;
-  }
-
-  const gruppen: GruppenMittel[] = order.map((g) => {
-    const a = agg.get(g)!;
-    return {
-      gruppe: g,
-      name: a.name,
-      // count>0 hier immer (Gruppe entsteht nur durch eine Instanz); 0-Schutz dennoch.
-      mittel: a.count > 0 ? a.summe / a.count : 0,
-      count: a.count,
-    };
-  });
-
-  return mitOeBalken(title, gruppen, options);
+  const gruppen = gruppiere(records, by);
+  const werte: KennzahlCategory[] = gruppen.map((g) => ({
+    name: g.name,
+    value: g.count > 0 ? g.sum / g.count : 0,
+  }));
+  return baueCube(
+    title,
+    werte,
+    options.topN ?? DEFAULT_TOP_N,
+    options.noZeroInEval ?? false,
+  );
 }
 
 /**
- * Anzahl fertiggestellter Auslösungen je Bezugsobjekt + ø über alles.
+ * Anzahl fertiggestellter Auslösungen je Bezugsobjekt + ø über alle (Top-N).
  *
- * Quelle: PAusloeser::GetKnzAnzAusloesung = m_iPtkAusloesungCount
- * (PAusloeser.cpp:122-125), inkrementiert bei OnDlplBeendet (:115-116).
- * über-alles: PtkAnzAusloesung, letzter Balken = iSumAnz/GetCount(), ø/rot
- * (PAusloeser.cpp:434-476, :508-510).
+ * Quelle: kennzahl_dlz-records, Σcount je Gruppe (= m_iPtkAusloesungCount,
+ * PAusloeser.cpp:122-125). ø/rot = Mittel der Anzahlen (:508-510).
  */
 export function anzahlAusloesungen(
-  frames: Frame[],
-  gruppeKey: string,
+  records: DlzRecord[],
+  by: DlzGroupBy,
   title = "Anzahl fertiggestellter Auslösungen",
   options: KennzahlOptions = {},
-  nameKey = "auftrag_id",
 ): KennzahlCube {
-  const instanzen = paareDurchlaeufe(frames, gruppeKey, nameKey);
-  const order: string[] = [];
-  const agg = new Map<string, { name: string; count: number }>();
-  for (const inst of instanzen) {
-    let a = agg.get(inst.gruppe);
-    if (!a) {
-      a = { name: inst.name, count: 0 };
-      agg.set(inst.gruppe, a);
-      order.push(inst.gruppe);
-    }
-    a.count += 1;
-  }
-  const gruppen: GruppenMittel[] = order.map((g) => {
-    const a = agg.get(g)!;
-    return { gruppe: g, name: a.name, mittel: a.count, count: a.count };
-  });
-  // Anzahl ist ganzzahlig je Objekt; der ø-Balken ist das Mittel der Anzahlen.
-  return mitOeBalken(title, gruppen, options);
+  const gruppen = gruppiere(records, by);
+  const werte: KennzahlCategory[] = gruppen.map((g) => ({
+    name: g.name,
+    value: g.count,
+  }));
+  return baueCube(title, werte, options.topN ?? DEFAULT_TOP_N, false);
 }
 
 /**
  * Ressourcen-Auslastung (Approximation aus Belegungs-Occupancy).
  *
  * EXAKT im Original: GetKnzAuslastung = abgearbBedarf / Kapazitätsbestand
- * (PRessBeleg.cpp:1617-1622), wobei Kapazitätsbestand = Einsatzzeit
- * (Belegungs-Fläche). Der abgearbeitete Bedarf und die theoretische Kapazität
- * (Schichtmodell) sind P5-D/P5-M-abhängig und werden HEUTE noch nicht gestreamt.
+ * (PRessBeleg.cpp:1617-1622). Der Kapazitätsbestand (Schichtmodell) ist
+ * P5-D/P5-M-abhängig und wird HEUTE noch nicht gestreamt.
  *
- * Approximation bis dahin (ehrlich etikettiert): Auslastung ≈ belegte Zeit /
- * Perioden-Länge, aus gantt_einsatz on/off-Intervallen je Ressource. Das ist die
- * Belegungs-Fläche über der Periode — die korrekte ZÄHLER-Größe, aber mit
- * Perioden-Länge als Nenner statt der (noch fehlenden) theoretischen Kapazität.
- *
- * @param einsatzFrames gantt_einsatz on/off-Frames.
- * @param periodLen     Perioden-Länge in Sekunden (Nenner der Approximation).
+ * Approximation (ehrlich etikettiert): Auslastung ≈ belegte Zeit /
+ * Perioden-Länge, aus gantt_einsatz on/off-Intervallen je Ressource.
  */
 export function ressourcenAuslastungApprox(
   einsatzFrames: Frame[],
   periodLen: number,
   title = "Auslastung (Näherung: belegte Zeit / Periode)",
 ): KennzahlCube {
-  // belegte Zeit je Ressource aus on/off-Paaren (FIFO je Ressource).
   const offen = new Map<string, number[]>(); // ressource_id → start_times
   const order: string[] = [];
   const belegt = new Map<string, number>();
@@ -295,24 +251,24 @@ export function ressourcenAuslastungApprox(
   }
 
   const denom = periodLen > 0 ? periodLen : 1;
-  const gruppen: GruppenMittel[] = order.map((rid) => {
-    const b = belegt.get(rid) ?? 0;
-    const pct = (b / denom) * 100;
-    return { gruppe: rid, name: rid, mittel: pct, count: 1 };
-  });
-  // ø-Balken = mittlere Auslastung über alle Ressourcen (analog ccRED-ø).
-  return mitOeBalken(title, gruppen, {});
+  const werte: KennzahlCategory[] = order.map((rid) => ({
+    name: rid,
+    value: (belegt.get(rid) ?? 0) / denom * 100,
+  }));
+  // Ressourcen sind überschaubar → alle zeigen (topN 0), ø über alle.
+  return baueCube(title, werte, 0, false);
 }
 
 /**
  * Wandelt einen KennzahlCube in die AuswertungChart-Props (categories inkl.
- * angehängtem Aggregat-Balken). Der Chart färbt den letzten Balken rot/blau
- * gemäß summaryType.
+ * angehängtem Aggregat-Balken + Hinweis). Der Chart färbt den letzten Balken
+ * rot/blau gemäß summaryType.
  */
 export function cubeToChart(cube: KennzahlCube): {
   title: string;
   categories: KennzahlCategory[];
   summaryType: "oe" | "sum";
+  note: string | null;
 } {
   const categories = [...cube.categories];
   if (cube.summary) {
@@ -322,5 +278,6 @@ export function cubeToChart(cube: KennzahlCube): {
     title: cube.title,
     categories,
     summaryType: cube.summary?.kind ?? "oe",
+    note: cube.note,
   };
 }

@@ -1,23 +1,21 @@
 /**
- * AuswertungChart — 3D-Balken-Chart nach OSim2004-bmStd-Spezifikation
- * (Plan 01-15 Task 3).
+ * AuswertungChart — flaches 2D-Balken-Chart für OSim-Kennzahlen.
  *
- * 1:1-Port des OChartCtrl bmStd-Renderers (ofc/OChartCtrl.cpp:602-685):
- *  - Balken grün (ccDEFAULT = RGB(0,224,0)) — MthChart.cpp:28
- *  - Letzter Balken = Zusammenfassungs-Kategorie "ø" rot (ccRED = RGB(224,0,0))
- *    oder "Sum" blau (ccBLUE = RGB(0,0,224)) — PAusloeser.cpp:744-746
- *  - 3D-Effekt: top +64/Kanal (aufgehellt), side -64/Kanal (abgedunkelt),
- *    depth = STD_BAR_DEPTH=12 — OChartCtrl.cpp:1277-1364
- *  - Wert-Label %6.2f über jedem Balken (m_showBarValue=TRUE) — :650-666
- *  - Kategorie-Label darunter (m_xinfo[x].m_btxt) — :669-675
- *  - Achse 0..nice-gerundetes-Max, 5 Intervalle (%6.0f) — MthChart.cpp:57-128
- *  - Titel = Kennzahl-Name (m_title, PAusloeser.cpp:749-750)
+ * Bewusst 2D (Nutzer-Entscheidung 2026-05-30: „kannst du auch 2d machen, muss
+ * nicht so sein wie im OSim"). Die frühere 3D-bmStd-Nachbildung (skewed Top-/
+ * Side-Flächen) war optisch fehlerhaft und wird durch saubere, performante
+ * Rechteck-Balken ersetzt. Die OSim-Semantik bleibt: grüne Objekt-Balken, der
+ * letzte Balken ist die Zusammenfassung (ø rot / Sum blau), Wert-Label über dem
+ * Balken (%6.2f), Kategorie-Label darunter, Achse 0..nice-Max in 5 Intervallen.
  *
- * Balken-/3D-Farben sind datengetriebene OSim-Farbwerte (nicht UI-Branding),
- * daher inline-style (osim-ui/CLAUDE.md: 1:1-Treue-Ausnahme gilt hier).
- * Alle übrigen Styles über 3FLS-Design-Tokens.
+ * Balken-Farben sind datengetriebene OSim-Farbwerte (ccDEFAULT grün, ccRED, ccBLUE)
+ * und daher inline-style (osim-ui/CLAUDE.md: 1:1-Treue-Ausnahme). Übrige Styles
+ * über 3FLS-Design-Tokens.
  *
- * Leere Daten → ehrlich leerer Chart, keine erfundenen Balken (T-01-15-02).
+ * `note`: optionaler ehrlicher Hinweis bei Top-N-Anzeige (z.B. „Top 30 von 364"),
+ * damit eine gekappte Objektmenge nicht als „alles gezeigt" missverstanden wird.
+ *
+ * Leere Daten → ehrlich leerer Chart, keine erfundenen Balken.
  */
 
 import * as React from "react";
@@ -31,42 +29,29 @@ export interface ChartCategory {
 }
 
 export interface AuswertungChartProps {
-  /** Titel des Charts = Kennzahl-Name (m_title). */
+  /** Titel des Charts = Kennzahl-Name. */
   title: string;
   /** Geordnete Kategorien (letzter Eintrag = Zusammenfassung ø/Sum). */
   categories: ChartCategory[];
   /**
    * Typ des Zusammenfassungs-Balkens (default: "oe" → rot).
-   * "sum" → blau (KnzAnzAusloesungZeitInt etc., §4.2).
+   * "sum" → blau.
    */
   summaryType?: "oe" | "sum";
+  /** Ehrlicher Top-N-Hinweis (null/undefined = alle Objekte gezeigt). */
+  note?: string | null;
 }
 
 // OSim-Farbkonstanten (MthChart.cpp:403-423)
-const COLOR_DEFAULT = { r: 0, g: 224, b: 0 }; // ccDEFAULT grün
-const COLOR_RED = { r: 224, g: 0, b: 0 }; // ccRED
-const COLOR_BLUE = { r: 0, g: 0, b: 224 }; // ccBLUE
-const BAR_DEPTH = 12; // STD_BAR_DEPTH
-const BAR_WIDTH = 50; // STD_BAR_WIDTH
-const CELL_WIDTH = 100; // STD_CELL_WIDTH
-
-/** Clamp 0..255. */
-const clamp = (v: number) => Math.max(0, Math.min(255, v));
-
-/** RGB-String ohne Leerzeichen (inline-style 1:1-Treue). */
-const rgb = (r: number, g: number, b: number) => `rgb(${r},${g},${b})`;
-
-/** +64/Kanal (top-Fläche). */
-const lighter = (c: { r: number; g: number; b: number }) =>
-  rgb(clamp(c.r + 64), clamp(c.g + 64), clamp(c.b + 64));
-
-/** -64/Kanal (side-Fläche). */
-const darker = (c: { r: number; g: number; b: number }) =>
-  rgb(clamp(c.r - 64), clamp(c.g - 64), clamp(c.b - 64));
+const COLOR_DEFAULT = "rgb(0,224,0)"; // ccDEFAULT grün
+const COLOR_RED = "rgb(224,0,0)"; // ccRED (ø)
+const COLOR_BLUE = "rgb(0,0,224)"; // ccBLUE (Sum)
+const BAR_WIDTH = 44; // Balkenbreite in px
+const CELL_WIDTH = 64; // Spaltenbreite je Kategorie
 
 /**
- * "Nice" Achsen-Maximum: berechnet das aufgerundete Maximum für 5 Intervalle.
- * 1:1 MthChart.cpp:57-128 (vereinfacht: pot = 10^floor(log10(intv)), dann ceil).
+ * "Nice" Achsen-Maximum: aufgerundetes Maximum für 5 Intervalle.
+ * (MthChart.cpp:57-128, vereinfacht.)
  */
 function niceMax(max: number, intervals = 5): number {
   if (max <= 0) return intervals; // Fallback: 5 Einheiten
@@ -76,7 +61,7 @@ function niceMax(max: number, intervals = 5): number {
   return niceIntv * intervals;
 }
 
-/** Formatiert einen Wert nach %6.2f (min 6 Zeichen, 2 Dezimalstellen). */
+/** Formatiert einen Wert nach %6.2f (2 Dezimalstellen). */
 function fmt2f(v: number): string {
   return v.toFixed(2);
 }
@@ -86,36 +71,31 @@ function fmt0f(v: number): string {
   return Math.round(v).toString();
 }
 
-/** Ein einzelner 3D-Balken (div-basiert, Top/Side-Flächen als Pseudo-3D). */
-function Bar3D({
+/** Ein flacher 2D-Balken mit Wert-Label oben und Kategorie-Label unten. */
+function Bar2D({
   value,
-  maxValue,
+  axisMax,
   color,
-  barHeight,
+  chartHeight,
   index,
   name,
-  isLast,
 }: {
   value: number;
-  maxValue: number;
-  color: { r: number; g: number; b: number };
-  barHeight: number;
+  axisMax: number;
+  color: string;
+  chartHeight: number;
   index: number;
   name: string;
-  isLast: boolean;
 }): React.ReactElement {
-  const fillH = maxValue > 0 ? (value / maxValue) * barHeight : 0;
-  const frontColor = rgb(color.r, color.g, color.b);
-  const topColor = lighter(color);
-  const sideColor = darker(color);
+  const fillH = axisMax > 0 ? Math.max(0, (value / axisMax) * chartHeight) : 0;
 
   return (
     <div
-      className="flex flex-col items-center"
+      className="flex shrink-0 flex-col items-center"
       style={{ width: CELL_WIDTH }}
       aria-label={`${name}: ${fmt2f(value)}`}
     >
-      {/* Wert-Label über dem Balken (%6.2f, m_showBarValue=TRUE) */}
+      {/* Wert-Label über dem Balken (%6.2f) */}
       <span
         className="mb-0.5 text-[10px] font-medium tabular-nums text-foreground"
         data-testid={`ausw-chart-label-${index}`}
@@ -123,57 +103,25 @@ function Bar3D({
         {fmt2f(value)}
       </span>
 
-      {/* 3D-Balken (front + top + side) */}
+      {/* Balken-Zone fester Höhe, Balken unten ausgerichtet */}
       <div
-        className="relative"
-        style={{ height: fillH + BAR_DEPTH, width: BAR_WIDTH + BAR_DEPTH }}
+        className="flex items-end"
+        style={{ height: chartHeight }}
       >
-        {/* Front face */}
         <div
           data-testid={`ausw-chart-bar-${index}`}
-          aria-hidden={isLast ? undefined : "true"}
-          className="absolute bottom-0 left-0"
+          className="rounded-t-sm"
           style={{
             width: BAR_WIDTH,
             height: fillH,
-            backgroundColor: frontColor,
+            backgroundColor: color,
           }}
         />
-        {/* Top face (parallelogram via skewed div) */}
-        {fillH > 0 && (
-          <div
-            className="absolute"
-            style={{
-              width: BAR_WIDTH,
-              height: BAR_DEPTH,
-              bottom: fillH,
-              left: BAR_DEPTH * 0.5,
-              backgroundColor: topColor,
-              transform: "skewX(-45deg)",
-              transformOrigin: "bottom left",
-            }}
-            aria-hidden="true"
-          />
-        )}
-        {/* Side face */}
-        {fillH > 0 && (
-          <div
-            className="absolute"
-            style={{
-              width: BAR_DEPTH,
-              height: fillH,
-              bottom: 0,
-              left: BAR_WIDTH,
-              backgroundColor: sideColor,
-            }}
-            aria-hidden="true"
-          />
-        )}
       </div>
 
       {/* Kategorie-Label unterhalb */}
       <span
-        className="mt-0.5 max-w-[90px] truncate text-center text-[10px] text-muted-foreground"
+        className="mt-1 max-w-[60px] truncate text-center text-[10px] text-muted-foreground"
         title={name}
       >
         {name}
@@ -186,6 +134,7 @@ export function AuswertungChart({
   title,
   categories,
   summaryType = "oe",
+  note = null,
 }: AuswertungChartProps): React.ReactElement {
   if (categories.length === 0) {
     return (
@@ -202,9 +151,8 @@ export function AuswertungChart({
   const maxVal = Math.max(...categories.map((c) => c.value), 0);
   const axisMax = niceMax(maxVal);
   const axisIntervals = 5;
-  const chartHeight = 120; // Balken-Höhe in Pixel
+  const chartHeight = 160; // Balken-Zone in px
 
-  // Zusammenfassungs-Farbe: ø=rot, Sum=blau (§4.2)
   const summaryColor = summaryType === "sum" ? COLOR_BLUE : COLOR_RED;
 
   return (
@@ -221,12 +169,22 @@ export function AuswertungChart({
         {title}
       </div>
 
-      {/* Balken + Achse nebeneinander */}
+      {/* Ehrlicher Top-N-Hinweis */}
+      {note && (
+        <div
+          className="text-center text-[11px] text-muted-foreground"
+          data-testid="ausw-chart-note"
+        >
+          {note}
+        </div>
+      )}
+
+      {/* Achse + Balken nebeneinander */}
       <div className="flex gap-2">
-        {/* Y-Achse links */}
+        {/* Y-Achse links (0..nice-Max, 5 Intervalle) */}
         <div
           className="flex flex-col-reverse justify-between border-r border-border pr-1 text-right text-[10px] tabular-nums text-muted-foreground"
-          style={{ height: chartHeight + BAR_DEPTH + 20, width: 50 }}
+          style={{ height: chartHeight, width: 52 }}
           data-testid="ausw-chart-axis"
           aria-label="Werteachse"
         >
@@ -240,24 +198,20 @@ export function AuswertungChart({
           })}
         </div>
 
-        {/* Balken */}
-        <div
-          className="flex items-end gap-0 overflow-x-auto"
-          style={{ height: chartHeight + BAR_DEPTH + 20 }}
-        >
+        {/* Balken (horizontal scrollbar bei vielen Kategorien) */}
+        <div className="flex items-end gap-1 overflow-x-auto pb-1">
           {categories.map((cat, i) => {
             const isLast = i === categories.length - 1;
             const color = isLast ? summaryColor : COLOR_DEFAULT;
             return (
-              <Bar3D
+              <Bar2D
                 key={`${cat.name}-${i}`}
                 value={cat.value}
-                maxValue={axisMax}
+                axisMax={axisMax}
                 color={color}
-                barHeight={chartHeight}
+                chartHeight={chartHeight}
                 index={i}
                 name={cat.name}
-                isLast={isLast}
               />
             );
           })}

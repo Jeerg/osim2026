@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "osim-engine:streaming/kennzahl_dlz.json",
+  "title": "kennzahl_dlz frame",
+  "description": "Sub-Stream kennzahl_dlz: Durchlaufzeit-Rohdaten je Ausloeser am Perioden-Ende (m_dPtkDurchlaufzeit / m_iPtkAusloesungCount, GetKnzMittlDlfz PAusloeser.cpp:149-155). Engine loggt Rohdaten, UI berechnet Mittel je Ausloeser/Durchlaufplan + oe.",
+  "type": "object",
+  "required": ["t", "stream", "seq", "v"],
+  "properties": {
+    "t": { "type": "integer" },
+    "stream": { "const": "kennzahl_dlz" },
+    "seq": { "type": "integer" },
+    "wall_t": { "type": "string" },
+    "meta_event": { "type": "string" },
+    "v": {
+      "type": "object",
+      "required": ["kind", "period_num", "records"],
+      "properties": {
+        "kind": { "const": "period" },
+        "period_num": { "type": "integer" },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "ausloeser",
+              "ausloeser_oid",
+              "durchlaufplan",
+              "durchlaufplan_oid",
+              "dlz_sum",
+              "count"
+            ],
+            "properties": {
+              "ausloeser": { "type": "string" },
+              "ausloeser_oid": { "type": "integer" },
+              "durchlaufplan": { "type": ["string", "null"] },
+              "durchlaufplan_oid": { "type": "integer" },
+              "dlz_sum": { "type": "number" },
+              "count": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

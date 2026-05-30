@@ -387,10 +387,11 @@ export interface KennzahlSpec {
     | "mittlereDurchlaufzeit"
     | "anzahlAusloesungen"
     | "ressourcenAuslastungApprox";
-  /** Gruppierungs-Feld im start-Frame (Auslöser vs. Durchlaufplan). */
-  gruppeKey?: "auftrag_oid" | "durchlaufplan_oid";
-  /** Feld für den Kategorie-Anzeigenamen (Default auftrag_id). */
-  nameKey?: "auftrag_id" | "durchlaufplan_id";
+  /**
+   * Bezugsobjekt der DLZ-/Anzahl-Gruppierung (kennzahl_dlz-records tragen
+   * beide Schlüssel). Ignoriert bei ressourcenAuslastungApprox.
+   */
+  by?: "ausloeser" | "durchlaufplan";
 }
 
 /**
@@ -450,18 +451,6 @@ export const LIVE_MENU: LiveMenuGroup[] = [
     label: "Kennzahlen (Diagramme)",
     children: [
       {
-        id: "kz-dlz-ausloeser",
-        label: "Mittlere Durchlaufzeit · Auslöser",
-        kind: "kennzahl",
-        kennzahl: {
-          id: "kz-dlz-ausloeser",
-          title: "mittlere Durchlaufzeit (Auslöser)",
-          fn: "mittlereDurchlaufzeit",
-          gruppeKey: "auftrag_oid",
-          nameKey: "auftrag_id",
-        },
-      },
-      {
         id: "kz-dlz-dlpl",
         label: "Mittlere Durchlaufzeit · Durchlaufplan",
         kind: "kennzahl",
@@ -469,20 +458,29 @@ export const LIVE_MENU: LiveMenuGroup[] = [
           id: "kz-dlz-dlpl",
           title: "mittlere Durchlaufzeit (Durchlaufplan)",
           fn: "mittlereDurchlaufzeit",
-          gruppeKey: "durchlaufplan_oid",
-          nameKey: "durchlaufplan_id",
+          by: "durchlaufplan",
         },
       },
       {
-        id: "kz-anz-ausloeser",
-        label: "Anzahl Auslösungen · Auslöser",
+        id: "kz-dlz-ausloeser",
+        label: "Mittlere Durchlaufzeit · Auslöser",
         kind: "kennzahl",
         kennzahl: {
-          id: "kz-anz-ausloeser",
-          title: "Anzahl fertiggestellter Auslösungen",
+          id: "kz-dlz-ausloeser",
+          title: "mittlere Durchlaufzeit (Auslöser)",
+          fn: "mittlereDurchlaufzeit",
+          by: "ausloeser",
+        },
+      },
+      {
+        id: "kz-anz-dlpl",
+        label: "Anzahl Auslösungen · Durchlaufplan",
+        kind: "kennzahl",
+        kennzahl: {
+          id: "kz-anz-dlpl",
+          title: "Anzahl fertiggestellter Auslösungen (Durchlaufplan)",
           fn: "anzahlAusloesungen",
-          gruppeKey: "auftrag_oid",
-          nameKey: "auftrag_id",
+          by: "durchlaufplan",
         },
       },
       {
