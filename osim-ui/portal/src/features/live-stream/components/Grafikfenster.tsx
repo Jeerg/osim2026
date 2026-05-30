@@ -1,16 +1,31 @@
 /**
- * Grafikfenster — faithfull OSim2004-Grafikfenster (Plan 01-15 Task 2).
+ * Grafikfenster — faithfull OSim2004-Grafikfenster (Plan 01-15 Task 2
+ * + GAP-CLOSURE Sim-Zeit-Zoom).
  *
  * 1:1-Port des OGfxModeRow-Layouts (OSimBase/OGfxRow.cpp):
  *  - Top-Bar: Modus-Titel zentriert (OGfxRowTopBar)
  *  - Left-Bar: "Ressourcen"-Header + per-Ressource-Labels rechtsbündig
  *    (OGfxRowLeftBar + PGfxRowObjProzRessBeleg::Draw)
- *  - Grid: gepunktete vertikale Zeitachsen-Linien + gepunktete Baselines
- *    je Zeile + rote aktuelle-Zeit-Linie (OGfxRowGrid §2.6)
+ *    → sticky/fix dank overflow-x-auto auf dem Scroll-Container
+ *  - Grid: scrollbarer Content-Bereich mit gepunkteten vertikalen Zeitachsen-
+ *    Linien + gepunkteten Baselines je Zeile + roter Zeit-Linie (§2.6)
  *  - Drei Modi (Modus-Dropdown-Registry):
  *      - Belegung: OID-gefärbte Segmente aus gantt_einsatz (§3.1)
  *      - Warteschlangen: rotes Gebirge aus gantt_wartequeue (§3.2)
  *      - Qualifikation: ehrlich leer/gated — "(Slice offen)" (§3.3)
+ *
+ * ZOOM (GAP-CLOSURE, analog 3fls scheduler-widget):
+ *  - SimZoomLevel: fit | tag | stunde | viertelstunde
+ *  - x(t) = (t - windowBegin) * pxProSekunde, pxProSekunde aus Zoom-Stufe
+ *  - "fit" = dynamisches Zeitfenster passt in Container-Breite (bisheriges Verhalten)
+ *  - Content-Breite = span * pxProSekunde → overflow-x-auto scrollbar
+ *  - Linke "Ressourcen"-Spalte bleibt sticky/fix (position: sticky left: 0)
+ *  - EINHEITLICHE x(t)-Abbildung für Segmente, Gebirge, Rasterlinien, rote Linie
+ *  - Mausrad-Zoom (Ctrl+Wheel) für stufenlosen zoomFactor-Multiplikator
+ *
+ * WARTESCHLANGEN-ZUORDNUNG (GAP-CLOSURE):
+ *  - Pro Warteschlangen-Zeile: Skalen-Hinweis (max Wartende) links an der Zeile
+ *  - Tooltip pro Segment/Sample mit (Sim-Zeit, Wert)
  *
  * Geometrie über GObject/@osim/graphobject (D-4.3) — keine eigene Geometrie.
  * Store-Daten kommen gecappt (MAX_FRAMES_PER_STREAM, T-01-15-03).
@@ -29,7 +44,13 @@ import { cpoint, csize, crectWidth, crectEmpty } from "@osim/graphobject";
 import { useLiveStreamStore } from "../store";
 import type { Frame } from "../types";
 import { auftragColor } from "./AuftragColor";
-import { time2client, timeAxisScale, GRAFIKFENSTER_MODES } from "./grafikfenster-modes";
+import { GRAFIKFENSTER_MODES } from "./grafikfenster-modes";
+import {
+  type SimZoomLevel,
+  makeSimTimeToX,
+  contentWidthPx as calcContentWidthPx,
+  simTimeTicks,
+} from "./grafikfenster-coords";
 
 /** Höhe einer Ressourcen-Zeile in Pixel (PGfxModeRessBeleg m_rowHeight=20, §3.1). */
 const ROW_HEIGHT_PX = 20;
@@ -42,13 +63,17 @@ const SEG_HEIGHT_PX = 18;
 const LEFT_BAR_WIDTH_PX = 210;
 /** Höhe der Zeit-Achsen-Leiste am Fuß (mit lesbaren d/h/m-Labels). */
 const AXIS_HEIGHT_PX = 28;
+/** Minimalbreite des Grid-Bereichs damit der Scroll-Container einen vernünftigen
+ * Startwert hat (JSDOM liefert 0 für offsetWidth). */
+const MIN_GRID_WIDTH_PX = 400;
+
 /** Modus-Schlüssel-Typ. */
 export type GrafikModus = "belegung" | "warteschlangen" | "qualifikation";
 
 export interface GrafikfensterProps {
   /** Aktiver Modus (bestimmt die Render-Logik der Zeilen). */
   modus: GrafikModus;
-  /** Pixel-Breite des Grafik-Bereichs (ohne Left-Bar). */
+  /** Pixel-Breite des Grafik-Bereichs (Startwert/Fallback für JSDOM-Tests). */
   widthPx: number;
   /** Perioden-Beginn in Sekunden (Zeit-Achse, Time2Client-Basis). */
   periodBegin: number;
@@ -58,10 +83,21 @@ export interface GrafikfensterProps {
    * Ressourcen-IDs aus dem geladenen Modell (PBetriebsmittel.m_sName).
    * Diese erscheinen als Zeilen SCHON VOR dem Lauf (leere Lanes).
    * Frame-Ressourcen (die im Lauf auftauchen) werden als Fallback hinten angehängt.
-   * Entspricht FSimulatorViewerGfx/PGfxModeRessBeleg: Zeilenmenge = Modell-Ressourcen
-   * (autoritativ, pre-start) ∪ in Frames auftauchende ressource_id (Fallback).
    */
   ressourcenFromModel?: string[];
+  /**
+   * Aktive Zoom-Stufe (analog 3fls ZoomLevel, Default 'fit').
+   * "fit" = Inhalt passt genau in Container (bisheriges Verhalten).
+   * "tag" / "stunde" / "viertelstunde" = feste px/s-Skalierung, dann scrollbar.
+   */
+  zoom?: SimZoomLevel;
+  /**
+   * Kontinuierlicher Zoom-Multiplikator (Default 1.0), analog 3fls zoomFactor.
+   * effectivePxPerSecond = PX_PER_SECOND_BY_ZOOM[level] * zoomFactor.
+   */
+  zoomFactor?: number;
+  /** Callback wenn sich zoomFactor durch Ctrl+Wheel ändert. */
+  onZoomFactorChange?: (nextFactor: number) => void;
 }
 
 /** on/off-Paar-Segment für Belegungs-Render. */
@@ -87,10 +123,6 @@ interface QueueSample {
  *  2. Frame-Ressourcen (Fallback: auftauchen im Lauf, nicht im Modell) — werden angehängt
  *
  * Defensiv — fehlende ressource_id wird ignoriert (T-01-15-01).
- *
- * @param einsatzFrames  gantt_einsatz-Frames aus dem Store
- * @param queueFrames    gantt_wartequeue-Frames aus dem Store
- * @param ressourcenFromModel  Optionale autoritativen Modell-Ressourcen (PBetriebsmittel)
  */
 function extractRessourcen(
   einsatzFrames: Frame[],
@@ -165,12 +197,10 @@ function buildSegments(frames: Frame[]): EinsatzSegment[] {
 /** Berechnet Pixel-Left + Pixel-Width eines Segments über GObject (D-4.3). */
 function segmentGeometry(
   seg: { start_time: number; end_time: number },
-  begin: number,
-  end: number,
-  widthPx: number,
+  toX: (t: number) => number,
 ): { left: number; width: number } {
-  const x = Math.round(time2client(seg.start_time, begin, end, widthPx));
-  const xEnd = Math.round(time2client(seg.end_time, begin, end, widthPx));
+  const x = Math.round(toX(seg.start_time));
+  const xEnd = Math.round(toX(seg.end_time));
   const go = new GObject();
   go.SetPosition(cpoint(x, 0));
   go.SetSize(csize(Math.max(1, xEnd - x), SEG_HEIGHT_PX));
@@ -183,21 +213,19 @@ function segmentGeometry(
 function BelegungsRow({
   ressource_id,
   segments,
-  periodBegin,
-  periodEnd,
-  widthPx,
+  toX,
+  contentW,
 }: {
   ressource_id: string;
   segments: EinsatzSegment[];
-  periodBegin: number;
-  periodEnd: number;
-  widthPx: number;
+  toX: (t: number) => number;
+  contentW: number;
 }): React.ReactElement {
   const mySegs = segments.filter((s) => s.ressource_id === ressource_id);
   return (
     <div
       className="relative border-b border-dashed border-border"
-      style={{ height: ROW_HEIGHT_PX }}
+      style={{ height: ROW_HEIGHT_PX, width: contentW }}
       data-testid={`grafik-row-${ressource_id}`}
       aria-label={`Belegung Ressource ${ressource_id}`}
     >
@@ -208,13 +236,15 @@ function BelegungsRow({
         aria-hidden="true"
       />
       {mySegs.map((seg, i) => {
-        const geo = segmentGeometry(seg, periodBegin, periodEnd, widthPx);
+        const geo = segmentGeometry(seg, toX);
         const color = auftragColor(seg.auftrag_oid);
+        const startH = Math.floor(seg.start_time / 3600);
+        const endH = Math.floor(seg.end_time / 3600);
         return (
           <div
             key={`${seg.ressource_id}-${i}`}
             data-testid={`grafik-seg-${ressource_id}-${i}`}
-            title={`Auftrag OID ${seg.auftrag_oid}`}
+            title={`Auftrag OID ${seg.auftrag_oid} | ${startH}h – ${endH}h`}
             className="absolute rounded-sm"
             style={{
               left: geo.left,
@@ -230,29 +260,28 @@ function BelegungsRow({
   );
 }
 
-/** Warteschlangen-Zeile: rotes Gebirge als Treppenfunktion (§3.2). */
+/** Warteschlangen-Zeile: rotes Gebirge als Treppenfunktion (§3.2).
+ * Mit Skalen-Hinweis (max Wartende) für Zuordenbarkeit (GAP-CLOSURE). */
 function WarteschlangenRow({
   ressource_id,
   samples,
-  periodBegin,
-  periodEnd,
-  widthPx,
-  maxWartende,
+  toX,
+  contentW,
 }: {
   ressource_id: string;
   samples: QueueSample[];
-  periodBegin: number;
-  periodEnd: number;
-  widthPx: number;
-  maxWartende: number;
+  toX: (t: number) => number;
+  contentW: number;
 }): React.ReactElement {
   const mySamples = samples
     .filter((s) => s.ressource_id === ressource_id)
     .sort((a, b) => a.t - b.t);
 
+  const myMax = mySamples.length > 0 ? Math.max(...mySamples.map((s) => s.wartende)) : 0;
+
   // Treppenfunktion: SVG-Polygon bottom-aligned (vmSolid, vaBottom, §3.2).
   const h = ROW_HEIGHT_PX;
-  const scaleY = maxWartende > 0 ? (h * 0.8) / maxWartende : 1;
+  const scaleY = myMax > 0 ? (h * 0.8) / myMax : 1;
 
   const buildPolygon = (): string => {
     if (mySamples.length === 0) return "";
@@ -261,18 +290,18 @@ function WarteschlangenRow({
     pts.push(`0,${h}`);
     for (let i = 0; i < mySamples.length; i++) {
       const s = mySamples[i];
-      const x = time2client(s.t, periodBegin, periodEnd, widthPx);
+      const x = toX(s.t);
       const barH = Math.max(2, s.wartende * scaleY);
       const y = h - barH;
       // Treppenfunktion: zuerst horizontal auf x, dann vertikal auf y
       if (i > 0) {
-        const prevX = time2client(mySamples[i - 1].t, periodBegin, periodEnd, widthPx);
+        const prevX = toX(mySamples[i - 1].t);
         pts.push(`${prevX},${y}`); // horizontale Stufe
       }
       pts.push(`${x},${y}`);
     }
     // Rechter Boden
-    const lastX = time2client(mySamples[mySamples.length - 1].t, periodBegin, periodEnd, widthPx);
+    const lastX = toX(mySamples[mySamples.length - 1].t);
     pts.push(`${lastX},${h}`);
     return pts.join(" ");
   };
@@ -282,12 +311,23 @@ function WarteschlangenRow({
   return (
     <div
       className="relative border-b border-border"
-      style={{ height: ROW_HEIGHT_PX }}
+      style={{ height: ROW_HEIGHT_PX, width: contentW }}
       data-testid={`grafik-row-${ressource_id}`}
       aria-label={`Warteschlange Ressource ${ressource_id}`}
     >
+      {/* Skalen-Hinweis: max Wartende rechts an der Zeile (GAP-CLOSURE Zuordenbarkeit) */}
+      {myMax > 0 && (
+        <span
+          className="absolute right-1 top-0 z-10 text-[9px] font-mono tabular-nums text-muted-foreground"
+          title={`Max. Wartende: ${myMax}`}
+          aria-label={`Maximale Wartende: ${myMax}`}
+          style={{ lineHeight: `${h}px` }}
+        >
+          {myMax}
+        </span>
+      )}
       <svg
-        width={widthPx}
+        width={contentW}
         height={h}
         className="absolute left-0 top-0"
         aria-hidden="true"
@@ -300,40 +340,60 @@ function WarteschlangenRow({
             opacity={0.8}
           />
         )}
+        {/* Tooltip-Interaktionsflächen pro Sample (SVG <title>) */}
+        {mySamples.map((s, i) => {
+          const x = toX(s.t);
+          const barH = Math.max(2, s.wartende * (myMax > 0 ? (h * 0.8) / myMax : 1));
+          const simH = Math.floor(s.t / 3600);
+          return (
+            <rect
+              key={i}
+              x={x - 4}
+              y={h - barH}
+              width={8}
+              height={barH}
+              fill="transparent"
+              aria-label={`t=${simH}h, wartende=${s.wartende}`}
+            >
+              <title>{`t=${simH}h | Wartende: ${s.wartende}`}</title>
+            </rect>
+          );
+        })}
       </svg>
     </div>
   );
 }
 
-/** Zeitachsen-Leiste mit gepunkteten Rasterlinien. */
+/** Zeitachsen-Leiste mit Ticks aus simTimeTicks (GAP-CLOSURE: klare Sim-Zeit-Skala). */
 function ZeitachsBar({
   periodBegin,
-  periodEnd,
-  widthPx,
+  zoom,
+  zoomFactor,
+  containerWidthPx,
+  span,
+  contentW,
   currentTimePx,
 }: {
   periodBegin: number;
-  periodEnd: number;
-  widthPx: number;
+  zoom: SimZoomLevel;
+  zoomFactor: number;
+  containerWidthPx: number;
+  span: number;
+  contentW: number;
   currentTimePx: number;
 }): React.ReactElement {
-  const { intervals, unit } = timeAxisScale(periodEnd - periodBegin);
-  const span = periodEnd - periodBegin;
-  // Einheits-Faktor (OGfxRow.cpp:1619-1625): d=86400, h=3600, m=60, s=1.
-  const fakt = unit === "d" ? 86400 : unit === "h" ? 3600 : unit === "m" ? 60 : 1;
-
-  const ticks = Array.from({ length: intervals + 1 }, (_, i) => {
-    const t = periodBegin + (i / intervals) * span;
-    const x = time2client(t, periodBegin, periodEnd, widthPx);
-    const value = periodBegin / fakt + (i / intervals) * (span / fakt);
-    const label = `${Math.round(value)}${unit}`;
-    return { x, label };
-  });
+  const ticks = simTimeTicks(
+    periodBegin,
+    periodBegin + span,
+    zoom,
+    zoomFactor,
+    containerWidthPx,
+  );
 
   return (
     <div
       className="relative border-t border-border bg-muted/30"
-      style={{ height: AXIS_HEIGHT_PX, width: widthPx }}
+      style={{ height: AXIS_HEIGHT_PX, width: contentW }}
       aria-label="Zeitachse"
     >
       {ticks.map((tick, i) => (
@@ -345,10 +405,7 @@ function ZeitachsBar({
           />
           <span
             className="absolute top-1 text-[11px] font-medium tabular-nums text-foreground"
-            style={{
-              left: i === intervals ? undefined : tick.x + 3,
-              right: i === intervals ? 2 : undefined,
-            }}
+            style={{ left: tick.x + 3 }}
           >
             {tick.label}
           </span>
@@ -378,6 +435,9 @@ export function Grafikfenster({
   periodBegin: periodBeginProp,
   periodEnd: periodEndProp,
   ressourcenFromModel,
+  zoom = "fit",
+  zoomFactor = 1,
+  onZoomFactorChange,
 }: GrafikfensterProps): React.ReactElement {
   const einsatzFrames = useLiveStreamStore(
     (s) => s.byStream["gantt_einsatz"] ?? EMPTY_FRAMES,
@@ -386,11 +446,10 @@ export function Grafikfenster({
     (s) => s.byStream["gantt_wartequeue"] ?? EMPTY_FRAMES,
   );
 
-  // Zeitfenster DYNAMISCH aus den vorhandenen Frames ableiten — NICHT hart auf
-  // 1 Tag (Browser-UAT-Bug: ein 4-Perioden-Bosch2-Lauf spannt ~59 Tage; das
-  // hart verdrahtete 0..86400-Fenster schob alle Segmente + das Queue-Gebirge
-  // rechts off-screen → "während dem Lauf keinerlei Grafik"). Solange keine
-  // Frames da sind, gelten die übergebenen Props als Default (leere Lanes).
+  // Zeitfenster DYNAMISCH aus den vorhandenen Frames ableiten — das dynamische
+  // Fenster ist das "fit"-Verhalten (Browser-UAT-Bug: ein 4-Perioden-Bosch2-Lauf
+  // spannt ~59 Tage; das hart verdrahtete 0..86400-Fenster schob alles off-screen).
+  // Solange keine Frames da sind, gelten die übergebenen Props als Default.
   const { periodBegin, periodEnd } = React.useMemo(() => {
     let lo = Infinity;
     let hi = -Infinity;
@@ -433,28 +492,43 @@ export function Grafikfenster({
     })).filter((s) => s.ressource_id.length > 0);
   }, [queueFrames]);
 
-  // Max wartende für Gebirge-Skalierung
-  const maxWartende = React.useMemo(
-    () => Math.max(1, ...queueSamples.map((s) => s.wartende)),
-    [queueSamples],
+  // Container-Breite per ResizeObserver (der Grid-Scroll-Container).
+  // widthPx ist nur Startwert/Fallback für JSDOM-Tests ohne ResizeObserver.
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const [containerW, setContainerW] = React.useState<number>(
+    Math.max(widthPx, MIN_GRID_WIDTH_PX),
   );
-
-  // Responsive Breite: das Grid füllt die verfügbare Fläche (OSim OGfxCtrl nutzt
-  // die volle Control-Breite, nicht eine feste 800px-Spalte). Per ResizeObserver
-  // gemessen; die Prop widthPx ist nur Startwert/Fallback (z.B. in JSDOM-Tests
-  // ohne ResizeObserver).
-  const gridAreaRef = React.useRef<HTMLDivElement>(null);
-  const [effWidth, setEffWidth] = React.useState<number>(widthPx);
   React.useEffect(() => {
-    const el = gridAreaRef.current;
+    const el = scrollContainerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width;
-      if (typeof w === "number" && w > 0) setEffWidth(Math.floor(w));
+      if (typeof w === "number" && w > 0) setContainerW(Math.floor(w));
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Span und Content-Breite je Zoom-Stufe.
+  // "fit" → Inhalt füllt Container (effektiv wie bisheriges Verhalten).
+  // Andere Stufen → feste px/s, Content kann breiter als Container sein → scrollbar.
+  const span = Math.max(1, periodEnd - periodBegin);
+  const contentW = React.useMemo(() => {
+    if (zoom === "fit") return Math.max(containerW, MIN_GRID_WIDTH_PX);
+    return Math.max(
+      MIN_GRID_WIDTH_PX,
+      Math.round(calcContentWidthPx(span, zoom, zoomFactor)),
+    );
+  }, [zoom, zoomFactor, span, containerW]);
+
+  // EINHEITLICHE x(t)-Abbildung — eine Closure für Segmente, Gebirge, Raster, rote Linie.
+  // effectivePxPerSecond + makeSimTimeToX werden mit denselben Parametern aufgerufen;
+  // makeSimTimeToX verwendet effectivePxPerSecond intern. Eine separate Bindung
+  // an pxPerSec ist nicht nötig.
+  const toX = React.useMemo(
+    () => makeSimTimeToX(periodBegin, zoom, zoomFactor, containerW, span),
+    [zoom, zoomFactor, containerW, span, periodBegin],
+  );
 
   // Aktuelle Zeit = max t aller relevanten Frames (§2.6)
   const maxT = React.useMemo(() => {
@@ -465,7 +539,19 @@ export function Grafikfenster({
     return t;
   }, [einsatzFrames, queueFrames, periodBegin]);
 
-  const currentTimePx = time2client(maxT, periodBegin, periodEnd, effWidth);
+  const currentTimePx = toX(maxT);
+
+  // Ctrl+Wheel → stufenloser zoomFactor-Multiplikator (analog 3fls onZoomFactorChange).
+  const handleWheel = React.useCallback(
+    (e: React.WheelEvent<HTMLDivElement>) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.85 : 1 / 0.85;
+      const nextFactor = Math.min(10, Math.max(0.1, zoomFactor * delta));
+      onZoomFactorChange?.(Math.round(nextFactor * 100) / 100);
+    },
+    [zoomFactor, onZoomFactorChange],
+  );
 
   // Modus-Name für Top-Bar
   const modeObj = GRAFIKFENSTER_MODES.find((m) => m.key === modus);
@@ -476,18 +562,22 @@ export function Grafikfenster({
       className="flex flex-col rounded-md border border-border bg-background font-mono text-xs"
       data-testid="grafikfenster"
       aria-label={`Grafikfenster — ${modeTitle}`}
+      onWheel={handleWheel}
     >
       {/* Top-Bar: Modus-Titel (OGfxRowTopBar §2.3) */}
       <div className="border-b border-border bg-muted px-2 py-1 text-center text-sm font-semibold text-foreground">
         {modeTitle}
       </div>
 
-      {/* Hauptbereich: Left-Bar + Grid */}
-      <div className="flex">
-        {/* Left-Bar: "Ressourcen"-Header + Labels (§2.2) */}
+      {/* Hauptbereich: Left-Bar (sticky) + scrollbares Grid */}
+      <div className="flex overflow-hidden">
+        {/* Left-Bar: sticky (OSim OGfxRowLeftBar).
+            position:sticky left:0 sorgt dafür, dass die Ressourcen-Spalte beim
+            horizontalen Scrollen fix bleibt — analog zur fixed Tree-Pane im
+            3fls-Scheduler-Widget. z-index:10 damit sie über dem Grid-Content liegt. */}
         <div
-          className="shrink-0 border-r border-border"
-          style={{ width: LEFT_BAR_WIDTH_PX }}
+          className="z-10 shrink-0 border-r border-border bg-background"
+          style={{ width: LEFT_BAR_WIDTH_PX, position: "sticky", left: 0 }}
           aria-label="Ressourcen-Liste"
         >
           <div className="border-b border-border bg-muted px-2 py-1 text-center text-xs font-medium text-muted-foreground">
@@ -506,16 +596,17 @@ export function Grafikfenster({
           ))}
         </div>
 
-        {/* Grid-Bereich */}
+        {/* Scroll-Container: overflow-x-auto für horizontalen Scroll bei nicht-fit-Zoom. */}
         <div
-          ref={gridAreaRef}
-          className="relative flex-1 overflow-hidden"
+          ref={scrollContainerRef}
+          className="flex-1 overflow-x-auto overflow-y-hidden"
           style={{ minWidth: 0 }}
+          aria-label="Grafikfenster Grid"
         >
           {/* Qualifikation-Gated-Hinweis (§3.3, T-01-15-02) */}
           {modus === "qualifikation" && (
             <div
-              className="flex h-full min-h-[60px] items-center justify-center p-4 text-muted-foreground italic"
+              className="flex min-h-[60px] items-center justify-center p-4 text-muted-foreground italic"
               data-testid="grafik-quali-gated"
               aria-label="Qualifikations-Stream noch nicht verfügbar (Slice offen)"
             >
@@ -528,24 +619,27 @@ export function Grafikfenster({
 
           {/* Ressourcen-Zeilen (Belegung / Warteschlangen) */}
           {modus !== "qualifikation" && (
-            <div style={{ width: effWidth, position: "relative" }}>
-              {/* Gepunktete vertikale Rasterlinien (§2.4) */}
+            <div style={{ width: contentW, position: "relative" }}>
+              {/* Gepunktete vertikale Rasterlinien (§2.4) — EINHEITLICHE toX-Abbildung */}
               {(() => {
-                const { intervals } = timeAxisScale(periodEnd - periodBegin);
-                return Array.from({ length: intervals + 1 }, (_, i) => {
-                  const x = (i / intervals) * effWidth;
-                  return (
-                    <div
-                      key={i}
-                      className="absolute top-0 border-l border-dashed border-muted-foreground/30"
-                      style={{ left: x, bottom: 0 }}
-                      aria-hidden="true"
-                    />
-                  );
-                });
+                const ticks = simTimeTicks(
+                  periodBegin,
+                  periodBegin + span,
+                  zoom,
+                  zoomFactor,
+                  containerW,
+                );
+                return ticks.map((tick, i) => (
+                  <div
+                    key={i}
+                    className="absolute top-0 border-l border-dashed border-muted-foreground/30"
+                    style={{ left: tick.x, bottom: 0 }}
+                    aria-hidden="true"
+                  />
+                ));
               })()}
 
-              {/* Rote aktuelle-Zeit-Linie (§2.6) */}
+              {/* Rote aktuelle-Zeit-Linie (§2.6) — EINHEITLICHE toX-Abbildung */}
               <div
                 data-testid="grafik-time-line"
                 className="absolute top-0 bottom-0 z-10"
@@ -564,9 +658,8 @@ export function Grafikfenster({
                     key={rid}
                     ressource_id={rid}
                     segments={segments}
-                    periodBegin={periodBegin}
-                    periodEnd={periodEnd}
-                    widthPx={effWidth}
+                    toX={toX}
+                    contentW={contentW}
                   />
                 ))}
 
@@ -576,21 +669,22 @@ export function Grafikfenster({
                     key={rid}
                     ressource_id={rid}
                     samples={queueSamples}
-                    periodBegin={periodBegin}
-                    periodEnd={periodEnd}
-                    widthPx={effWidth}
-                    maxWartende={maxWartende}
+                    toX={toX}
+                    contentW={contentW}
                   />
                 ))}
             </div>
           )}
 
-          {/* Zeitachse am Fuß (nur bei nicht-gated Modi) */}
+          {/* Zeitachse am Fuß (nur bei nicht-gated Modi) — EINHEITLICHE toX + simTimeTicks */}
           {modus !== "qualifikation" && (
             <ZeitachsBar
               periodBegin={periodBegin}
-              periodEnd={periodEnd}
-              widthPx={effWidth}
+              zoom={zoom}
+              zoomFactor={zoomFactor}
+              containerWidthPx={containerW}
+              span={span}
+              contentW={contentW}
               currentTimePx={currentTimePx}
             />
           )}

@@ -1,12 +1,14 @@
 /**
  * GrafikfensterControls — Steuerleiste des faithful OSim-Grafikfensters
- * (Plan 01-15 Task 2).
+ * (Plan 01-15 Task 2 + GAP-CLOSURE Zoom).
  *
  * 1:1-Port der PSimulatorViewerGfx Bottom-Bar (OSimPro/PSimulatorViewerGfx.cpp:18-28):
  *  - Start/Weiter-Button (caption = "Start" bei ssBegin, "Weiter" bei ssPeriod)
  *  - Abbruch (nur enabled bei ssRunning — im headless-Port: always disabled)
  *  - Zurücksetzen (enabled bei ssPeriod/ssSuspended — nach erstem Lauf-Ende)
  *  - Felder: Periode N / Simulationszeit / assoz. Datum / Modus-Dropdown
+ *  - Zoom-Button-Gruppe (analog 3fls scheduler-widget/toolbar.tsx):
+ *      Fit / Tag / Stunde / ¼h — diskrete Stufen + aktiver Zustand hervorgehoben
  *
  * Im headless-Port von Phase 01 ist serverseitig nur Start realisiert.
  * Abbruch + Zurücksetzen sind faithful sichtbar, aber wie in den Kommentaren
@@ -14,15 +16,26 @@
  * erfundene Funktionalität (SPEC §1.2 headless-Port-Anmerkung).
  *
  * Styling über 3FLS-Design-Tokens (osim-ui/CLAUDE.md).
+ * Zoom-Buttons nutzen 3FLS-Token (variant default/ghost), KEINE Daten-Farben.
  * A11y: aria-Labels auf allen Buttons (osim-ui/CLAUDE.md §5).
  */
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { GRAFIKFENSTER_MODES, type GrafikfensterModus } from "./grafikfenster-modes";
+import { SIM_ZOOM_LEVELS, type SimZoomLevel } from "./grafikfenster-coords";
 
 /** Simulations-Status (§1.2 OSimPro/PSimulatorViewerGfx.cpp:134-181). */
 export type SimStatus = "begin" | "period" | "running" | "suspended";
+
+/** Label-Map für Zoom-Stufen (Anzeige-Texte, analog 3fls ZOOM_OPTIONS). */
+const ZOOM_LABELS: Record<SimZoomLevel, string> = {
+  fit: "Fit",
+  tag: "Tag",
+  stunde: "Std",
+  viertelstunde: "15m",
+};
 
 export interface GrafikfensterControlsProps {
   /** Gewähltes Modell (für Start-Button). */
@@ -47,6 +60,10 @@ export interface GrafikfensterControlsProps {
   simStatus?: SimStatus;
   /** Periode-Nummer (optional). */
   periodNum?: number;
+  /** Aktive Zoom-Stufe (analog 3fls ZoomLevel, Default 'fit'). */
+  zoom?: SimZoomLevel;
+  /** Callback bei Zoom-Wechsel (analog 3fls setZoom). */
+  onZoomChange?: (zoom: SimZoomLevel) => void;
 }
 
 /** Formatiert eine Sim-Zeit (Sekunden) als "Xd Yh Zm Ss". */
@@ -79,6 +96,8 @@ export function GrafikfensterControls({
   simTime,
   simStatus = "begin",
   periodNum = 0,
+  zoom = "fit",
+  onZoomChange,
 }: GrafikfensterControlsProps): React.ReactElement {
   // Start-Button-Caption: "Start" bei begin, "Weiter" bei period (§1.2)
   const startCaption =
@@ -200,6 +219,44 @@ export function GrafikfensterControls({
           ))}
         </select>
       </label>
+
+      {/* Trennlinie */}
+      <div className="h-6 w-px bg-border" aria-hidden="true" />
+
+      {/* Zoom-Button-Gruppe (analog 3fls scheduler-widget/toolbar.tsx ZOOM_OPTIONS).
+          Diskrete Stufen: Fit / Tag / Std / 15m.
+          Aktiver Button hervorgehoben (variant="default"), inaktive ghost.
+          3FLS-Token, KEINE Daten-Farben. A11y: role="radiogroup". */}
+      <div
+        role="radiogroup"
+        aria-label="Zoom-Stufe"
+        data-testid="grafik-zoom-group"
+        className="flex items-center gap-0.5"
+      >
+        {SIM_ZOOM_LEVELS.map((level) => {
+          const active = zoom === level;
+          return (
+            <Button
+              key={level}
+              type="button"
+              variant={active ? "default" : "ghost"}
+              size="sm"
+              role="radio"
+              aria-checked={active}
+              data-active={active || undefined}
+              data-testid={`grafik-zoom-${level}`}
+              onClick={() => onZoomChange?.(level)}
+              className={cn(
+                "h-7 px-2 text-xs gap-1",
+                active && "shadow-sm",
+              )}
+              aria-label={`Zoom ${ZOOM_LABELS[level]}`}
+            >
+              {ZOOM_LABELS[level]}
+            </Button>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -52,6 +52,7 @@ import type {
 import { Grafikfenster } from "@/features/live-stream/components/Grafikfenster";
 import type { GrafikModus } from "@/features/live-stream/components/Grafikfenster";
 import { GrafikfensterControls } from "@/features/live-stream/components/GrafikfensterControls";
+import type { SimZoomLevel } from "@/features/live-stream/components/grafikfenster-coords";
 
 /** Polling-Intervall des Tail-Readers (D-4.4). */
 const POLL_INTERVAL_MS = 200;
@@ -176,6 +177,11 @@ function LivePage({
 
   // Grafikfenster-Modus (Belegung / Warteschlangen / Qualifikation).
   const [grafikModus, setGrafikModus] = React.useState<GrafikModus>("belegung");
+
+  // Grafikfenster-Zoom (analog 3fls scheduler-store.zoom).
+  // Default "fit" = Inhalt passt genau in Container (bisheriges Verhalten).
+  const [grafikZoom, setGrafikZoom] = React.useState<SimZoomLevel>("fit");
+  const [grafikZoomFactor, setGrafikZoomFactor] = React.useState<number>(1);
 
   // Run-Setup-State (modelId kommt jetzt aus dem Store, nicht aus useState).
   const [runId, setRunId] = React.useState<string | null>(null);
@@ -371,6 +377,11 @@ function LivePage({
                   periodEnd={periodInfo.end}
                   simTime={liveSimTime}
                   periodNum={periodInfo.num}
+                  zoom={grafikZoom}
+                  onZoomChange={(z) => {
+                    setGrafikZoom(z);
+                    setGrafikZoomFactor(1); // Reset factor bei Stufen-Wechsel
+                  }}
                 />
                 <Grafikfenster
                   modus={grafikModus}
@@ -378,6 +389,9 @@ function LivePage({
                   periodBegin={0}
                   periodEnd={86400}
                   ressourcenFromModel={ressourcenFromModel}
+                  zoom={grafikZoom}
+                  zoomFactor={grafikZoomFactor}
+                  onZoomFactorChange={setGrafikZoomFactor}
                 />
               </div>
             ) : (
