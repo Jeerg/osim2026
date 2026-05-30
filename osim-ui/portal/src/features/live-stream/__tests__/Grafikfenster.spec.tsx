@@ -135,6 +135,67 @@ describe("Grafikfenster", () => {
     expect(screen.getByTestId("grafik-mountain-Drehe-01")).toBeInTheDocument();
   });
 
+  it("Test 2b-DECIMATE: viele Samples → Gebirge ohne Punkt-Explosion (UAT 2026-05-30)", () => {
+    // Regression: ~8k Samples/Ressource erzeugten ein <polygon> mit zehntausenden
+    // Punkten → UI-Jank + "Springen". Decimation pro Pixelspalte fängt das auf.
+    const N = 8000;
+    const frames: Frame[] = [];
+    for (let i = 0; i < N; i++) {
+      // Sägezahn, damit das Spalten-Maximum nicht trivial konstant ist.
+      frames.push(wartequeueFrame(i + 1, "M1", (i % 50) + 1, Math.floor((i / N) * 86400)));
+    }
+    useLiveStreamStore.getState().ingest(frames);
+
+    render(
+      <Grafikfenster
+        modus="warteschlangen"
+        widthPx={800}
+        periodBegin={0}
+        periodEnd={86400}
+        ressourcenFromModel={["M1"]}
+      />,
+    );
+
+    const mountain = screen.getByTestId("grafik-mountain-M1");
+    const polygon = mountain.querySelector("polygon");
+    expect(polygon).not.toBeNull();
+    // Decimation: deutlich weniger Punkte als Samples (ein Pixel zeigt nur einen Wert).
+    const pts = (polygon?.getAttribute("points") ?? "").trim();
+    const pointCount = pts.length === 0 ? 0 : pts.split(/\s+/).length;
+    expect(pointCount).toBeLessThan(N);
+  });
+
+  it("Test 2b-GRUPPEN: zwei Ressourcen werden nicht vermischt (Vorgruppierung)", () => {
+    useLiveStreamStore.getState().ingest([
+      wartequeueFrame(1, "M1", 3, 1000),
+      wartequeueFrame(2, "M2", 9, 1000),
+      wartequeueFrame(3, "M1", 4, 2000),
+      wartequeueFrame(4, "M2", 7, 2000),
+    ]);
+
+    render(
+      <Grafikfenster
+        modus="warteschlangen"
+        widthPx={800}
+        periodBegin={0}
+        periodEnd={86400}
+        ressourcenFromModel={["M1", "M2"]}
+      />,
+    );
+
+    // Beide Zeilen + ihr je EIGENES Gebirge — kein Vermischen über Ressourcen.
+    const m1 = screen.getByTestId("grafik-mountain-M1");
+    const m2 = screen.getByTestId("grafik-mountain-M2");
+    expect(m1).toBeInTheDocument();
+    expect(m2).toBeInTheDocument();
+    // Jede Zeile trägt ihren EIGENEN Max-Skalen-Hinweis (M1→4, M2→9) — der
+    // Wert steht als title="Max. Wartende: N" am Span der jeweiligen Zeile.
+    const m1row = screen.getByTestId("grafik-row-M1");
+    const m2row = screen.getByTestId("grafik-row-M2");
+    expect(m1row.querySelector('[title="Max. Wartende: 4"]')).not.toBeNull();
+    expect(m2row.querySelector('[title="Max. Wartende: 9"]')).not.toBeNull();
+  });
+
   it("Test 2c: Modus Qualifikation → gated-Hinweis (keine erfundenen Werte)", () => {
     useLiveStreamStore.getState().ingest([
       einsatzOnFrame(1, "Drehe-01", 1, 0),

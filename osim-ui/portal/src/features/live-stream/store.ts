@@ -30,6 +30,33 @@ import { STREAM_TAGS } from "./types";
 export const MAX_FRAMES_PER_STREAM = 10_000;
 
 /**
+ * Stream-spezifische Obergrenzen. Die gantt_*-Streams (Belegung/Warteschlangen/
+ * Durchlauf) erzeugen pro Periode HUNDERTTAUSENDE Treppen-Frames — gemessen für
+ * Bosch2_wechseln/1 Periode: ~495k gantt_wartequeue (94 Ressourcen × ~8.3k
+ * Samples), ~93k gantt_einsatz. Ein 10k-Cap kürzt die Historie auf ein ~2%-
+ * Schiebefenster: das Warteschlangen-Gebirge "springt" und löscht die
+ * Vergangenheit, weil ältere Samples laufend verdrängt werden (Browser-UAT
+ * 2026-05-30). Diese Streams MÜSSEN die ganze Periode halten; die UI dezimiert
+ * beim Rendern pro Pixelspalte (Grafikfenster.tsx), sodass die volle Historie
+ * ohne Performance-Verlust dargestellt wird.
+ *
+ * Speicher-Tradeoff: ~1M Frames × ~Stream-Objekt ≈ einige 100 MB im Worst-Case
+ * (mehrere Perioden). Bewusst akzeptiert — Live-Sicht ist ein Analyse-Werkzeug,
+ * kein Dauer-Replay (Replay = Phase 6). Bei sehr langen Mehr-Perioden-Läufen
+ * greift der Cap als Sicherheitsnetz (dann ältester Anfang verworfen).
+ */
+const MAX_FRAMES_BY_STREAM: Partial<Record<StreamTag, number>> = {
+  gantt_wartequeue: 1_000_000,
+  gantt_einsatz: 1_000_000,
+  gantt_durchlauf: 1_000_000,
+};
+
+/** Effektive Buffer-Obergrenze für einen Stream-Tag (stream-spezifisch > Default). */
+function capForStream(tag: StreamTag): number {
+  return MAX_FRAMES_BY_STREAM[tag] ?? MAX_FRAMES_PER_STREAM;
+}
+
+/**
  * Vom UI verstandene Schema-Major-Version (SPEC §6.4). Ein abweichender
  * Major-Wert in `meta.json.schema_version` löst KEINEN Hard-Block aus, sondern
  * setzt `schemaMismatch=true` → die UI rendert best-effort und zeigt ein gelbes
@@ -124,8 +151,9 @@ export const useLiveStreamStore = create<LiveStreamState & LiveStreamActions>(
         next[f.stream].push(f);
       }
       for (const tag of touched) {
-        if (next[tag].length > MAX_FRAMES_PER_STREAM) {
-          next[tag] = next[tag].slice(next[tag].length - MAX_FRAMES_PER_STREAM);
+        const cap = capForStream(tag);
+        if (next[tag].length > cap) {
+          next[tag] = next[tag].slice(next[tag].length - cap);
         }
       }
 

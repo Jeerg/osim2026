@@ -81,14 +81,32 @@ describe("useLiveStreamStore", () => {
     expect(state.streamStatus.gantt_durchlauf?.status).toBe("partial");
   });
 
-  it("cappt den Per-Stream-Buffer auf die Obergrenze (T-01-05)", () => {
+  it("cappt Default-Streams auf die Obergrenze (T-01-05)", () => {
+    // lifecycle ist KEIN gantt_*-Stream → Default-Cap (10k) greift.
     const store = useLiveStreamStore.getState();
     const many: Frame[] = [];
-    for (let i = 1; i <= 12000; i++) many.push(frame(i, "gantt_durchlauf"));
+    for (let i = 1; i <= 12000; i++) many.push(frame(i, "lifecycle"));
     store.ingest(many);
-    const buf = useLiveStreamStore.getState().byStream.gantt_durchlauf;
+    const buf = useLiveStreamStore.getState().byStream.lifecycle;
     expect(buf.length).toBeLessThanOrEqual(10000);
     // Jüngste Frames bleiben erhalten (Ring/slice von hinten).
     expect(buf[buf.length - 1].seq).toBe(12000);
+  });
+
+  it("hält gantt-Streams weit über dem Default-Cap (Queue-Historie, UAT 2026-05-30)", () => {
+    // Regression: ein 10k-Default-Cap kürzte die ~495k Queue-Frames auf ein
+    // 2%-Schiebefenster → das Gebirge "sprang" und löschte die Vergangenheit.
+    // gantt_wartequeue/-einsatz/-durchlauf MÜSSEN die volle Periode halten.
+    const store = useLiveStreamStore.getState();
+    const n = 30000; // > Default-Cap 10k
+    const many: Frame[] = [];
+    for (let i = 1; i <= n; i++) many.push(frame(i, "gantt_wartequeue"));
+    store.ingest(many);
+    const buf = useLiveStreamStore.getState().byStream.gantt_wartequeue;
+    // Volle Historie erhalten (nicht auf 10k gekürzt).
+    expect(buf).toHaveLength(n);
+    // Der ÄLTESTE Frame (seq=1) ist noch da — Vergangenheit nicht gelöscht.
+    expect(buf[0].seq).toBe(1);
+    expect(buf[buf.length - 1].seq).toBe(n);
   });
 });

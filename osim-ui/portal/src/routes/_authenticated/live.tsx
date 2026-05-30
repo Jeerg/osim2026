@@ -247,7 +247,14 @@ function LivePage({
       if (cancelled) return;
       try {
         const frames = await reader.step();
-        if (frames.length > 0) pending.push(...frames);
+        // NICHT pending.push(...frames): ein Spread mit zehntausenden Elementen
+        // sprengt den Call-Stack (RangeError "Maximum call stack size exceeded").
+        // Das warf bei den ~600k-Frame-gantt-Streams pro Tick, wurde hier gefangen
+        // und verwarf die Frames still — der Byte-Offset war aber schon vor dem
+        // nächsten Read fortgeschritten → eine ECHTE seq-Lücke → fälschlich das
+        // "Lücke im Stream"-Banner (Browser-UAT 2026-05-30). Element-weise (oder
+        // via Array-Concat-Schleife) anhängen vermeidet das.
+        for (let i = 0; i < frames.length; i++) pending.push(frames[i]);
       } catch (err) {
         console.warn("[live-stream] Tail-Step fehlgeschlagen:", err);
       }

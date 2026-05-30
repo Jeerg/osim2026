@@ -154,12 +154,16 @@ function extractRessourcen(
     }
   }
 
-  // Schritt 2: Frame-Ressourcen als Fallback (im Modell nicht enthaltene)
-  for (const f of [...einsatzFrames, ...queueFrames]) {
-    const id = (f.v as { ressource_id?: string }).ressource_id;
-    if (typeof id === "string" && id.length > 0 && !seen.has(id)) {
-      seen.add(id);
-      result.push(id);
+  // Schritt 2: Frame-Ressourcen als Fallback (im Modell nicht enthaltene).
+  // Beide Arrays getrennt iterieren statt [...a, ...b] — der Spread würde bei
+  // ~600k Frames jede Render-Runde ein Riesen-Array allokieren.
+  for (const arr of [einsatzFrames, queueFrames]) {
+    for (const f of arr) {
+      const id = (f.v as { ressource_id?: string }).ressource_id;
+      if (typeof id === "string" && id.length > 0 && !seen.has(id)) {
+        seen.add(id);
+        result.push(id);
+      }
     }
   }
   return result;
@@ -221,10 +225,12 @@ function segmentGeometry(
   return { left: rect.left, width: crectWidth(rect) };
 }
 
-/** Belegungs-Zeile: gefüllte Segmente nach auftrag_oid-Farbe. */
+/** Belegungs-Zeile: gefüllte Segmente nach auftrag_oid-Farbe.
+ * `segments` sind bereits NACH dieser Ressource vorgruppiert (O(n)-Map im
+ * Eltern-Memo statt O(n×Zeilen)-filter je Zeile). */
 function BelegungsRow({
   ressource_id,
-  segments,
+  segments: mySegs,
   toX,
   contentW,
 }: {
@@ -233,7 +239,6 @@ function BelegungsRow({
   toX: (t: number) => number;
   contentW: number;
 }): React.ReactElement {
-  const mySegs = segments.filter((s) => s.ressource_id === ressource_id);
   return (
     <div
       className="relative border-b border-dashed border-border"
@@ -272,8 +277,44 @@ function BelegungsRow({
   );
 }
 
+/**
+ * Dezimiert eine (zeitlich sortierte) Sample-Folge auf höchstens ein Sample je
+ * Pixelspalte — pro Spalte das MAXIMUM (das Warteschlangen-Gebirge soll seine
+ * Spitzen behalten, nicht wegmitteln). Reduziert 8.000+ Samples auf ≤ contentW
+ * Punkte, ohne die sichtbare Form zu verändern (ein Pixel kann nur einen Wert
+ * zeigen). Ohne diese Dezimation rendert ein <polygon> mit zehntausenden
+ * Punkten je Zeile × Dutzenden Zeilen → UI-Jank (Browser-UAT 2026-05-30).
+ *
+ * Behält den zeitlich ERSTEN und LETZTEN Punkt der jeweiligen Spalte bei (für
+ * korrekte Treppen-Kanten) sowie den Spalten-Maximalwert.
+ */
+function decimateByColumn(
+  samples: QueueSample[],
+  toX: (t: number) => number,
+): QueueSample[] {
+  if (samples.length <= 2) return samples;
+  const out: QueueSample[] = [];
+  let colPx = Number.NaN;
+  let colMax: QueueSample | null = null;
+  for (const s of samples) {
+    const px = Math.round(toX(s.t));
+    if (px !== colPx) {
+      // Neue Pixelspalte → vorheriges Spalten-Maximum festschreiben.
+      if (colMax) out.push(colMax);
+      colPx = px;
+      colMax = s;
+    } else if (s.wartende > (colMax?.wartende ?? -1)) {
+      colMax = s;
+    }
+  }
+  if (colMax) out.push(colMax);
+  return out;
+}
+
 /** Warteschlangen-Zeile: rotes Gebirge als Treppenfunktion (§3.2).
- * Mit Skalen-Hinweis (max Wartende) für Zuordenbarkeit (GAP-CLOSURE). */
+ * Mit Skalen-Hinweis (max Wartende) für Zuordenbarkeit (GAP-CLOSURE).
+ * `samples` sind bereits NACH dieser Ressource vorgruppiert + zeitlich sortiert
+ * (O(n)-Vorgruppierung im Eltern-Memo statt O(n×Zeilen)-filter je Zeile). */
 function WarteschlangenRow({
   ressource_id,
   samples,
@@ -285,9 +326,11 @@ function WarteschlangenRow({
   toX: (t: number) => number;
   contentW: number;
 }): React.ReactElement {
-  const mySamples = samples
-    .filter((s) => s.ressource_id === ressource_id)
-    .sort((a, b) => a.t - b.t);
+  // Vorgruppiert + sortiert vom Eltern-Memo. Hier nur noch pro-Pixel dezimieren.
+  const mySamples = React.useMemo(
+    () => decimateByColumn(samples, toX),
+    [samples, toX],
+  );
 
   const myMax = mySamples.length > 0 ? Math.max(...mySamples.map((s) => s.wartende)) : 0;
 
@@ -381,6 +424,9 @@ function WarteschlangenRow({
 
 /** Leeres Array als stabile Referenz für nicht vorhandene Streams. */
 const EMPTY_FRAMES: Frame[] = [];
+/** Stabile Leer-Referenzen für Ressourcen ohne Segmente/Samples (kein Re-Render). */
+const EMPTY_SEGMENTS: EinsatzSegment[] = [];
+const EMPTY_SAMPLES: QueueSample[] = [];
 
 export function Grafikfenster({
   modus,
@@ -415,19 +461,42 @@ export function Grafikfenster({
     [einsatzFrames, queueFrames, ressourcenFromModel],
   );
 
-  const segments = React.useMemo(
-    () => buildSegments(einsatzFrames),
-    [einsatzFrames],
-  );
+  // Belegungs-Segmente EINMAL bauen und nach Ressource gruppieren — die Zeilen
+  // greifen per Map-Lookup zu (O(1) je Zeile) statt jede Zeile über alle
+  // Segmente zu filtern (O(n×Zeilen) → bei ~93k Einsatz-Frames × Dutzenden
+  // Zeilen spürbarer Jank).
+  const segmentsByRes = React.useMemo((): Map<string, EinsatzSegment[]> => {
+    const map = new Map<string, EinsatzSegment[]>();
+    for (const seg of buildSegments(einsatzFrames)) {
+      const arr = map.get(seg.ressource_id);
+      if (arr) arr.push(seg);
+      else map.set(seg.ressource_id, [seg]);
+    }
+    return map;
+  }, [einsatzFrames]);
 
-  const queueSamples = React.useMemo((): QueueSample[] => {
-    return queueFrames.map((f) => ({
-      ressource_id: String((f.v as { ressource_id?: string }).ressource_id ?? ""),
-      wartende: typeof (f.v as { wartende?: number }).wartende === "number"
-        ? ((f.v as { wartende: number }).wartende)
-        : 0,
-      t: f.t,
-    })).filter((s) => s.ressource_id.length > 0);
+  // Warteschlangen-Samples EINMAL nach Ressource gruppieren + je Gruppe zeitlich
+  // sortieren. Die Zeilen dezimieren danach nur noch ihre eigene (kurze) Gruppe
+  // pro Pixelspalte — kein O(n×Zeilen)-filter + kein 8k-Punkt-Polygon mehr
+  // (Browser-UAT 2026-05-30: Sprung/Jank bei ~495k Queue-Frames).
+  const samplesByRes = React.useMemo((): Map<string, QueueSample[]> => {
+    const map = new Map<string, QueueSample[]>();
+    for (const f of queueFrames) {
+      const rid = String((f.v as { ressource_id?: string }).ressource_id ?? "");
+      if (rid.length === 0) continue;
+      const w = (f.v as { wartende?: number }).wartende;
+      const sample: QueueSample = {
+        ressource_id: rid,
+        wartende: typeof w === "number" ? w : 0,
+        t: f.t,
+      };
+      const arr = map.get(rid);
+      if (arr) arr.push(sample);
+      else map.set(rid, [sample]);
+    }
+    // Frames kommen seq-/zeitlich geordnet an; defensiv dennoch je Gruppe sortieren.
+    for (const arr of map.values()) arr.sort((a, b) => a.t - b.t);
+    return map;
   }, [queueFrames]);
 
   // Container-Breite per ResizeObserver (der Grid-Scroll-Container).
@@ -468,12 +537,15 @@ export function Grafikfenster({
     [zoom, zoomFactor, containerW, span, periodBegin],
   );
 
-  // Aktuelle Zeit = max t aller relevanten Frames (§2.6)
+  // Aktuelle Zeit = max t aller relevanten Frames (§2.6). Frames sind zeitlich
+  // geordnet → nur das jeweils letzte Element prüfen (kein Spread über ~600k
+  // Frames, der den Call-Stack sprengen würde).
   const maxT = React.useMemo(() => {
     let t = periodBegin;
-    for (const f of [...einsatzFrames, ...queueFrames]) {
-      if (f.t > t) t = f.t;
-    }
+    const lastE = einsatzFrames[einsatzFrames.length - 1];
+    const lastQ = queueFrames[queueFrames.length - 1];
+    if (lastE && lastE.t > t) t = lastE.t;
+    if (lastQ && lastQ.t > t) t = lastQ.t;
     return t;
   }, [einsatzFrames, queueFrames, periodBegin]);
 
@@ -670,25 +742,25 @@ export function Grafikfenster({
                     aria-hidden="true"
                   />
 
-                  {/* Per-Ressource-Zeilen (Belegung) */}
+                  {/* Per-Ressource-Zeilen (Belegung) — vorgruppierte Segmente */}
                   {modus === "belegung" &&
                     ressourcen.map((rid) => (
                       <BelegungsRow
                         key={rid}
                         ressource_id={rid}
-                        segments={segments}
+                        segments={segmentsByRes.get(rid) ?? EMPTY_SEGMENTS}
                         toX={toX}
                         contentW={contentW}
                       />
                     ))}
 
-                  {/* Per-Ressource-Zeilen (Warteschlangen) */}
+                  {/* Per-Ressource-Zeilen (Warteschlangen) — vorgruppierte Samples */}
                   {modus === "warteschlangen" &&
                     ressourcen.map((rid) => (
                       <WarteschlangenRow
                         key={rid}
                         ressource_id={rid}
-                        samples={queueSamples}
+                        samples={samplesByRes.get(rid) ?? EMPTY_SAMPLES}
                         toX={toX}
                         contentW={contentW}
                       />
