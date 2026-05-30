@@ -437,24 +437,28 @@ class ISimulator(ISimObj):
     Mittlerer Lagerwert (m_lgw_mittel).
 
     SLICE-GATED: Sales-/Kosten-Slice heute Skelett → die OSim-Gesamt-Felder
-    tragen null + missing_slice="Sales-/Kosten-Slice". Die now-buildable
-    Auftrags-Durchsatz-Counter (count_auftraege_*) dürfen als Zusatz-Kennzahl
-    bleiben (real aus dem Durchsatz, kein OSim-Gesamt-Feld).
+    tragen null + missing_slice="Sales-/Kosten-Slice". Die Auftrags-Durchsatz-
+    Counter (count_auftraege_*) sind dagegen now-buildable und werden 1:1 aus den
+    echten OSim-Auslöser-Akkumulatoren gefüllt (PAusloeser m_iPtkBegAusloesungCount
+    / m_iPtkAusloesungCount, period-scoped via on_rec_init) — vom AuswertungListener
+    am Perioden-Ende über ``set_auftrag_durchsatz`` gesetzt.
     """
 
     MISSING_SLICE = "Sales-/Kosten-Slice"
 
     def __init__(self, simulator: "PSimulator | None" = None) -> None:
         super().__init__(simulator)
-        # Zusatz-Durchsatz-Counter (now-buildable, KEIN OSim-Gesamt-Feld).
+        # Durchsatz aus den Auslöser-Akkumulatoren (Σ über sim.m_lAusl):
+        #   gesamt = Σ m_iPtkBegAusloesungCount (begonnene Auslösungen)
+        #   fertig = Σ m_iPtkAusloesungCount    (abgeschlossene Auslösungen)
+        # offen  = gesamt − fertig (noch laufende). Period-scoped.
         self.count_auftraege_gesamt: int = 0
         self.count_auftraege_fertig: int = 0
 
-    def update_auftrag_gesamt(self) -> None:
-        self.count_auftraege_gesamt += 1
-
-    def update_auftrag_fertig(self) -> None:
-        self.count_auftraege_fertig += 1
+    def set_auftrag_durchsatz(self, gesamt: int, fertig: int) -> None:
+        """Setzt den Durchsatz 1:1 aus den OSim-Auslöser-Akkumulatoren (Σ)."""
+        self.count_auftraege_gesamt = gesamt
+        self.count_auftraege_fertig = fertig
 
     def snapshot(self, period_num: int) -> dict:
         offen = self.count_auftraege_gesamt - self.count_auftraege_fertig

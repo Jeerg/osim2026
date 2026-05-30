@@ -106,41 +106,24 @@ class AuswertungListener(OListenerSimulator):
             ("gesamt", self._gesamt),
         )
 
-        # Durchsatz-Tracking für den gesamt-Roll-up (now-buildable Zusatz).
-        self._started: set[int] = set()
-
-    # ------------------------------------------------------------------
-    # Incremental Durchsatz-Counter pro Event (D-3.1, O(1), gesamt-Zusatz)
-    # ------------------------------------------------------------------
-
-    def on_sim_ereig(self) -> None:
-        assert self.m_sim is not None
-        sim = self.m_sim
-
-        pool = getattr(sim, "_evt_pool", None)
-        if pool is None or not pool.curr_exists():
-            return
-        event = pool.get_curr()
-        if event is None:
-            return
-
-        proz = event.m_obj
-        meta = event.m_meta
-        meta_name = getattr(meta, "m_name", "")
-
-        status = getattr(proz, "m_eStatus", None)
-        is_bearb = getattr(status, "value", status) == _PT_BEARB
-
-        if proz is not None and is_bearb and id(proz) not in self._started:
-            self._started.add(id(proz))
-            self._gesamt.update_auftrag_gesamt()
-
-        if meta_name == _BEARBEIT_ENDE and proz is not None:
-            self._gesamt.update_auftrag_fertig()
-
     # ------------------------------------------------------------------
     # Read-only Sammler für die now-buildable Records (SPEC §5)
     # ------------------------------------------------------------------
+
+    def _collect_durchsatz(self) -> None:
+        """gesamt/fertig 1:1 aus den OSim-Auslöser-Akkumulatoren (Σ über
+        sim.m_lAusl). Ersetzt die frühere Event-Detection (m_eStatus==PT_BEARB
+        feuerte für reale Modelle NIE → count_gesamt=0, offen negativ). Quelle:
+        PAusloeser m_iPtkBegAusloesungCount (:84) / m_iPtkAusloesungCount (:116),
+        period-scoped via on_rec_init."""
+        sim = self.m_sim
+        beg = comp = 0
+        for ausl in getattr(sim, "m_lAusl", []) or []:
+            if getattr(ausl, "m_sName", None) is None:
+                continue
+            beg += int(getattr(ausl, "m_iPtkBegAusloesungCount", 0) or 0)
+            comp += int(getattr(ausl, "m_iPtkAusloesungCount", 0) or 0)
+        self._gesamt.set_auftrag_durchsatz(beg, comp)
 
     @staticmethod
     def _name(obj, default=None):  # noqa: ANN001, ANN205
@@ -226,6 +209,7 @@ class AuswertungListener(OListenerSimulator):
         # now-buildable Records read-only aus dem sim-State sammeln.
         self._collect_prod_und_nbearbeit()
         self._collect_wschlange()
+        self._collect_durchsatz()
 
         for kind, agg in self._kinds:
             v = {"kind": kind}

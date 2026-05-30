@@ -229,9 +229,9 @@ def test_gesamt_aggregator_gated_plus_durchsatz() -> None:
     from osim_engine.insights import ISimulator
 
     agg = ISimulator()
-    agg.update_auftrag_gesamt()
-    agg.update_auftrag_gesamt()
-    agg.update_auftrag_fertig()
+    # Durchsatz wird 1:1 aus den Auslöser-Akkumulatoren gesetzt (Σ über m_lAusl):
+    # gesamt = Σ m_iPtkBegAusloesungCount, fertig = Σ m_iPtkAusloesungCount.
+    agg.set_auftrag_durchsatz(gesamt=2, fertig=1)
 
     snap = agg.snapshot(period_num=2)
     # gated OSim-Felder
