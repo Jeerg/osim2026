@@ -21,12 +21,6 @@
 import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
 import { apiErrorMessage } from "@/api/error-message";
 import { useModel, useModels } from "@/api/models";
 import {
@@ -42,8 +36,9 @@ import { useLiveStreamStore } from "@/features/live-stream/store";
 import { useModelStore } from "@/stores/model-store";
 import { StreamRouter } from "@/features/live-stream/stream-router";
 import {
-  DEFAULT_VIEWER_TAB_ID,
-  VIEWER_TABS,
+  DEFAULT_MENU_LEAF_ID,
+  liveMenuLeafById,
+  viewerTabById,
 } from "@/features/live-stream/viewer-config";
 import type {
   Frame,
@@ -52,6 +47,7 @@ import type {
 import { Grafikfenster } from "@/features/live-stream/components/Grafikfenster";
 import type { GrafikModus } from "@/features/live-stream/components/Grafikfenster";
 import { GrafikfensterControls } from "@/features/live-stream/components/GrafikfensterControls";
+import { LiveMenuTree } from "@/features/live-stream/components/LiveMenuTree";
 import type { SimZoomLevel } from "@/features/live-stream/components/grafikfenster-coords";
 
 /** Polling-Intervall des Tail-Readers (D-4.4). */
@@ -170,13 +166,14 @@ function LivePage({
 
   const { data: models, isLoading: modelsLoading } = useModels();
 
-  // Aktiver OSim-Viewer-Tab (Default = der primäre Grafik-Viewer Durchlaufplan).
-  const [activeTabId, setActiveTabId] = React.useState<string>(
-    DEFAULT_VIEWER_TAB_ID,
-  );
-
-  // Grafikfenster-Modus (Belegung / Warteschlangen / Qualifikation).
-  const [grafikModus, setGrafikModus] = React.useState<GrafikModus>("belegung");
+  // Aktives Menü-Blatt (LIVE-LAYOUT-SPEC). Default = Simulation → Belegung
+  // (die animierte Grafik, NICHT der Durchlaufplan-Gantt).
+  const [activeLeafId, setActiveLeafId] =
+    React.useState<string>(DEFAULT_MENU_LEAF_ID);
+  const activeLeaf = liveMenuLeafById(activeLeafId);
+  const isGrafik = activeLeaf?.kind === "grafik";
+  // Modus ergibt sich direkt aus dem gewählten Grafik-Blatt (Baum steuert Modus).
+  const grafikModus: GrafikModus = (activeLeaf?.modus ?? "belegung") as GrafikModus;
 
   // Grafikfenster-Zoom (analog 3fls scheduler-store.zoom).
   // Default "fit" = Inhalt passt genau in Container (bisheriges Verhalten).
@@ -205,7 +202,7 @@ function LivePage({
     // und auf den primären Grafik-Viewer (Durchlaufplan) springen — der Lauf
     // zeigt sich im Grafik-Viewer, nicht in einer generischen Standard-Fläche.
     useLiveStreamStore.getState().reset();
-    setActiveTabId(DEFAULT_VIEWER_TAB_ID);
+    setActiveLeafId(DEFAULT_MENU_LEAF_ID);
     setRunMeta(undefined);
     setCoverageRatio(null);
     try {
@@ -348,65 +345,63 @@ function LivePage({
         )}
       </header>
 
-      <Tabs
-        value={activeTabId}
-        onValueChange={setActiveTabId}
-        className="flex flex-1 flex-col"
-      >
-        <TabsList>
-          {VIEWER_TABS.map((tab) => (
-            <TabsTrigger
-              key={tab.id}
-              value={tab.id}
-              data-testid={`live-tab-${tab.id}`}
-            >
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      {/* Steuerleiste OBEN — geteilt über alle Sichten (PSim "Steuerung").
+          Ein Lauf, viele Sichten: Start/Periode/Sim-Zeit gehören zum Lauf,
+          nicht zu einem einzelnen Viewer. Modus steuert der Menübaum (showModus
+          aus); Zoom nur bei der Simulationsgrafik (showZoom = isGrafik). */}
+      <GrafikfensterControls
+        modelId={modelId}
+        modus={grafikModus}
+        onModusChange={() => {}}
+        starting={starting}
+        hasRun={runId !== null}
+        onStart={() => void handleStartRun()}
+        periodBegin={periodInfo.begin}
+        periodEnd={periodInfo.end}
+        simTime={liveSimTime}
+        periodNum={periodInfo.num}
+        zoom={grafikZoom}
+        onZoomChange={(z) => {
+          setGrafikZoom(z);
+          setGrafikZoomFactor(1); // Reset factor bei Stufen-Wechsel
+        }}
+        showModus={false}
+        showZoom={isGrafik}
+      />
 
-        {VIEWER_TABS.map((tab) => (
-          <TabsContent key={tab.id} value={tab.id} className="flex-1">
-            {/* Der Durchlaufplan ist der primäre Grafik-Viewer (01-15):
-                GrafikfensterControls + das faithful OSim-Grafikfenster
-                (3 Modi: Belegung/Warteschlangen/Qualifikation).
-                Die übrigen Viewer rendern direkt ihren Stream (Isolation, AC-4). */}
-            {tab.id === DEFAULT_VIEWER_TAB_ID ? (
-              <div className="flex flex-col gap-3">
-                <GrafikfensterControls
-                  modelId={modelId}
-                  modus={grafikModus}
-                  onModusChange={(m) => setGrafikModus(m as GrafikModus)}
-                  starting={starting}
-                  hasRun={runId !== null}
-                  onStart={() => void handleStartRun()}
-                  periodBegin={periodInfo.begin}
-                  periodEnd={periodInfo.end}
-                  simTime={liveSimTime}
-                  periodNum={periodInfo.num}
-                  zoom={grafikZoom}
-                  onZoomChange={(z) => {
-                    setGrafikZoom(z);
-                    setGrafikZoomFactor(1); // Reset factor bei Stufen-Wechsel
-                  }}
-                />
-                <Grafikfenster
-                  modus={grafikModus}
-                  widthPx={800}
-                  periodBegin={periodInfo.begin}
-                  periodEnd={periodInfo.end}
-                  ressourcenFromModel={ressourcenFromModel}
-                  zoom={grafikZoom}
-                  zoomFactor={grafikZoomFactor}
-                  onZoomFactorChange={setGrafikZoomFactor}
-                />
-              </div>
-            ) : (
-              <StreamRouter tab={tab} />
-            )}
-          </TabsContent>
-        ))}
-      </Tabs>
+      {/* Menübaum (links) + aktiver Viewer (rechts) */}
+      <div className="mt-3 flex min-h-0 flex-1 overflow-hidden rounded-md border border-border">
+        <LiveMenuTree activeLeafId={activeLeafId} onSelect={setActiveLeafId} />
+        <div className="min-w-0 flex-1 overflow-auto p-3" data-testid="live-viewer-pane">
+          {isGrafik ? (
+            <Grafikfenster
+              modus={grafikModus}
+              widthPx={800}
+              periodBegin={periodInfo.begin}
+              periodEnd={periodInfo.end}
+              ressourcenFromModel={ressourcenFromModel}
+              zoom={grafikZoom}
+              zoomFactor={grafikZoomFactor}
+              onZoomFactorChange={setGrafikZoomFactor}
+            />
+          ) : activeLeaf?.tabId ? (
+            (() => {
+              const tab = viewerTabById(activeLeaf.tabId);
+              return tab ? (
+                <StreamRouter tab={tab} />
+              ) : (
+                <div className="p-4 text-sm text-muted-foreground">
+                  Unbekannter Viewer.
+                </div>
+              );
+            })()
+          ) : (
+            <div className="p-4 text-sm text-muted-foreground">
+              Bitte links eine Sicht wählen.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

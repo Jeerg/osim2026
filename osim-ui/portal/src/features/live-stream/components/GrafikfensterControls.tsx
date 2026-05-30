@@ -65,6 +65,16 @@ export interface GrafikfensterControlsProps {
   zoom?: SimZoomLevel;
   /** Callback bei Zoom-Wechsel (analog 3fls setZoom). */
   onZoomChange?: (zoom: SimZoomLevel) => void;
+  /**
+   * Modus-Dropdown anzeigen? Default true (Stand-alone). In /live steuert der
+   * Menübaum den Modus → dort false (LIVE-LAYOUT-SPEC).
+   */
+  showModus?: boolean;
+  /**
+   * Zoom-Buttons anzeigen? Default true. Zoom betrifft nur die Simulationsgrafik;
+   * bei Auswertungs-Sichten in /live → false.
+   */
+  showZoom?: boolean;
 }
 
 /** Formatiert eine Sim-Zeit (Sekunden) als "Xd Yh Zm Ss". */
@@ -99,6 +109,8 @@ export function GrafikfensterControls({
   periodNum = 0,
   zoom = "fit",
   onZoomChange,
+  showModus = true,
+  showZoom = true,
 }: GrafikfensterControlsProps): React.ReactElement {
   // Start-Button-Caption: "Start" bei begin, "Weiter" bei period (§1.2)
   const startCaption =
@@ -199,65 +211,71 @@ export function GrafikfensterControls({
         </span>
       </span>
 
-      {/* Modus-Dropdown (IDC_CBB_PGFX_MODUS, §1.1) */}
-      <label className="flex items-center gap-1 text-xs text-muted-foreground">
-        Modus:
-        <select
-          data-testid="grafik-modus-select"
-          value={modus}
-          onChange={(e) =>
-            onModusChange(
-              e.target.value as GrafikfensterModus["key"],
-            )
-          }
-          className="h-7 rounded-md border border-input bg-transparent px-2 text-xs text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          aria-label="Grafikfenster Modus wählen"
-        >
-          {GRAFIKFENSTER_MODES.map((m) => (
-            <option key={m.key} value={m.key}>
-              {m.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {/* Trennlinie */}
-      <div className="h-6 w-px bg-border" aria-hidden="true" />
+      {/* Modus-Dropdown (IDC_CBB_PGFX_MODUS, §1.1). In /live durch den Menübaum
+          ersetzt → ausblendbar (showModus). */}
+      {showModus && (
+        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          Modus:
+          <select
+            data-testid="grafik-modus-select"
+            value={modus}
+            onChange={(e) =>
+              onModusChange(
+                e.target.value as GrafikfensterModus["key"],
+              )
+            }
+            className="h-7 rounded-md border border-input bg-transparent px-2 text-xs text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            aria-label="Grafikfenster Modus wählen"
+          >
+            {GRAFIKFENSTER_MODES.map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {/* Zoom-Button-Gruppe (analog 3fls scheduler-widget/toolbar.tsx ZOOM_OPTIONS).
-          Diskrete Stufen: Fit / Tag / Std / 15m.
-          Aktiver Button hervorgehoben (variant="default"), inaktive ghost.
-          3FLS-Token, KEINE Daten-Farben. A11y: role="radiogroup". */}
-      <div
-        role="radiogroup"
-        aria-label="Zoom-Stufe"
-        data-testid="grafik-zoom-group"
-        className="flex items-center gap-0.5"
-      >
-        {SIM_ZOOM_LEVELS.map((level) => {
-          const active = zoom === level;
-          return (
-            <Button
-              key={level}
-              type="button"
-              variant={active ? "default" : "ghost"}
-              size="sm"
-              role="radio"
-              aria-checked={active}
-              data-active={active || undefined}
-              data-testid={`grafik-zoom-${level}`}
-              onClick={() => onZoomChange?.(level)}
-              className={cn(
-                "h-7 px-2 text-xs gap-1",
-                active && "shadow-sm",
-              )}
-              aria-label={`Zoom ${ZOOM_LABELS[level]}`}
-            >
-              {ZOOM_LABELS[level]}
-            </Button>
-          );
-        })}
-      </div>
+          Diskrete Stufen: Fit / Woche / Tag / Std / 15m. Nur bei Simulationsgrafik
+          (showZoom). Aktiver Button hervorgehoben. 3FLS-Token, KEINE Daten-Farben.
+          A11y: role="radiogroup". */}
+      {showZoom && (
+        <>
+          {/* Trennlinie */}
+          <div className="h-6 w-px bg-border" aria-hidden="true" />
+          <div
+            role="radiogroup"
+            aria-label="Zoom-Stufe"
+            data-testid="grafik-zoom-group"
+            className="flex items-center gap-0.5"
+          >
+            {SIM_ZOOM_LEVELS.map((level) => {
+              const active = zoom === level;
+              return (
+                <Button
+                  key={level}
+                  type="button"
+                  variant={active ? "default" : "ghost"}
+                  size="sm"
+                  role="radio"
+                  aria-checked={active}
+                  data-active={active || undefined}
+                  data-testid={`grafik-zoom-${level}`}
+                  onClick={() => onZoomChange?.(level)}
+                  className={cn(
+                    "h-7 px-2 text-xs gap-1",
+                    active && "shadow-sm",
+                  )}
+                  aria-label={`Zoom ${ZOOM_LABELS[level]}`}
+                >
+                  {ZOOM_LABELS[level]}
+                </Button>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

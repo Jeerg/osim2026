@@ -361,5 +361,120 @@ export function viewerTabById(id: string): ViewerTab | undefined {
   return VIEWER_TABS.find((t) => t.id === id);
 }
 
+// ---------------------------------------------------------------------------
+// Menübaum der /live-Sicht (LIVE-LAYOUT-SPEC) — spiegelt das PSim-Menü:
+//   Gruppe "Simulation" (Grafikfenster, 3 Modi) + Gruppe "Auswertung" (KPI).
+// Die flache VIEWER_TABS-Registry oben bleibt Quelle für StreamRouter; der
+// Menübaum ist die NEUE Navigation. Durchlaufplan-/Einsatzzeit-Gantt sind
+// bewusst NICHT im Baum (Modellierung bzw. redundant zum Belegungs-Modus).
+// ---------------------------------------------------------------------------
+
+/** Grafikfenster-Modus (dupliziert aus Grafikfenster.tsx, um Zyklen zu vermeiden). */
+export type GrafikModusKey = "belegung" | "warteschlangen" | "qualifikation";
+
+/**
+ * Ein Blatt im Menübaum.
+ *  - kind "grafik" → rendert das Grafikfenster mit `modus` (Simulationsgrafik).
+ *  - kind "viewer" → rendert `StreamRouter` mit dem Tab `tabId` (Auswertung).
+ */
+export interface LiveMenuLeaf {
+  /** Stabile, eindeutige Blatt-/Test-ID. */
+  id: string;
+  /** Anzeige-Label (deutsch, OSim). */
+  label: string;
+  kind: "grafik" | "viewer";
+  /** Grafikfenster-Modus (nur kind "grafik"). */
+  modus?: GrafikModusKey;
+  /** VIEWER_TABS-id (nur kind "viewer"). */
+  tabId?: string;
+}
+
+/** Eine Gruppe (oberste Baum-Ebene). */
+export interface LiveMenuGroup {
+  id: string;
+  label: string;
+  children: LiveMenuLeaf[];
+}
+
+/**
+ * Der Menübaum der /live-Sicht. Reihenfolge folgt dem PSim-Menü:
+ * Simulation (Grafik) zuerst, dann Auswertung (in VIEWER_TABS-Reihenfolge,
+ * Schicht als Tabelle am Ende der Auswertungen).
+ */
+export const LIVE_MENU: LiveMenuGroup[] = [
+  {
+    id: "simulation",
+    label: "Simulation",
+    children: [
+      { id: "grafik-belegung", label: "Belegung", kind: "grafik", modus: "belegung" },
+      {
+        id: "grafik-warteschlangen",
+        label: "Warteschlangen",
+        kind: "grafik",
+        modus: "warteschlangen",
+      },
+      {
+        id: "grafik-qualifikation",
+        label: "Qualifikation",
+        kind: "grafik",
+        modus: "qualifikation",
+      },
+    ],
+  },
+  {
+    id: "auswertung",
+    label: "Auswertung",
+    children: [
+      { id: "m-ausw-gesamt", label: "Gesamt", kind: "viewer", tabId: "ausw-gesamt" },
+      {
+        id: "m-ausw-prod_auftrag",
+        label: "Produktionsaufträge",
+        kind: "viewer",
+        tabId: "ausw-prod_auftrag",
+      },
+      {
+        id: "m-ausw-best_auftrag",
+        label: "Bestellaufträge",
+        kind: "viewer",
+        tabId: "ausw-best_auftrag",
+      },
+      { id: "m-ausw-pers", label: "Personal", kind: "viewer", tabId: "ausw-pers" },
+      { id: "m-ausw-betr", label: "Betriebsmittel", kind: "viewer", tabId: "ausw-betr" },
+      { id: "m-ausw-lager", label: "Kauf-/Eigenlager", kind: "viewer", tabId: "ausw-lager" },
+      {
+        id: "m-ausw-kalkulation",
+        label: "Kalkulation",
+        kind: "viewer",
+        tabId: "ausw-kalkulation",
+      },
+      {
+        id: "m-ausw-wschlange",
+        label: "Warteschlange",
+        kind: "viewer",
+        tabId: "ausw-wschlange",
+      },
+      {
+        id: "m-ausw-nbearbeit",
+        label: "Nicht bearbeitet",
+        kind: "viewer",
+        tabId: "ausw-nbearbeit",
+      },
+      { id: "m-schicht", label: "Schicht", kind: "viewer", tabId: "schicht" },
+    ],
+  },
+];
+
+/** Default-Auswahl beim Betreten von /live = Simulation → Belegung (NICHT Gantt). */
+export const DEFAULT_MENU_LEAF_ID = "grafik-belegung";
+
+/** Lookup eines Menü-Blatts über seine id (über alle Gruppen). */
+export function liveMenuLeafById(id: string): LiveMenuLeaf | undefined {
+  for (const g of LIVE_MENU) {
+    const leaf = g.children.find((c) => c.id === id);
+    if (leaf) return leaf;
+  }
+  return undefined;
+}
+
 /** Marker-Text für slice-gated Felder (NIE erfundene Zahlen). */
 export const SLICE_OPEN_LABEL = "(Slice offen)";
