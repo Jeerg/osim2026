@@ -373,20 +373,44 @@ export function viewerTabById(id: string): ViewerTab | undefined {
 export type GrafikModusKey = "belegung" | "warteschlangen" | "qualifikation";
 
 /**
+ * Spezifikation einer Kennzahl-Auswertung (3D-Balken, OChartCtrl-treu).
+ * Bindet eine Berechnungsfunktion (kennzahlen.ts) an ein Bezugsobjekt
+ * (Gruppierungs-Schlüssel) — KENNZAHLEN-SPEC §1.
+ */
+export interface KennzahlSpec {
+  /** Stabile id (= Menü-Blatt-id). */
+  id: string;
+  /** Chart-Titel (= OSim-Kennzahl-Name). */
+  title: string;
+  /** Welche Berechnungsfunktion (kennzahlen.ts). */
+  fn:
+    | "mittlereDurchlaufzeit"
+    | "anzahlAusloesungen"
+    | "ressourcenAuslastungApprox";
+  /** Gruppierungs-Feld im start-Frame (Auslöser vs. Durchlaufplan). */
+  gruppeKey?: "auftrag_oid" | "durchlaufplan_oid";
+  /** Feld für den Kategorie-Anzeigenamen (Default auftrag_id). */
+  nameKey?: "auftrag_id" | "durchlaufplan_id";
+}
+
+/**
  * Ein Blatt im Menübaum.
- *  - kind "grafik" → rendert das Grafikfenster mit `modus` (Simulationsgrafik).
- *  - kind "viewer" → rendert `StreamRouter` mit dem Tab `tabId` (Auswertung).
+ *  - kind "grafik"   → Grafikfenster mit `modus` (Simulationsgrafik).
+ *  - kind "viewer"   → StreamRouter mit `tabId` (Auswertungs-Tabelle).
+ *  - kind "kennzahl" → KennzahlChartPanel mit `kennzahl` (3D-Balken-Diagramm).
  */
 export interface LiveMenuLeaf {
   /** Stabile, eindeutige Blatt-/Test-ID. */
   id: string;
   /** Anzeige-Label (deutsch, OSim). */
   label: string;
-  kind: "grafik" | "viewer";
+  kind: "grafik" | "viewer" | "kennzahl";
   /** Grafikfenster-Modus (nur kind "grafik"). */
   modus?: GrafikModusKey;
   /** VIEWER_TABS-id (nur kind "viewer"). */
   tabId?: string;
+  /** Kennzahl-Spezifikation (nur kind "kennzahl"). */
+  kennzahl?: KennzahlSpec;
 }
 
 /** Eine Gruppe (oberste Baum-Ebene). */
@@ -422,8 +446,60 @@ export const LIVE_MENU: LiveMenuGroup[] = [
     ],
   },
   {
+    id: "kennzahlen",
+    label: "Kennzahlen (Diagramme)",
+    children: [
+      {
+        id: "kz-dlz-ausloeser",
+        label: "Mittlere Durchlaufzeit · Auslöser",
+        kind: "kennzahl",
+        kennzahl: {
+          id: "kz-dlz-ausloeser",
+          title: "mittlere Durchlaufzeit (Auslöser)",
+          fn: "mittlereDurchlaufzeit",
+          gruppeKey: "auftrag_oid",
+          nameKey: "auftrag_id",
+        },
+      },
+      {
+        id: "kz-dlz-dlpl",
+        label: "Mittlere Durchlaufzeit · Durchlaufplan",
+        kind: "kennzahl",
+        kennzahl: {
+          id: "kz-dlz-dlpl",
+          title: "mittlere Durchlaufzeit (Durchlaufplan)",
+          fn: "mittlereDurchlaufzeit",
+          gruppeKey: "durchlaufplan_oid",
+          nameKey: "durchlaufplan_id",
+        },
+      },
+      {
+        id: "kz-anz-ausloeser",
+        label: "Anzahl Auslösungen · Auslöser",
+        kind: "kennzahl",
+        kennzahl: {
+          id: "kz-anz-ausloeser",
+          title: "Anzahl fertiggestellter Auslösungen",
+          fn: "anzahlAusloesungen",
+          gruppeKey: "auftrag_oid",
+          nameKey: "auftrag_id",
+        },
+      },
+      {
+        id: "kz-auslastung",
+        label: "Ressourcenauslastung (Näherung)",
+        kind: "kennzahl",
+        kennzahl: {
+          id: "kz-auslastung",
+          title: "Auslastung (Näherung: belegte Zeit / Periode)",
+          fn: "ressourcenAuslastungApprox",
+        },
+      },
+    ],
+  },
+  {
     id: "auswertung",
-    label: "Auswertung",
+    label: "Auswertung (Tabellen)",
     children: [
       { id: "m-ausw-gesamt", label: "Gesamt", kind: "viewer", tabId: "ausw-gesamt" },
       {

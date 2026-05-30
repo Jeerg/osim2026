@@ -18,8 +18,20 @@ import {
 } from "../viewer-config";
 
 describe("LIVE_MENU (Struktur)", () => {
-  it("hat genau zwei Gruppen: Simulation + Auswertung", () => {
-    expect(LIVE_MENU.map((g) => g.id)).toEqual(["simulation", "auswertung"]);
+  it("hat die Gruppen Simulation, Kennzahlen, Auswertung (PSim-Menü)", () => {
+    expect(LIVE_MENU.map((g) => g.id)).toEqual([
+      "simulation",
+      "kennzahlen",
+      "auswertung",
+    ]);
+  });
+
+  it("Kennzahlen-Gruppe enthält nur kind=kennzahl-Blätter mit Spec", () => {
+    const kz = LIVE_MENU.find((g) => g.id === "kennzahlen")!;
+    expect(kz.children.length).toBeGreaterThan(0);
+    expect(
+      kz.children.every((c) => c.kind === "kennzahl" && !!c.kennzahl),
+    ).toBe(true);
   });
 
   it("Default-Blatt ist Simulation → Belegung (Grafik, nicht Gantt)", () => {

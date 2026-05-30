@@ -78,6 +78,56 @@ class GanttListener(OListenerSimulator):
         return getattr(ausl, "oid", -1)
 
     @staticmethod
+    def _durchlaufplan_oid(proz) -> int:  # noqa: ANN001
+        """Stabile Durchlaufplan-OID des auslösenden Auslösers.
+
+        Bezugsobjekt für die Durchlaufplan-Kennzahlen (KENNZAHLEN-SPEC §1):
+        OSim gruppiert „mittlere Durchlaufzeit" wahlweise nach Auslöser ODER
+        nach Durchlaufplan (PDurchlaufplanLList, PDurchlaufplan.cpp:2072-2117).
+        Quelle = PAusloeser.m_lDlpl.oid. Fallback -1 (kein Plan auflösbar).
+        """
+        try:
+            ausl = proz.get_ausloeser()
+        except Exception:
+            return -1
+        if ausl is None:
+            return -1
+        dlpl = getattr(ausl, "m_lDlpl", None)
+        return getattr(dlpl, "oid", -1) if dlpl is not None else -1
+
+    @staticmethod
+    def _durchlaufplan_id(proz) -> str | None:  # noqa: ANN001
+        """Anzeigename des Durchlaufplans (für die Chart-Kategorie)."""
+        try:
+            ausl = proz.get_ausloeser()
+        except Exception:
+            return None
+        if ausl is None:
+            return None
+        dlpl = getattr(ausl, "m_lDlpl", None)
+        return getattr(dlpl, "m_sName", None) if dlpl is not None else None
+
+    @staticmethod
+    def _soll_end_termin(proz, start_time: int) -> int:  # noqa: ANN001
+        """Geplanter Abschluss-Zeitpunkt = Start + m_iSollDauer.
+
+        1:1 PAusloeser.cpp:1457 (`m_iPtkSollEndTermin = EvtCurrTime()+m_iSollDauer`).
+        Treibt die Liefertermintreue (KENNZAHLEN-SPEC §2.3). Der -1-Sentinel von
+        m_iSollDauer (KPI deaktiviert, PAusloeser.cpp:163-177) wird als
+        soll_end_termin = -1 durchgereicht. Default m_iSollDauer=0 → soll = start.
+        """
+        try:
+            ausl = proz.get_ausloeser()
+        except Exception:
+            return -1
+        if ausl is None:
+            return -1
+        soll_dauer = getattr(ausl, "m_iSollDauer", 0)
+        if soll_dauer == -1:
+            return -1
+        return start_time + soll_dauer
+
+    @staticmethod
     def _prozess_id(proz) -> str | None:  # noqa: ANN001
         return getattr(proz, "m_sName", None)
 
@@ -146,6 +196,12 @@ class GanttListener(OListenerSimulator):
                     "betriebsmittel_id": self._betriebsmittel_id(proz),
                     "dauer_geplant": getattr(proz, "m_iZeitinhaltGesamt", None),
                     "auftrag_oid": self._auftrag_oid(proz),
+                    # Bezugsobjekt Durchlaufplan + Soll-Termin (KENNZAHLEN-SPEC §3):
+                    # ermöglichen Durchlaufzeit-Gruppierung pro Durchlaufplan und
+                    # die Liefertermintreue im UI — read-only abgeleitet.
+                    "durchlaufplan_oid": self._durchlaufplan_oid(proz),
+                    "durchlaufplan_id": self._durchlaufplan_id(proz),
+                    "soll_end_termin": self._soll_end_termin(proz, start_time),
                 },
             )
 

@@ -48,6 +48,7 @@ import { Grafikfenster } from "@/features/live-stream/components/Grafikfenster";
 import type { GrafikModus } from "@/features/live-stream/components/Grafikfenster";
 import { GrafikfensterControls } from "@/features/live-stream/components/GrafikfensterControls";
 import { LiveMenuTree } from "@/features/live-stream/components/LiveMenuTree";
+import { KennzahlChartPanel } from "@/features/live-stream/components/KennzahlChartPanel";
 import type { SimZoomLevel } from "@/features/live-stream/components/grafikfenster-coords";
 
 /** Polling-Intervall des Tail-Readers (D-4.4). */
@@ -383,6 +384,11 @@ function LivePage({
               zoom={grafikZoom}
               zoomFactor={grafikZoomFactor}
               onZoomFactorChange={setGrafikZoomFactor}
+            />
+          ) : activeLeaf?.kind === "kennzahl" && activeLeaf.kennzahl ? (
+            <KennzahlChartPanel
+              spec={activeLeaf.kennzahl}
+              periodLen={Math.max(1, periodInfo.end - periodInfo.begin)}
             />
           ) : activeLeaf?.tabId ? (
             (() => {
