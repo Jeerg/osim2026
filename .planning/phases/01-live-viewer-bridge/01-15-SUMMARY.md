@@ -283,8 +283,44 @@ das soll analog unseres 3fls scheduler zoom sein"
 tsc --noEmit: 0 Fehler. ESLint: 0 Errors auf berührten Dateien.
 Portal-Container neu gestartet; VITE ready bestätigt.
 
+## Gap-Closure: Sticky Top-Zeitachse + Vertikaler Scroll (UAT-Feedback 2026-05-30)
+
+Browser-UAT-Feedback: „fehlen aber noch zeitangaben am besten oben so das man die
+skalierung sieht und ein scroll bar wenn zu viele stationen da sind"
+
+### Implementierung
+
+**`Grafikfenster.tsx`** — 2D-sticky-Layout:
+- Gemeinsamer Scroll-Wrapper (`data-testid=grafik-scroll-wrapper`):
+  `overflow: auto` in beide Richtungen, `maxHeight: 480px`
+  → vertikaler Scrollbalken bei vielen Ressourcen, horizontaler Scrollbalken bei Zoom
+- Sticky Top-Zeitachse (`data-testid=grafik-top-axis`):
+  `position: sticky; top: 0; z-index: 20` — scrollt horizontal mit dem Grid,
+  bleibt beim vertikalen Scrollen immer sichtbar; zeigt Sim-Zeit-Ticks (d/h/m/s) + rote Linie
+- Ecke oben-links (Ressourcen-Header): `sticky top+left; z-index: 30` — bleibt immer fix
+- Labels-Spalte: `sticky left; z-index: 10` — bleibt beim horizontalen Scrollen fix
+- ZeitachsBar (untere Achse) entfernt — Top-Achse ist die primäre, klare Skalierung
+- `MAX_BODY_HEIGHT_PX = 480` — Fallback wenn keine explizite Eltern-Höhe messbar (JSDOM-sicher)
+- Ticks per `useMemo` berechnet und zwischen Top-Achse + vertikalen Rasterlinien geteilt
+- Alignment garantiert: Top-Achse und Rasterlinien teilen dieselbe `ticks`-Instanz (gleiche x-Positionen)
+
+### Neue Tests (2 neue in Grafikfenster.spec.tsx)
+
+- **Test S1:** `data-testid=grafik-top-axis` muss im DOM existieren (UAT: Zeitangaben oben)
+- **Test S2:** `data-testid=grafik-scroll-wrapper` muss im DOM existieren (UAT: Scrollbar)
+
+### Commits (GAP-CLOSURE Sticky+Scroll)
+
+- `0fe0602` test(01-15): RED — sticky Top-Achse + vertikaler Scroll (S1/S2)
+- `aff3eee` feat(01-15): GREEN — 2D-sticky Layout in Grafikfenster
+
+**Gesamt nach diesem Gap-Closure:** 97 Unit-Tests gruen (12 Testdateien).
+tsc --noEmit: 0 Fehler. ESLint: 0 Errors auf berührten Dateien.
+Portal-Container neu gestartet; VITE ready bestätigt.
+
 ## Self-Check: PASSED
 
 Alle Task-Commits vorhanden (7eba51a, 8fe8de4, 8958a66, 0680ed1, 69d5e32, c932a47, 45af119,
-7345f90-RED, 2abb58e-GREEN, 272dfff-RED, 4f4d2d8-GREEN, e67a1d9-RED, 47b79d5-GREEN).
-95 Unit-Tests gruen. tsc --noEmit clean. ESLint 0 Errors.
+7345f90-RED, 2abb58e-GREEN, 272dfff-RED, 4f4d2d8-GREEN, e67a1d9-RED, 47b79d5-GREEN,
+0fe0602-RED, aff3eee-GREEN).
+97 Unit-Tests gruen. tsc --noEmit clean. ESLint 0 Errors.
