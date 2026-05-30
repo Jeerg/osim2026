@@ -396,31 +396,16 @@ export function Grafikfenster({
     (s) => s.byStream["gantt_wartequeue"] ?? EMPTY_FRAMES,
   );
 
-  // Zeitfenster DYNAMISCH aus den vorhandenen Frames ableiten — das dynamische
-  // Fenster ist das "fit"-Verhalten (Browser-UAT-Bug: ein 4-Perioden-Bosch2-Lauf
-  // spannt ~59 Tage; das hart verdrahtete 0..86400-Fenster schob alles off-screen).
-  // Solange keine Frames da sind, gelten die übergebenen Props als Default.
-  const { periodBegin, periodEnd } = React.useMemo(() => {
-    let lo = Infinity;
-    let hi = -Infinity;
-    const consider = (n: unknown): void => {
-      if (typeof n === "number" && Number.isFinite(n)) {
-        if (n < lo) lo = n;
-        if (n > hi) hi = n;
-      }
-    };
-    for (const f of einsatzFrames) {
-      const v = f.v as { start_time?: number; end_time?: number };
-      consider(v.start_time);
-      consider(v.end_time);
-      consider(f.t);
-    }
-    for (const f of queueFrames) consider(f.t);
-    if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) {
-      return { periodBegin: periodBeginProp, periodEnd: periodEndProp };
-    }
-    return { periodBegin: lo, periodEnd: hi };
-  }, [einsatzFrames, queueFrames, periodBeginProp, periodEndProp]);
+  // Zeitfenster = FESTE Perioden-Grenzen [period_begin, period_begin+period_len]
+  // aus dem lifecycle-Stream (via Props). 1:1 OSim FSimulatorViewerGfx: die Achse
+  // zeigt IMMER die ganze aktuelle Periode (Bild 1: 0–31d Monat; Bild 3: 0–24h
+  // Tag) und reskaliert NICHT, während Frames eintreffen — sie wird NUR durch
+  // User-Zoom verändert (Browser-UAT: "die skalierung ändert sich nur wenn der
+  // user den zoom betätigt, nicht dynamisch während der simulation"). Die Frames
+  // füllen das feste Fenster von links bis zur aktuellen Sim-Zeit (rote Linie).
+  const periodBegin = periodBeginProp;
+  const periodEnd =
+    periodEndProp > periodBeginProp ? periodEndProp : periodBeginProp + 86400;
 
   const ressourcen = React.useMemo(
     () => extractRessourcen(einsatzFrames, queueFrames, ressourcenFromModel),
