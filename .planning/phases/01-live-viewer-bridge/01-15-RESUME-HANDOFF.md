@@ -51,10 +51,14 @@ Finale Browser-UAT der letzten Fixes durch den Nutzer auf **http://localhost:300
 
 - **Dev-Stack läuft** (docker). Portal = Bind-Mount + Vite-HMR, aber bei Code-Änderung
   sicherheitshalber `docker restart osim-ui-portal-1`. Stack-Start sonst: `bash scripts/dev-up.sh`.
-- **api-Container = gebautes Image OHNE Live-Mount der Engine.** Die neue Engine (01-14,
-  inkl. `WartequeueListener`) wurde per `docker cp engine/src/osim_engine/. osim-ui-api-1:/workspace/osim-engine/engine/src/osim_engine/`
-  + `docker restart osim-ui-api-1` in den Container synchronisiert. **DAS IST FLÜCHTIG** —
-  bei Container-Neubau verloren. **OFFENER FOLGEPUNKT: api-Image dauerhaft neu bauen.**
+- **api-Container = gebautes Image (Engine ist jetzt eingebacken).** ERLEDIGT 2026-05-30:
+  api-Image neu gebaut, Engine (01-14, inkl. `WartequeueListener`) ist dauerhaft im Image
+  unter `/workspace/osim-engine/engine` — KEIN `docker cp` mehr nötig, überlebt Container-Neubau.
+  Verifiziert: `import osim_engine.streaming.listeners.wartequeue` → `WartequeueListener` OK,
+  `/health` ok. **Dabei Bug gefixt:** Dockerfile `COPY osim-engine/engine` zeigte auf den
+  Pre-Migration-Pfad; im Monorepo liegt die Engine unter Repo-Root `engine/` → auf
+  `COPY engine /workspace/osim-engine/engine` korrigiert (Ziel/venv-Pfade unverändert).
+  Der Dockerfile-Fix ist NOCH NICHT committet.
 - **Modell-Horizont**: `Bosch2_wechseln`-OTX setzt `m_szeitEnde = 31.01.1900` (kein Start →
   0) → 31-Tage-Periode (`period_len = 2.678.400 s`). Laut Nutzer ist der **Monat korrekt**
   (Engine baut keinen Mist). Es gibt KEIN Kalender-Datum in der Pipeline (nur Sim-Sekunden);
@@ -71,7 +75,8 @@ Finale Browser-UAT der letzten Fixes durch den Nutzer auf **http://localhost:300
 
 ## Offene Folgepunkte (nach UAT-Approval)
 
-1. **api-Image-Rebuild** (Engine dauerhaft im Container statt `docker cp`).
+1. ~~**api-Image-Rebuild** (Engine dauerhaft im Container statt `docker cp`).~~ ERLEDIGT
+   2026-05-30 (inkl. Dockerfile-Monorepo-Pfadfix — noch zu committen).
 2. Optional: **echtes Kalender-Datum** (Sim-Startdatum streamen → api → UI).
 3. Plan 01-15 abschließen: Code-Review-Gate (`/gsd:code-review 01`) + Phasen-Verifikation
    (gsd-verifier) + `phase.complete`. Danach Phase 01 als COMPLETE markieren.
