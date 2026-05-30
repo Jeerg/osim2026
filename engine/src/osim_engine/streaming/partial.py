@@ -116,12 +116,18 @@ def build_streams_status() -> dict[str, dict[str, Any]]:
             "Stillstand-Differenzierung bleiben deferred.",
         ),
         "gantt_wartequeue": _entry(
-            "full", [],
-            "Per-Ressource Warteschlangen-Länge aus m_lPtkWartschl "
-            "(Count-Modus, GetZstWartProzesse, PRessBeleg.cpp:1807-1809, "
-            "01-14). Treppenfunktion-Sampling bei jeder Änderung (SPEC §1.6). "
-            "qcContent/Umlage (GetKnzArbeitsinhalt) und Quali-Stream bleiben "
-            "deferred (out of scope).",
+            "partial", [],
+            "Per-Ressource Warteschlangen-Länge aus len(m_lPtkWartschl), "
+            "Count-Modus, Treppenfunktion-Sampling (SPEC §1.6). ABWEICHUNG zum "
+            "Original (AUDIT-OSIM-TREUE, verifiziert): das Python-m_lPtkWartschl "
+            "trägt nur BLOCKIERT-WARTENDE Prozesse (zentrale WS, Austrag bei "
+            "ress_belegen), während C++ GetZstWartProzesse ALLE am Knoten "
+            "anhängenden zählt (Eintrag bei PDlplKnoten::AddProzess VOR "
+            "BearbeitBeginnen, Austrag bei Knoten-Verlassen → inkl. in "
+            "Bearbeitung). Folge: Python-Spitzen systematisch zu niedrig. Fix "
+            "= m_lPtkWartschl-Lebensdauer an Knoten-An-/Abmeldung koppeln "
+            "(reproduzierbarkeits-neutral, da reine KPI-Liste). qcContent/"
+            "Umlage + Quali-Stream bleiben deferred.",
         ),
         "gantt_schicht": _entry(
             "partial", ["P5-M"],
