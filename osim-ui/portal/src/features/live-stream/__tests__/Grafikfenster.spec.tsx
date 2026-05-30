@@ -14,7 +14,7 @@
  *  Test B1: live.tsx liest activeModelId aus useModelStore (Persistenz-Test via Store)
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { Grafikfenster } from "../components/Grafikfenster";
 import { GrafikfensterControls } from "../components/GrafikfensterControls";
@@ -266,6 +266,71 @@ describe("GrafikfensterControls", () => {
 
     expect(screen.getByTestId("grafik-btn-abbruch")).toBeDisabled();
     expect(screen.getByTestId("grafik-btn-zurueck")).toBeDisabled();
+  });
+
+  it("Test Z-UI-1: Zoom-Button-Gruppe ist vorhanden (data-testid grafik-zoom-<level>)", () => {
+    render(
+      <GrafikfensterControls
+        modelId="test-model"
+        modus="belegung"
+        onModusChange={() => {}}
+        starting={false}
+        hasRun={false}
+        onStart={() => {}}
+        periodBegin={0}
+        periodEnd={86400}
+        simTime={0}
+      />,
+    );
+
+    // Analog zu 3fls scheduler-zoom-<level>: Zoom-Buttons müssen vorhanden sein
+    expect(screen.getByTestId("grafik-zoom-fit")).toBeInTheDocument();
+    expect(screen.getByTestId("grafik-zoom-tag")).toBeInTheDocument();
+    expect(screen.getByTestId("grafik-zoom-stunde")).toBeInTheDocument();
+  });
+
+  it("Test Z-UI-2: aktiver Zoom-Button ist hervorgehoben (data-active)", () => {
+    render(
+      <GrafikfensterControls
+        modelId="test-model"
+        modus="belegung"
+        onModusChange={() => {}}
+        starting={false}
+        hasRun={false}
+        onStart={() => {}}
+        periodBegin={0}
+        periodEnd={86400}
+        simTime={0}
+        zoom="fit"
+      />,
+    );
+
+    // Aktiver Button soll data-active gesetzt haben (analog 3fls)
+    const fitBtn = screen.getByTestId("grafik-zoom-fit");
+    expect(fitBtn).toHaveAttribute("data-active");
+  });
+
+  it("Test Z-UI-3: onZoomChange wird aufgerufen bei Zoom-Button-Klick", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const onZoomChange = vi.fn();
+    render(
+      <GrafikfensterControls
+        modelId="test-model"
+        modus="belegung"
+        onModusChange={() => {}}
+        starting={false}
+        hasRun={false}
+        onStart={() => {}}
+        periodBegin={0}
+        periodEnd={86400}
+        simTime={0}
+        zoom="fit"
+        onZoomChange={onZoomChange}
+      />,
+    );
+
+    await userEvent.setup().click(screen.getByTestId("grafik-zoom-tag"));
+    expect(onZoomChange).toHaveBeenCalledWith("tag");
   });
 });
 
