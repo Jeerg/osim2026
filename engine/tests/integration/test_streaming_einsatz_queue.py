@@ -81,8 +81,15 @@ def test_ress_beleg_queue_count_after_eintragen() -> None:
     assert bm.get_zst_wart_prozesse() == 2
 
 
-def test_ress_beleg_queue_count_decreases_after_ress_belegen() -> None:
-    """Nach ress_belegen eines wartenden Prozesses: get_zst_wart_prozesse() == 1."""
+def test_ress_belegen_laesst_wartequeue_unveraendert() -> None:
+    """OSim-treu (AUDIT-OSIM-TREUE): ress_belegen leert m_lPtkWartschl NICHT.
+
+    Im Original zählt GetZstWartProzesse ALLE am Knoten anhängenden Prozesse
+    (wartend + in Bearbeitung); ein Proz bleibt von der Knoten-Anmeldung bis zum
+    Knoten-Verlassen in der Liste — auch während er eine Ressource belegt. Die
+    Lebensdauer hängt jetzt an PDlplKnoten.add_prozess/remove_prozess (= C++
+    PtkUpDateProcessQueue), nicht am RessBelegen (das früher fälschlich schon
+    beim Bearbeitungs-Start austrug → Warteschlangen-Spitzen zu niedrig)."""
     from osim_engine.pps.simulator import PSimulator
     from osim_engine.resources.beleg import PBetriebsmittel
     from osim_engine.pps.prozess.zeitvorgabe import PtProzZeitvorgabe
@@ -104,10 +111,11 @@ def test_ress_beleg_queue_count_decreases_after_ress_belegen() -> None:
     bm.m_lPtkWartschl.append(p2)
     assert bm.get_zst_wart_prozesse() == 2
 
-    # ress_belegen entfernt p1 aus der Warteschlange
+    # ress_belegen ändert die Warteschlange NICHT — p1 ist in Bearbeitung,
+    # zählt aber weiter als „am Knoten" (1:1 GetZstWartProzesse).
     bm.ress_belegen(p1)
 
-    assert bm.get_zst_wart_prozesse() == 1
+    assert bm.get_zst_wart_prozesse() == 2
 
 
 # ======================================================================

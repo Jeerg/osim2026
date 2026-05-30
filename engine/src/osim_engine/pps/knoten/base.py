@@ -103,12 +103,58 @@ class PDlplKnoten(PSimObj):
 
     def add_prozess(self, proz: "PtProzess") -> None:
         self.m_lProzesse.append(proz)
+        # C++ PDlplKnoten::AddProzess → PtkUpDateProcessQueue(add=TRUE): der Proz
+        # gilt ab Knoten-Eintritt (VOR BearbeitBeginnen) als „am Knoten" und wird
+        # in m_lPtkWartschl der zugeordneten Ressourcen geführt — bis zum Austritt.
+        self._ptk_update_process_queue(proz, add=True)
 
     def remove_prozess(self, proz: "PtProzess") -> None:
         try:
             self.m_lProzesse.remove(proz)
         except ValueError:
             pass
+        # C++ PDlplKnoten::RemoveProzess → PtkUpDateProcessQueue(add=FALSE).
+        self._ptk_update_process_queue(proz, add=False)
+
+    def _ptk_update_process_queue(self, proz: "PtProzess", add: bool) -> None:
+        """1:1 PAssozBeleg::PtkUpDateProcessQueue (PAssozRessource.cpp:953-965).
+
+        Trägt ``proz`` beim Knoten-Eintritt (add=True) in ``m_lPtkWartschl`` jeder
+        zugeordneten Ressource ein bzw. beim Austritt (add=False) aus. Damit zählt
+        ``GetZstWartProzesse`` = len(m_lPtkWartschl) — wie im Original — ALLE am
+        Knoten anhängenden Prozesse (wartend + in Bearbeitung), nicht nur die
+        blockiert-wartenden (AUDIT-OSIM-TREUE).
+
+        Beim Eintragen werden ABL_BLOCKED-Links übersprungen (C++ :963). Reine
+        KPI-Protokoll-Liste (gantt_wartequeue) — KEINE RNG-/Sim-Entscheidung,
+        daher reproduzierbarkeits-neutral (T-01-14-02).
+        """
+        from osim_engine.decisions.strategie_rsv import AssozBelegLinkStatus
+
+        for assoz in getattr(self, "m_lAssozRess", ()) or ():
+            for ress in getattr(assoz, "m_lRessourcen", ()) or ():
+                wq = getattr(ress, "m_lPtkWartschl", None)
+                if wq is None:
+                    continue
+                if add:
+                    get_ls = getattr(assoz, "get_link_status", None)
+                    if callable(get_ls):
+                        try:
+                            status = get_ls(ress)
+                        except Exception:
+                            status = None
+                        if (
+                            getattr(status, "value", status)
+                            == AssozBelegLinkStatus.ABL_BLOCKED.value
+                        ):
+                            continue  # C++ :963 — blockierte Links nicht eintragen
+                    if proz not in wq:
+                        wq.append(proz)
+                else:
+                    try:
+                        wq.remove(proz)
+                    except ValueError:
+                        pass
 
     # ------------------------------------------------------------------
     # Assoziations-Helper (V4)

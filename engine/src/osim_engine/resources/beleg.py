@@ -252,18 +252,15 @@ class PRessBeleg(PRessource, PAktor):
     def ress_belegen(self, proz: "PtProzess") -> None:
         """PRessBeleg.cpp:605-616. Setzt Status, merkt Prozess, notifiziert.
 
-        Zusatz (P5D-SCOPE §3.2): Proz aus m_lPtkWartschl entfernen, da er die
-        Ressource jetzt belegt (C++: PtkUpDateProcessQueue add=FALSE beim
-        erfolgreichen RessBelegen, PRessBeleg.cpp:1571-1578).
+        Hinweis (AUDIT-OSIM-TREUE): m_lPtkWartschl wird hier NICHT mehr geleert.
+        Im Original bleibt der Proz von der Knoten-Anmeldung bis zum Knoten-
+        Verlassen in der Liste — auch während der Bearbeitung. GetZstWartProzesse
+        zählt daher wartend + in Bearbeitung. Die Lebensdauer hängt jetzt an
+        PDlplKnoten.add_prozess/remove_prozess (= C++ PtkUpDateProcessQueue),
+        nicht am RessBelegen.
         """
         self.set_status(RessStatus.RS_BELEGT)
         self.m_oProzCurrent = proz
-
-        # Per-Ressource-Queue: Proz ist nicht mehr wartend, sondern belegt.
-        try:
-            self.m_lPtkWartschl.remove(proz)
-        except ValueError:
-            pass  # War nicht in der Warteschlange dieser Ressource (kein Fehler)
 
         self.p_simulator.bus.emit(
             "ress.belegen",

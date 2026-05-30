@@ -116,18 +116,14 @@ def build_streams_status() -> dict[str, dict[str, Any]]:
             "Stillstand-Differenzierung bleiben deferred.",
         ),
         "gantt_wartequeue": _entry(
-            "partial", [],
-            "Per-Ressource Warteschlangen-Länge aus len(m_lPtkWartschl), "
-            "Count-Modus, Treppenfunktion-Sampling (SPEC §1.6). ABWEICHUNG zum "
-            "Original (AUDIT-OSIM-TREUE, verifiziert): das Python-m_lPtkWartschl "
-            "trägt nur BLOCKIERT-WARTENDE Prozesse (zentrale WS, Austrag bei "
-            "ress_belegen), während C++ GetZstWartProzesse ALLE am Knoten "
-            "anhängenden zählt (Eintrag bei PDlplKnoten::AddProzess VOR "
-            "BearbeitBeginnen, Austrag bei Knoten-Verlassen → inkl. in "
-            "Bearbeitung). Folge: Python-Spitzen systematisch zu niedrig. Fix "
-            "= m_lPtkWartschl-Lebensdauer an Knoten-An-/Abmeldung koppeln "
-            "(reproduzierbarkeits-neutral, da reine KPI-Liste). qcContent/"
-            "Umlage + Quali-Stream bleiben deferred.",
+            "full", [],
+            "Per-Ressource Warteschlangen-Länge len(m_lPtkWartschl), Count-Modus, "
+            "Treppenfunktion-Sampling (SPEC §1.6). Zählt 1:1 wie OSim "
+            "GetZstWartProzesse ALLE am Knoten anhängenden Prozesse (wartend + in "
+            "Bearbeitung): m_lPtkWartschl-Lebensdauer hängt an PDlplKnoten."
+            "add_prozess/remove_prozess (= C++ PtkUpDateProcessQueue, ABL_BLOCKED-"
+            "Filter auf add), nicht mehr an der zentralen WS (AUDIT-OSIM-TREUE-Fix). "
+            "qcContent/Umlage (GetKnzArbeitsinhalt) + Quali-Stream bleiben deferred.",
         ),
         "gantt_schicht": _entry(
             "partial", ["P5-M"],
