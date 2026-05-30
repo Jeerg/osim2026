@@ -1,12 +1,11 @@
 /**
  * Grafikfenster — faithfull OSim2004-Grafikfenster (Plan 01-15 Task 2
- * + GAP-CLOSURE Sim-Zeit-Zoom).
+ * + GAP-CLOSURE Sim-Zeit-Zoom + GAP-CLOSURE Sticky-Top-Achse + Vertikaler-Scroll).
  *
  * 1:1-Port des OGfxModeRow-Layouts (OSimBase/OGfxRow.cpp):
  *  - Top-Bar: Modus-Titel zentriert (OGfxRowTopBar)
  *  - Left-Bar: "Ressourcen"-Header + per-Ressource-Labels rechtsbündig
  *    (OGfxRowLeftBar + PGfxRowObjProzRessBeleg::Draw)
- *    → sticky/fix dank overflow-x-auto auf dem Scroll-Container
  *  - Grid: scrollbarer Content-Bereich mit gepunkteten vertikalen Zeitachsen-
  *    Linien + gepunkteten Baselines je Zeile + roter Zeit-Linie (§2.6)
  *  - Drei Modi (Modus-Dropdown-Registry):
@@ -22,6 +21,13 @@
  *  - Linke "Ressourcen"-Spalte bleibt sticky/fix (position: sticky left: 0)
  *  - EINHEITLICHE x(t)-Abbildung für Segmente, Gebirge, Rasterlinien, rote Linie
  *  - Mausrad-Zoom (Ctrl+Wheel) für stufenlosen zoomFactor-Multiplikator
+ *
+ * 2D-STICKY (GAP-CLOSURE UAT: Zeitangaben oben + Scrollbar viele Stationen):
+ *  - Gemeinsamer Scroll-Container (overflow auto in beide Richtungen, begrenzte Höhe)
+ *  - Ecke oben-links: sticky top+left (höchster z-index) = "Ressourcen"-Header
+ *  - Top-Zeitachse: sticky top (z über Body) — scrollt horizontal mit, bleibt vertikal fix
+ *  - Body-Labels-Spalte: sticky left (z über Grid) — scrollt vertikal mit, bleibt horizontal fix
+ *  - Grid-Body: normal scrollbar in beide Richtungen
  *
  * WARTESCHLANGEN-ZUORDNUNG (GAP-CLOSURE):
  *  - Pro Warteschlangen-Zeile: Skalen-Hinweis (max Wartende) links an der Zeile
@@ -61,11 +67,17 @@ const SEG_HEIGHT_PX = 18;
  * OSim-Ressourcennamen (z.B. "WAR P10 (Warein.)", Person + Schicht-Suffix) sind
  * lang und rechtsbündig — 120px schnitten sie ab; 210px gibt ihnen Platz. */
 const LEFT_BAR_WIDTH_PX = 210;
-/** Höhe der Zeit-Achsen-Leiste am Fuß (mit lesbaren d/h/m-Labels). */
+/** Höhe der Zeit-Achsen-Leiste (Top + ehemals Bottom, gleicher Wert). */
 const AXIS_HEIGHT_PX = 28;
 /** Minimalbreite des Grid-Bereichs damit der Scroll-Container einen vernünftigen
  * Startwert hat (JSDOM liefert 0 für offsetWidth). */
 const MIN_GRID_WIDTH_PX = 400;
+/**
+ * Maximale Höhe des 2D-Scroll-Wrappers (Körper-Bereich ohne Modus-Titel-Bar).
+ * Wenn viele Ressourcen-Zeilen vorhanden sind, wird ein vertikaler Scrollbalken
+ * gezeigt. Fallback-Wert wenn keine Eltern-Höhe messbar ist (z.B. JSDOM-Tests).
+ */
+const MAX_BODY_HEIGHT_PX = 480;
 
 /** Modus-Schlüssel-Typ. */
 export type GrafikModus = "belegung" | "warteschlangen" | "qualifikation";
@@ -364,68 +376,6 @@ function WarteschlangenRow({
   );
 }
 
-/** Zeitachsen-Leiste mit Ticks aus simTimeTicks (GAP-CLOSURE: klare Sim-Zeit-Skala). */
-function ZeitachsBar({
-  periodBegin,
-  zoom,
-  zoomFactor,
-  containerWidthPx,
-  span,
-  contentW,
-  currentTimePx,
-}: {
-  periodBegin: number;
-  zoom: SimZoomLevel;
-  zoomFactor: number;
-  containerWidthPx: number;
-  span: number;
-  contentW: number;
-  currentTimePx: number;
-}): React.ReactElement {
-  const ticks = simTimeTicks(
-    periodBegin,
-    periodBegin + span,
-    zoom,
-    zoomFactor,
-    containerWidthPx,
-  );
-
-  return (
-    <div
-      className="relative border-t border-border bg-muted/30"
-      style={{ height: AXIS_HEIGHT_PX, width: contentW }}
-      aria-label="Zeitachse"
-    >
-      {ticks.map((tick, i) => (
-        <React.Fragment key={i}>
-          <div
-            className="absolute top-0 border-l border-dashed border-muted-foreground/50"
-            style={{ left: tick.x, height: AXIS_HEIGHT_PX }}
-            aria-hidden="true"
-          />
-          <span
-            className="absolute top-1 text-[11px] font-medium tabular-nums text-foreground"
-            style={{ left: tick.x + 3 }}
-          >
-            {tick.label}
-          </span>
-        </React.Fragment>
-      ))}
-      {/* Rote Zeit-Linie (§2.6) */}
-      <div
-        className="absolute top-0"
-        style={{
-          left: currentTimePx,
-          width: 1,
-          height: AXIS_HEIGHT_PX,
-          backgroundColor: "rgb(255,0,0)",
-        }}
-        aria-hidden="true"
-      />
-    </div>
-  );
-}
-
 /** Leeres Array als stabile Referenz für nicht vorhandene Streams. */
 const EMPTY_FRAMES: Frame[] = [];
 
@@ -557,6 +507,12 @@ export function Grafikfenster({
   const modeObj = GRAFIKFENSTER_MODES.find((m) => m.key === modus);
   const modeTitle = modeObj?.name ?? "";
 
+  // Ticks einmal berechnen — geteilt zwischen Top-Achse und vertikalen Rasterlinien.
+  const ticks = React.useMemo(
+    () => simTimeTicks(periodBegin, periodBegin + span, zoom, zoomFactor, containerW),
+    [periodBegin, span, zoom, zoomFactor, containerW],
+  );
+
   return (
     <div
       className="flex flex-col rounded-md border border-border bg-background font-mono text-xs"
@@ -569,125 +525,191 @@ export function Grafikfenster({
         {modeTitle}
       </div>
 
-      {/* Hauptbereich: Left-Bar (sticky) + scrollbares Grid */}
-      <div className="flex overflow-hidden">
-        {/* Left-Bar: sticky (OSim OGfxRowLeftBar).
-            position:sticky left:0 sorgt dafür, dass die Ressourcen-Spalte beim
-            horizontalen Scrollen fix bleibt — analog zur fixed Tree-Pane im
-            3fls-Scheduler-Widget. z-index:10 damit sie über dem Grid-Content liegt. */}
-        <div
-          className="z-10 shrink-0 border-r border-border bg-background"
-          style={{ width: LEFT_BAR_WIDTH_PX, position: "sticky", left: 0 }}
-          aria-label="Ressourcen-Liste"
-        >
-          <div className="border-b border-border bg-muted px-2 py-1 text-center text-xs font-medium text-muted-foreground">
-            Ressourcen
-          </div>
-          {ressourcen.map((rid) => (
-            <div
-              key={rid}
-              className="flex items-center justify-end overflow-hidden whitespace-nowrap border-b border-dashed border-border px-2 text-right text-xs text-foreground"
-              style={{ height: ROW_HEIGHT_PX }}
-              aria-label={rid}
-              title={rid}
-            >
-              {rid}
-            </div>
-          ))}
-        </div>
+      {/*
+        2D-STICKY Scroll-Wrapper (GAP-CLOSURE UAT):
+        - overflow: auto in beide Richtungen → vertikaler + horizontaler Scrollbalken
+        - Begrenzte max-height → Scrollbalken bei vielen Ressourcen
+        - Darin: Ecke (sticky top+left), Top-Achse (sticky top), Labels (sticky left), Body
 
-        {/* Scroll-Container: overflow-x-auto für horizontalen Scroll bei nicht-fit-Zoom. */}
-        <div
-          ref={scrollContainerRef}
-          className="flex-1 overflow-x-auto overflow-y-hidden"
-          style={{ minWidth: 0 }}
-          aria-label="Grafikfenster Grid"
-        >
-          {/* Qualifikation-Gated-Hinweis (§3.3, T-01-15-02) */}
-          {modus === "qualifikation" && (
-            <div
-              className="flex min-h-[60px] items-center justify-center p-4 text-muted-foreground italic"
-              data-testid="grafik-quali-gated"
-              aria-label="Qualifikations-Stream noch nicht verfügbar (Slice offen)"
-            >
-              <span>
-                (Slice offen) — Qualifikations-Stream wird in einem späteren Slice
-                implementiert.
-              </span>
-            </div>
-          )}
+        Layout als CSS-Grid mit zwei Spalten:
+          LEFT_BAR_WIDTH_PX | auto (flex-1 / contentW)
 
-          {/* Ressourcen-Zeilen (Belegung / Warteschlangen) */}
+        Z-Index-Hierarchie:
+          30 = Ecke (top+left sticky, höchster Index)
+          20 = Top-Achse (top sticky, über Body, unter Ecke)
+          10 = Labels-Spalte (left sticky, über Grid-Body)
+           0 = Grid-Body
+      */}
+      <div
+        ref={scrollContainerRef}
+        data-testid="grafik-scroll-wrapper"
+        className="overflow-auto"
+        style={{ maxHeight: MAX_BODY_HEIGHT_PX }}
+        aria-label="Grafikfenster Scroll-Bereich"
+      >
+        {/*
+          Innerer Wrapper: mindestens so breit wie LEFT_BAR_WIDTH_PX + contentW,
+          damit sticky-left korrekt funktioniert (position:sticky braucht einen
+          scrollbaren Eltern-Container dessen Inhalt breiter ist als er selbst).
+        */}
+        <div style={{ minWidth: LEFT_BAR_WIDTH_PX + contentW }}>
+
+          {/* ── Zeile 1: Top-Achse-Leiste ── */}
           {modus !== "qualifikation" && (
-            <div style={{ width: contentW, position: "relative" }}>
-              {/* Gepunktete vertikale Rasterlinien (§2.4) — EINHEITLICHE toX-Abbildung */}
-              {(() => {
-                const ticks = simTimeTicks(
-                  periodBegin,
-                  periodBegin + span,
-                  zoom,
-                  zoomFactor,
-                  containerW,
-                );
-                return ticks.map((tick, i) => (
-                  <div
-                    key={i}
-                    className="absolute top-0 border-l border-dashed border-muted-foreground/30"
-                    style={{ left: tick.x, bottom: 0 }}
-                    aria-hidden="true"
-                  />
-                ));
-              })()}
-
-              {/* Rote aktuelle-Zeit-Linie (§2.6) — EINHEITLICHE toX-Abbildung */}
+            <div
+              className="flex"
+              style={{ position: "sticky", top: 0, zIndex: 20 }}
+            >
+              {/* Ecke oben-links: "Ressourcen"-Header — sticky top+left */}
               <div
-                data-testid="grafik-time-line"
-                className="absolute top-0 bottom-0 z-10"
+                className="shrink-0 border-b border-r border-border bg-muted px-2 py-1 text-center text-xs font-medium text-muted-foreground"
                 style={{
-                  left: currentTimePx,
-                  width: 2,
-                  backgroundColor: "rgb(255,0,0)",
+                  width: LEFT_BAR_WIDTH_PX,
+                  position: "sticky",
+                  left: 0,
+                  zIndex: 30,
                 }}
                 aria-hidden="true"
-              />
+              >
+                Ressourcen
+              </div>
 
-              {/* Per-Ressource-Zeilen */}
-              {modus === "belegung" &&
-                ressourcen.map((rid) => (
-                  <BelegungsRow
-                    key={rid}
-                    ressource_id={rid}
-                    segments={segments}
-                    toX={toX}
-                    contentW={contentW}
-                  />
+              {/* Top-Zeitachse (sticky top, scrollt horizontal mit) */}
+              <div
+                data-testid="grafik-top-axis"
+                className="relative border-b border-border bg-muted/30"
+                style={{ height: AXIS_HEIGHT_PX, width: contentW, flexShrink: 0 }}
+                aria-label="Zeitachse"
+              >
+                {ticks.map((tick, i) => (
+                  <React.Fragment key={i}>
+                    <div
+                      className="absolute top-0 border-l border-dashed border-muted-foreground/50"
+                      style={{ left: tick.x, height: AXIS_HEIGHT_PX }}
+                      aria-hidden="true"
+                    />
+                    <span
+                      className="absolute top-1 text-[11px] font-medium tabular-nums text-foreground"
+                      style={{ left: tick.x + 3 }}
+                    >
+                      {tick.label}
+                    </span>
+                  </React.Fragment>
                 ))}
-
-              {modus === "warteschlangen" &&
-                ressourcen.map((rid) => (
-                  <WarteschlangenRow
-                    key={rid}
-                    ressource_id={rid}
-                    samples={queueSamples}
-                    toX={toX}
-                    contentW={contentW}
-                  />
-                ))}
+                {/* Rote Zeit-Linie in der Achse */}
+                <div
+                  className="absolute top-0"
+                  style={{
+                    left: currentTimePx,
+                    width: 1,
+                    height: AXIS_HEIGHT_PX,
+                    backgroundColor: "rgb(255,0,0)",
+                  }}
+                  aria-hidden="true"
+                />
+              </div>
             </div>
           )}
 
-          {/* Zeitachse am Fuß (nur bei nicht-gated Modi) — EINHEITLICHE toX + simTimeTicks */}
-          {modus !== "qualifikation" && (
-            <ZeitachsBar
-              periodBegin={periodBegin}
-              zoom={zoom}
-              zoomFactor={zoomFactor}
-              containerWidthPx={containerW}
-              span={span}
-              contentW={contentW}
-              currentTimePx={currentTimePx}
-            />
-          )}
+          {/* ── Zeile 2: Body (Labels sticky-left + Grid) ── */}
+          <div className="flex">
+            {/* Left-Labels-Spalte: sticky left (bleibt beim horizontalen Scrollen fix) */}
+            {modus !== "qualifikation" && (
+              <div
+                className="shrink-0 border-r border-border bg-background"
+                style={{
+                  width: LEFT_BAR_WIDTH_PX,
+                  position: "sticky",
+                  left: 0,
+                  zIndex: 10,
+                }}
+                aria-label="Ressourcen-Liste"
+              >
+                {ressourcen.map((rid) => (
+                  <div
+                    key={rid}
+                    className="flex items-center justify-end overflow-hidden whitespace-nowrap border-b border-dashed border-border px-2 text-right text-xs text-foreground"
+                    style={{ height: ROW_HEIGHT_PX }}
+                    aria-label={rid}
+                    title={rid}
+                  >
+                    {rid}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Grid-Body: scrollbarer Content */}
+            <div
+              style={{ width: contentW, flexShrink: 0, position: "relative" }}
+              aria-label="Grafikfenster Grid"
+            >
+              {/* Qualifikation-Gated-Hinweis (§3.3, T-01-15-02) */}
+              {modus === "qualifikation" && (
+                <div
+                  className="flex min-h-[60px] items-center justify-center p-4 text-muted-foreground italic"
+                  data-testid="grafik-quali-gated"
+                  aria-label="Qualifikations-Stream noch nicht verfügbar (Slice offen)"
+                >
+                  <span>
+                    (Slice offen) — Qualifikations-Stream wird in einem späteren Slice
+                    implementiert.
+                  </span>
+                </div>
+              )}
+
+              {modus !== "qualifikation" && (
+                <>
+                  {/* Gepunktete vertikale Rasterlinien (§2.4) — EINHEITLICHE toX-Abbildung */}
+                  {ticks.map((tick, i) => (
+                    <div
+                      key={i}
+                      className="absolute top-0 border-l border-dashed border-muted-foreground/30"
+                      style={{ left: tick.x, bottom: 0 }}
+                      aria-hidden="true"
+                    />
+                  ))}
+
+                  {/* Rote aktuelle-Zeit-Linie (§2.6) — EINHEITLICHE toX-Abbildung */}
+                  <div
+                    data-testid="grafik-time-line"
+                    className="absolute top-0 bottom-0 z-10"
+                    style={{
+                      left: currentTimePx,
+                      width: 2,
+                      backgroundColor: "rgb(255,0,0)",
+                    }}
+                    aria-hidden="true"
+                  />
+
+                  {/* Per-Ressource-Zeilen (Belegung) */}
+                  {modus === "belegung" &&
+                    ressourcen.map((rid) => (
+                      <BelegungsRow
+                        key={rid}
+                        ressource_id={rid}
+                        segments={segments}
+                        toX={toX}
+                        contentW={contentW}
+                      />
+                    ))}
+
+                  {/* Per-Ressource-Zeilen (Warteschlangen) */}
+                  {modus === "warteschlangen" &&
+                    ressourcen.map((rid) => (
+                      <WarteschlangenRow
+                        key={rid}
+                        ressource_id={rid}
+                        samples={queueSamples}
+                        toX={toX}
+                        contentW={contentW}
+                      />
+                    ))}
+                </>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
