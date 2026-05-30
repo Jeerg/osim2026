@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: "Gap-Closure 01-15: api-Image neu gebaut (Engine inkl. WartequeueListener jetzt dauerhaft im Image, kein docker cp mehr) + Dockerfile-Monorepo-Pfadfix. Offen: finale Browser-UAT-Approval. Siehe 01-15-RESUME-HANDOFF.md"
-last_updated: "2026-05-30T12:00:00Z"
+stopped_at: "01-16: /live als PSim-Menübaum (Simulation/Kennzahlen/Auswertung getrennt, Steuerleiste oben, Durchlaufplan-Gantt raus) + OSim-treue Kennzahlen aus dem Sim-Stream (kennzahlen.ts: mittlere DLZ je Auslöser/Durchlaufplan + über-alles, Anzahl, Auslastungs-Näherung; OChartCtrl-3D-Balken). Engine: gantt_durchlauf-start trägt durchlaufplan_oid/-id + soll_end_termin. SPECs: LIVE-LAYOUT-SPEC, KENNZAHLEN-SPEC. api-Image neu, läuft. Offen: Browser-UAT der Kennzahlen-Charts; danach P5-D (echte Auslastung)."
+last_updated: "2026-05-30T14:45:00Z"
 resume_file: ".planning/phases/01-live-viewer-bridge/01-15-RESUME-HANDOFF.md"
 progress:
   total_phases: 1
