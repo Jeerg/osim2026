@@ -157,6 +157,30 @@ describe("Grafikfenster", () => {
     const timeLine = screen.getByTestId("grafik-time-line");
     expect(timeLine).toBeInTheDocument();
   });
+
+  it("Test S1: Sticky Top-Zeitachse vorhanden (data-testid grafik-top-axis)", () => {
+    // GAP-CLOSURE UAT: „fehlen noch Zeitangaben oben so dass man die Skalierung sieht"
+    // Die Top-Achse muss im DOM existieren, bevor der Zeilen-Bereich beginnt.
+    useLiveStreamStore.getState().ingest([
+      einsatzOnFrame(1, "Drehe-01", 5, 0),
+      einsatzOffFrame(2, "Drehe-01", 0, 3600),
+    ]);
+
+    render(<Grafikfenster modus="belegung" widthPx={800} periodBegin={0} periodEnd={86400} />);
+
+    // Top-Achse mit eigenem data-testid
+    const topAxis = screen.getByTestId("grafik-top-axis");
+    expect(topAxis).toBeInTheDocument();
+  });
+
+  it("Test S2: Scroll-Wrapper vorhanden (data-testid grafik-scroll-wrapper)", () => {
+    // GAP-CLOSURE UAT: „ein scrollbar wenn zu viele stationen da sind"
+    // Der Scroll-Wrapper umschließt linke Spalte + Grid; overflow-y: auto.
+    render(<Grafikfenster modus="belegung" widthPx={800} periodBegin={0} periodEnd={86400} />);
+
+    const wrapper = screen.getByTestId("grafik-scroll-wrapper");
+    expect(wrapper).toBeInTheDocument();
+  });
 });
 
 describe("Grafikfenster — GAP-CLOSURE: ressourcenFromModel (Defekt A)", () => {
