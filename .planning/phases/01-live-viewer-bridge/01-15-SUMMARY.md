@@ -227,8 +227,64 @@ Modell aus Modellierungs-UI wurde auf /live nicht übernommen.
 **Gesamt nach Gap-Closure:** 12/12 Tests in Grafikfenster.spec.tsx gruen (war 7/7 → +5 neue).
 471 Unit-Tests gesamt gruen. tsc --noEmit clean. 0 ESLint-Errors auf berührten Dateien.
 
+## Gap-Closure: Sim-Zeit-Zoom (3fls-analog)
+
+Browser-UAT-Feedback: „die skalierung der zeitachse ist absolut unklar. sie ist auch nicht
+zoombar was sie sein sollte. es bilden sich irgendwelche berge in der darstellung ich kann sie
+aber nicht zuordnen. also mach eine klare skalierung nach simulationszeit! mach alles zoombar.
+das soll analog unseres 3fls scheduler zoom sein"
+
+### Implementierung
+
+**Neues Modul `grafikfenster-coords.ts`** (analog 3fls `scheduler-widget/coords.ts`):
+- `SimZoomLevel`: `fit | tag | stunde | viertelstunde`
+- `PX_PER_SECOND_BY_ZOOM`: tag=4px/h, stunde=30px/h, viertelstunde=120px/h
+- `makeSimTimeToX(begin, level, zoomFactor)` → Closure `(t) => xPixel`
+- `makeSimXToTime(begin, level, zoomFactor)` → Inverse
+- `contentWidthPx(span, level, factor)` → Scroll-Content-Breite
+- `simTimeTicks(begin, end, level, factor)` → Ticks mit Label (d/h/m/s)
+- Kontinuierlicher `zoomFactor`-Multiplikator analog 3fls
+- "fit" = Content passt in Container (bisheriges Verhalten)
+
+**`GrafikfensterControls.tsx`** — Zoom-Button-Gruppe ergänzt:
+- 4 Buttons: Fit / Tag / Std / 15m (analog 3fls ZOOM_OPTIONS)
+- `variant="default"` + `data-active` für aktiven Button (3FLS-Token)
+- `role="radiogroup"` (A11y), `data-testid="grafik-zoom-<level>"`
+- Props: `zoom?: SimZoomLevel`, `onZoomChange?: (zoom) => void`
+
+**`Grafikfenster.tsx`** — horizontales Zoomen + Scrollen:
+- `overflow-x-auto` Scroll-Container; Left-Bar `position: sticky; left: 0` (fix beim Scrollen)
+- Content-Breite = `span * pxProSekunde` (bei fit: Container-Breite)
+- **EINHEITLICHE `toX`-Closure** für Segmente, Gebirge, Rasterlinien, rote Zeit-Linie
+- `simTimeTicks` für klare Sim-Zeit-Achse mit Einheit-Suffix (d/h/m/s)
+- `Ctrl+Wheel` → stufenloser `zoomFactor`-Multiplikator (`onZoomFactorChange`)
+- `WarteschlangenRow`: Skalen-Hinweis (max Wartende) rechts + SVG-Tooltips pro Sample
+
+**`live.tsx`** — Zoom-State verdrahtet:
+- `grafikZoom: SimZoomLevel` (Default "fit")
+- `grafikZoomFactor: number` (Default 1.0, Reset bei Stufen-Wechsel)
+- An `GrafikfensterControls` + `Grafikfenster` durchgereicht
+
+### Neue Tests (16 neue in grafikfenster-coords.spec.ts + 3 neue in Grafikfenster.spec.tsx)
+
+- Z1-Z7: Koordinaten-Mathematik (pxPerSecond, makeSimTimeToX, Inverse, contentWidth, ticks)
+- Z-UI-1: Zoom-Buttons vorhanden
+- Z-UI-2: Aktiver Zoom hervorgehoben (data-active)
+- Z-UI-3: onZoomChange Callback
+
+### Commits (GAP-CLOSURE Zoom)
+
+- `272dfff` test(01-15): RED — grafikfenster-coords.spec.ts (Z1-Z7, 16 Tests)
+- `4f4d2d8` feat(01-15): GREEN — grafikfenster-coords.ts Modul
+- `e67a1d9` test(01-15): RED — Zoom-UI Tests Z-UI-1/2/3
+- `47b79d5` feat(01-15): GREEN — Sim-Zeit-Zoom im Grafikfenster + Controls + live.tsx
+
+**Gesamt nach diesem Gap-Closure:** 95 Unit-Tests gruen (12 Testdateien).
+tsc --noEmit: 0 Fehler. ESLint: 0 Errors auf berührten Dateien.
+Portal-Container neu gestartet; VITE ready bestätigt.
+
 ## Self-Check: PASSED
 
 Alle Task-Commits vorhanden (7eba51a, 8fe8de4, 8958a66, 0680ed1, 69d5e32, c932a47, 45af119,
-7345f90-RED, 2abb58e-GREEN).
-29+5=34 Plan-Verifikationstests gruen. tsc --noEmit clean. ESLint-Warnungen 0 Errors.
+7345f90-RED, 2abb58e-GREEN, 272dfff-RED, 4f4d2d8-GREEN, e67a1d9-RED, 47b79d5-GREEN).
+95 Unit-Tests gruen. tsc --noEmit clean. ESLint 0 Errors.
