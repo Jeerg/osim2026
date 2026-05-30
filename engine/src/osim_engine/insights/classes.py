@@ -202,7 +202,7 @@ class IProzess(ISimObj):
         self,
         bm_name: str,
         teil: str,
-        restmenge: int,
+        restmenge: int | None,
         wartestatus: str,
         op: str | None = None,
         material: str | None = None,

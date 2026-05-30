@@ -114,7 +114,7 @@
                   "properties": {
                     "bm_name": { "type": "string" },
                     "teil": { "type": "string" },
-                    "restmenge": { "type": "integer" },
+                    "restmenge": { "type": ["integer", "null"] },
                     "wartestatus": {
                       "enum": [
                         "wartet_vor_bm",

@@ -136,15 +136,23 @@ class AuswertungListener(OListenerSimulator):
         abgearbeitet ist (kein PT_ENDE — analog fsEinlast)."""
         sim = self.m_sim
         for ausl in getattr(sim, "m_lAusl", []) or []:
-            teil = self._name(ausl)
-            if teil is None:  # leere Einträge überspringen (m_durch==NULL)
+            if self._name(ausl) is None:  # leerer Slot (kein Auslöser)
                 continue
-            soll_beginn = getattr(ausl, "m_iBeginTermin", 0) or 0
-            # Menge: Anzahl ausgelöster Entitäten (best-effort über m_lEntitaet).
+            # Teil = m_durch->m_name (1:1 ISimulatorViewerAuswProdAuftr.cpp:74).
+            # m_durch IST der Durchlaufplan; im headless-Port = ausl.m_lDlpl.
+            durch = getattr(ausl, "m_lDlpl", None)
+            if durch is None:  # C++ skip: if (m_durch==ONULL) continue
+                continue
+            teil = self._name(durch, "") or ""
+            soll_beginn = getattr(ausl, "m_iBeginTermin", 0) or 0  # m_beg_termin
+            # Menge: im instanz-basierten Modell genau eine Entität je Auslösung
+            # (= m_auftr_meng==1). Echte Batch-Mengen gehören zum FEMOS-Mengen-
+            # Modell (nicht portiert) → siehe AUDIT-OSIM-TREUE.
             entitaeten = getattr(ausl, "m_lEntitaet", None)
-            menge = len(entitaeten) if entitaeten is not None else 1
-            knoten = getattr(ausl, "m_lDlpl", None)
-            beschreibung = self._name(knoten, "") or ""
+            menge = len(entitaeten) if isinstance(entitaeten, (list, tuple)) else 1
+            # Beschreibung = Leaf-Tochter m_lager->m_beschr (FEMOS-Teile-/Lager-
+            # Modell, nicht portiert) → ehrlich leer statt Plan-Name erfinden.
+            beschreibung = ""
 
             self._prod_auftrag.add_prod_auftrag(
                 teil=teil,
@@ -153,7 +161,10 @@ class AuswertungListener(OListenerSimulator):
                 beschreibung=beschreibung,
             )
 
-            # nbearbeit: nicht abgearbeitet (kein abgeschlossener Counter).
+            # nbearbeit-Filter: C++ m_status==fsEinlast (eingelastet, noch nicht
+            # fertig). Headless-Äquivalent: Auslöser hat ausgelöst, aber noch nicht
+            # alle Auslösungen abgeschlossen (m_iAbgeCounter < m_iTrigCounter).
+            # fsEinlast selbst gehört zum FEMOS-Auftragsstatus (nicht portiert).
             abge = getattr(ausl, "m_iAbgeCounter", 0) or 0
             ausgeloest = getattr(ausl, "m_iTrigCounter", 0) or 0
             if ausgeloest == 0 or abge < ausgeloest:
@@ -176,23 +187,28 @@ class AuswertungListener(OListenerSimulator):
         for proz in prozesse:
             knoten = getattr(proz, "m_oKnoten", None)
             bm_name = self._name(knoten, "") or ""
-            # zu produz. Teil: über Trigger/Auslöser (best-effort).
+            # zu produz. Teil = m_auftr->m_fauftr->m_durch->m_name. Im headless-Port
+            # ist m_durch der Durchlaufplan des auslösenden Auslösers (ausl.m_lDlpl);
+            # die FEMOS-Kette m_auftr->m_fauftr ist nicht portiert.
             trigger = getattr(proz, "m_oTrigger", None)
             ausl = getattr(trigger, "m_oAusloeser", None) if trigger is not None else None
-            teil = self._name(ausl, "") or self._name(knoten, "") or ""
-            restmenge = getattr(proz, "m_iRestMenge", None)
-            if restmenge is None:
-                restmenge = 0
+            durch = getattr(ausl, "m_lDlpl", None) if ausl is not None else None
+            teil = self._name(durch, "") or self._name(knoten, "") or ""
+            # Restmenge = oProz->m_rest_meng (FEMOS-Mengen-Modell, nicht portiert).
+            # → gaten (None), NICHT erfinden (vorher konstant 0). Siehe AUDIT-OSIM-TREUE.
+            restmenge = None
             status = getattr(proz, "m_eStatus", None)
             status_val = getattr(status, "value", status)
             if status_val == _PT_UNT:
                 wartestatus = IProzess.UNTERBROCHEN
             else:
+                # psWartMat/psWartPers (Warten auf Material/Personal) brauchen das
+                # FEMOS-/Personal-Modell → nur der generische "wartet vor BM" ist treu.
                 wartestatus = IProzess.WARTET_VOR_BM
             self._wschlange.add_wschlange(
                 bm_name=bm_name,
                 teil=teil,
-                restmenge=int(restmenge),
+                restmenge=restmenge,
                 wartestatus=wartestatus,
             )
 
