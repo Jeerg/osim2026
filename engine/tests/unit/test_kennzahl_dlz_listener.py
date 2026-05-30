@@ -94,8 +94,10 @@ def test_emit_ein_frame_pro_periode_mit_records():
     assert writer.flushed == 1
 
 
-def test_ausloeser_ohne_abschluss_uebersprungen():
-    """count == 0 → kein record (OSim: 0/0 ist keine DLZ)."""
+def test_ausloeser_ohne_abschluss_mit_count_null_emittiert():
+    """count == 0 wird MIT-emittiert (dlz_sum 0, count 0), damit das UI den
+    ø-Balken exakt wie OSim-Default (÷ GetCount() = ALLE Auslöser) bilden kann.
+    GetKnzMittlDlfz == 0.0 bei count==0 (PAusloeser.cpp:151-152)."""
     ausl = [
         _FakeAusl('"A"', 1, dlz_sum=0.0, count=0),
         _FakeAusl('"B"', 2, dlz_sum=100.0, count=1, dlpl=_FakeDlpl("P", 3)),
@@ -105,7 +107,8 @@ def test_ausloeser_ohne_abschluss_uebersprungen():
     listener.on_period_end(2678400)
 
     recs = writer.frames[0].v["records"]
-    assert [r["ausloeser"] for r in recs] == ['"B"']
+    assert [r["ausloeser"] for r in recs] == ['"A"', '"B"']
+    assert recs[0]["count"] == 0 and recs[0]["dlz_sum"] == 0.0
 
 
 def test_leere_slots_und_kein_plan_defensiv():

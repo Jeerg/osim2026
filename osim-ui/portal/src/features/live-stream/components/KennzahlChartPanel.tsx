@@ -40,6 +40,13 @@ export function KennzahlChartPanel({
     (s) => s.byStream["gantt_einsatz"] ?? EMPTY,
   );
 
+  // NoZeroInEval (PAusloeser.cpp:675-692): bestimmt den ø-Nenner.
+  //  - false (Default) → ÷ GetCount() = ALLE Objekte (OSim-Default-Profil)
+  //  - true            → ÷ Objekte mit Mittel≠0 (m_PSim_NoZeroInEval=1)
+  // Nur für DLZ relevant.
+  const [noZeroInEval, setNoZeroInEval] = React.useState(false);
+  const istDlz = spec.fn === "mittlereDurchlaufzeit";
+
   const cube = React.useMemo(() => {
     switch (spec.fn) {
       case "mittlereDurchlaufzeit":
@@ -47,6 +54,7 @@ export function KennzahlChartPanel({
           latestDlzRecords(dlzFrames),
           spec.by ?? "ausloeser",
           spec.title,
+          { noZeroInEval },
         );
       case "anzahlAusloesungen":
         return anzahlAusloesungen(
@@ -59,12 +67,23 @@ export function KennzahlChartPanel({
       default:
         return { title: spec.title, categories: [], summary: null, note: null };
     }
-  }, [spec, dlzFrames, einsatzFrames, periodLen]);
+  }, [spec, dlzFrames, einsatzFrames, periodLen, noZeroInEval]);
 
   const chart = cubeToChart(cube);
 
   return (
     <div className="flex flex-col gap-2" data-testid={`kennzahl-panel-${spec.id}`}>
+      {istDlz && (
+        <label className="flex items-center gap-2 self-end text-[11px] text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={noZeroInEval}
+            onChange={(e) => setNoZeroInEval(e.target.checked)}
+            data-testid="kennzahl-nozero-toggle"
+          />
+          ø nur über Objekte mit Wert ≠ 0 (NoZeroInEval)
+        </label>
+      )}
       <AuswertungChart
         title={chart.title}
         categories={chart.categories}

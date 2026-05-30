@@ -71,9 +71,12 @@ class KennzahlDlzListener(OListenerSimulator):
             name = getattr(ausl, "m_sName", None)
             if name is None:  # leere Slots (m_durch == NULL) überspringen
                 continue
+            # ALLE benannten Auslöser emittieren — auch count==0 (nie gefeuerte).
+            # Das UI braucht die volle Objektmenge, um den ø-Balken exakt wie OSim
+            # zu bilden: Default (NoZeroInEval=0) teilt durch GetCount() = ALLE
+            # Auslöser (PAusloeserLList::PtkMittlDlfz, PAusloeser.cpp:687-693).
+            # count==0 → GetKnzMittlDlfz == 0.0 (PAusloeser.cpp:151-152).
             count = int(getattr(ausl, "m_iPtkAusloesungCount", 0) or 0)
-            if count <= 0:
-                continue  # ohne abgeschlossene Auslösung keine DLZ (OSim: 0/0)
             dlz_sum = float(getattr(ausl, "m_dPtkDurchlaufzeit", 0.0) or 0.0)
             dlpl_name, dlpl_oid = self._durchlaufplan(ausl)
             records.append(
