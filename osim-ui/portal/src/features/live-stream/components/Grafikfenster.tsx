@@ -32,9 +32,10 @@ import { auftragColor } from "./AuftragColor";
 import { time2client, timeAxisScale, GRAFIKFENSTER_MODES } from "./grafikfenster-modes";
 
 /** Höhe einer Ressourcen-Zeile in Pixel (PGfxModeRessBeleg m_rowHeight=20, §3.1). */
-const ROW_HEIGHT_PX = 24;
-/** Höhe eines Belegungs-Segments in Pixel (analog BAR_HEIGHT_PX in GanttRow). */
-const SEG_HEIGHT_PX = 16;
+const ROW_HEIGHT_PX = 20;
+/** Höhe eines Belegungs-Segments: füllt die Zeile fast ganz (solide OSim-Balken,
+ * 1px Rand oben/unten) statt eines dünnen Streifens. */
+const SEG_HEIGHT_PX = 18;
 /** Breite der linken Ressourcen-Leiste in Pixel (§2.1: 15 * charWidth). Die
  * OSim-Ressourcennamen (z.B. "WAR P10 (Warein.)", Person + Schicht-Suffix) sind
  * lang und rechtsbündig — 120px schnitten sie ab; 210px gibt ihnen Platz. */

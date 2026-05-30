@@ -68,6 +68,9 @@ export const Route = createFileRoute("/_authenticated/live")({
  */
 const noopRead: ReadFn = async () => ({ text: "", nextOffset: 0 });
 
+/** Stabile Leer-Referenz für nicht vorhandene Streams (kein Re-Render-Loop). */
+const EMPTY_FRAMES_LIVE: Frame[] = [];
+
 interface LivePageProps {
   /**
    * Injizierbar für Tests/Backend-Wire. Wenn gesetzt, überschreibt diese ReadFn
@@ -127,6 +130,42 @@ function LivePage({
       typeof o.attrs.m_sName === "string" ? o.attrs.m_sName : `oid_${o.oid}`,
     );
   }, [activeModel, storeWire]);
+
+  // Live-Status für die Steuerleiste: echte aktuelle Sim-Zeit (= größtes Frame-t)
+  // + Perioden-Info aus dem lifecycle-Stream. Es gibt KEIN Kalender-Datum (die
+  // Engine streamt nur Sim-Sekunden) — daher Sim-Zeit + Periode statt erfundenem
+  // dd.mm.yyyy.
+  const lifecycleFrames = useLiveStreamStore(
+    (s) => s.byStream["lifecycle"] ?? EMPTY_FRAMES_LIVE,
+  );
+  const einsatzFramesLive = useLiveStreamStore(
+    (s) => s.byStream["gantt_einsatz"] ?? EMPTY_FRAMES_LIVE,
+  );
+  const queueFramesLive = useLiveStreamStore(
+    (s) => s.byStream["gantt_wartequeue"] ?? EMPTY_FRAMES_LIVE,
+  );
+
+  const liveSimTime = React.useMemo(() => {
+    let t = 0;
+    for (const arr of [lifecycleFrames, einsatzFramesLive, queueFramesLive]) {
+      const last = arr[arr.length - 1];
+      if (last && last.t > t) t = last.t;
+    }
+    return t;
+  }, [lifecycleFrames, einsatzFramesLive, queueFramesLive]);
+
+  const periodInfo = React.useMemo(() => {
+    const last = lifecycleFrames[lifecycleFrames.length - 1];
+    const v = (last?.v ?? {}) as {
+      period_num?: number;
+      period_begin?: number;
+      period_len?: number;
+    };
+    const begin = typeof v.period_begin === "number" ? v.period_begin : 0;
+    const len = typeof v.period_len === "number" ? v.period_len : 86400;
+    const num = typeof v.period_num === "number" ? v.period_num : 0;
+    return { num, begin, end: begin + len };
+  }, [lifecycleFrames]);
 
   const { data: models, isLoading: modelsLoading } = useModels();
 
@@ -328,9 +367,10 @@ function LivePage({
                   starting={starting}
                   hasRun={runId !== null}
                   onStart={() => void handleStartRun()}
-                  periodBegin={0}
-                  periodEnd={86400}
-                  simTime={0}
+                  periodBegin={periodInfo.begin}
+                  periodEnd={periodInfo.end}
+                  simTime={liveSimTime}
+                  periodNum={periodInfo.num}
                 />
                 <Grafikfenster
                   modus={grafikModus}
